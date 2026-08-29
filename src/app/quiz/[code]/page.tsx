@@ -6,7 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { isDemoMode, getDemoQuizByCode, getDemoQuestions, getDemoUser } from "@/lib/demo";
 import { Quiz, Question, QuizAttempt } from "@/lib/types";
-import { Brain, Clock, ChevronLeft, ChevronRight, Send, CheckCircle, AlertCircle, User } from "lucide-react";
+import { Brain, Clock, Send, CheckCircle, AlertCircle, User } from "lucide-react";
 import { formatTime } from "@/lib/utils";
 
 export default function QuizPage() {
@@ -29,7 +29,7 @@ export default function QuizPage() {
   const [currentUser, setCurrentUser] = useState<{ name: string; isGuest: boolean } | null>(null);
   const [attempt, setAttempt] = useState<QuizAttempt | null>(null);
 
-  const [currentQ, setCurrentQ] = useState(0);
+
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -491,11 +491,8 @@ export default function QuizPage() {
     );
   }
 
-  // Quiz in progress
-  const q = questions[currentQ];
-  if (!q) return null;
-
-  const progress = ((currentQ + 1) / questions.length) * 100;
+  // Quiz in progress — all questions in one scrollable page
+  const answeredCount = questions.filter((q) => answers[q.id]).length;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -512,87 +509,56 @@ export default function QuizPage() {
               </div>
             )}
             <span className="text-xs bg-white/20 px-2 py-0.5 rounded">
-              {currentQ + 1}/{questions.length}
+              {answeredCount}/{questions.length} answered
             </span>
           </div>
-        </div>
-        <div className="h-0.5 bg-white/20">
-          <div className="h-full bg-white transition-all duration-300" style={{ width: `${progress}%` }} />
         </div>
       </header>
 
       <main className="flex-1 px-4 py-6">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-white border border-[#e0e0e0] rounded-lg p-5 mb-4">
-            <p className="text-sm font-medium text-[#333] mb-4">{q.question_text}</p>
-
-            {q.options && (
-              <div className="space-y-2">
-                {q.options.map((opt, idx) => {
-                  const isSelected = answers[q.id] === String(idx);
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => setAnswers((prev) => ({ ...prev, [q.id]: String(idx) }))}
-                      className={`w-full text-left px-4 py-3 rounded border text-sm transition-colors ${
-                        isSelected
-                          ? "border-[#006633] bg-green-50 text-[#006633] font-medium"
-                          : "border-[#e0e0e0] bg-white text-[#333] hover:border-[#ccc]"
-                      }`}
-                    >
-                      <span className="font-medium mr-2">{String.fromCharCode(65 + idx)}.</span>
-                      {opt}
-                    </button>
-                  );
-                })}
+        <div className="max-w-2xl mx-auto space-y-4">
+          {questions.map((q, idx) => (
+            <div key={q.id} className="bg-white border border-[#e0e0e0] rounded-lg p-5">
+              <div className="flex items-start gap-3 mb-3">
+                <span className="w-6 h-6 rounded-full bg-[#006633] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                  {idx + 1}
+                </span>
+                <p className="text-sm font-medium text-[#333]">{q.question_text}</p>
               </div>
-            )}
-          </div>
 
-          <div className="flex items-center justify-between">
+              {q.options && (
+                <div className="space-y-2 ml-9">
+                  {q.options.map((opt, optIdx) => {
+                    const isSelected = answers[q.id] === String(optIdx);
+                    return (
+                      <button
+                        key={optIdx}
+                        onClick={() => setAnswers((prev) => ({ ...prev, [q.id]: String(optIdx) }))}
+                        className={`w-full text-left px-4 py-2.5 rounded border text-sm transition-colors ${
+                          isSelected
+                            ? "border-[#006633] bg-green-50 text-[#006633] font-medium"
+                            : "border-[#e0e0e0] bg-white text-[#333] hover:border-[#ccc]"
+                        }`}
+                      >
+                        <span className="font-medium mr-2">{String.fromCharCode(65 + optIdx)}.</span>
+                        {opt}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+
+          <div className="sticky bottom-4 flex justify-center">
             <button
-              onClick={() => setCurrentQ(Math.max(0, currentQ - 1))}
-              disabled={currentQ === 0}
-              className="flex items-center gap-1 px-4 py-2 text-sm text-[#666] hover:text-[#333] disabled:opacity-30"
+              onClick={handleSubmit}
+              disabled={submitting || answeredCount === 0}
+              className="btn-primary flex items-center gap-2 text-sm px-8 py-3 shadow-lg"
             >
-              <ChevronLeft className="w-4 h-4" /> Previous
+              <Send className="w-4 h-4" />
+              {submitting ? "Submitting..." : `Submit (${answeredCount}/${questions.length})`}
             </button>
-
-            {currentQ === questions.length - 1 ? (
-              <button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="btn-primary flex items-center gap-2 text-sm px-6"
-              >
-                <Send className="w-4 h-4" />
-                {submitting ? "Submitting..." : "Submit"}
-              </button>
-            ) : (
-              <button
-                onClick={() => setCurrentQ(Math.min(questions.length - 1, currentQ + 1))}
-                className="flex items-center gap-1 px-4 py-2 text-sm text-[#006633] font-medium hover:text-[#004d26]"
-              >
-                Next <ChevronRight className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap gap-1.5 mt-4 justify-center">
-            {questions.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentQ(idx)}
-                className={`w-7 h-7 rounded text-xs font-medium transition-colors ${
-                  idx === currentQ
-                    ? "bg-[#006633] text-white"
-                    : answers[questions[idx].id]
-                    ? "bg-green-100 text-green-700 border border-green-200"
-                    : "bg-[#f0f0f0] text-[#666] border border-[#e0e0e0]"
-                }`}
-              >
-                {idx + 1}
-              </button>
-            ))}
           </div>
         </div>
       </main>
