@@ -2,13 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { analyzeAndGenerate, extractExistingQuestions } from "@/lib/ai/content-analyzer";
 import { extractTextFromBase64, getRelevantText } from "@/lib/file-extract";
 
-interface ClientApiKey {
-  id: string;
-  key: string;
-  provider: string;
-  enabled: boolean;
-}
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -22,16 +15,6 @@ export async function POST(request: NextRequest) {
       mode = "generate",
     } = body;
 
-    // Read API keys from header (sent from the client's localStorage)
-    const keysHeader = request.headers.get("x-api-keys");
-    const providerHeader = request.headers.get("x-ai-provider") || "groq";
-    let clientKeys: ClientApiKey[] = [];
-    if (keysHeader) {
-      try {
-        clientKeys = JSON.parse(keysHeader);
-      } catch { /* ignore */ }
-    }
-
     // Check that we have either text or a file
     const hasText = material_text && material_text.trim().length >= 10;
     const hasFile = file_data && file_type;
@@ -43,7 +26,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Extract existing questions mode (needs text)
+    // Extract existing questions mode
     if (mode === "extract") {
       if (!hasText) {
         return NextResponse.json(
@@ -97,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     finalText = getRelevantText(finalText, 4000);
 
-    // Call AI — pass client keys and provider
+    // Call AI — server-side keys from env vars or config file
     const { analysis, questions } = await analyzeAndGenerate(
       finalText,
       Math.min(question_count, 50),
@@ -106,8 +89,6 @@ export async function POST(request: NextRequest) {
         fileData: isImage ? file_data : undefined,
         fileType: isImage ? file_type : undefined,
         fileName: isImage ? file_name : undefined,
-        clientKeys,
-        provider: providerHeader,
       }
     );
 

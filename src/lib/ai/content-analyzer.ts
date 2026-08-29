@@ -59,8 +59,6 @@ export interface AIOptions {
   fileData?: string;
   fileType?: string;
   fileName?: string;
-  clientKeys?: Array<{ id: string; key: string; provider: string; enabled: boolean }>;
-  provider?: string;
 }
 
 // ─── API Configuration ────────────────────────────────
@@ -135,14 +133,13 @@ export async function analyzeAndGenerate(
   questionTypes: string[],
   options: AIOptions = {}
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
-  // Use client-provided keys (from localStorage via header)
-  const clientKeys = options.clientKeys || [];
-  const provider = options.provider || "groq";
-
-  const enabledKeys = clientKeys.filter((k) => k.enabled && k.key);
+  // Get all available providers from server-side keys
+  const { getAllKeys } = await import("./key-rotation");
+  const allKeys = getAllKeys();
+  const enabledKeys = allKeys.filter((k) => k.enabled && k.key);
 
   if (enabledKeys.length === 0) {
-    throw new Error("No API keys configured. Please add a key in Admin > Settings.");
+    throw new Error("No API keys configured. Add a key in Vercel Environment Variables or Admin > Settings.");
   }
 
   // Group keys by provider
@@ -150,18 +147,10 @@ export async function analyzeAndGenerate(
   let lastError: Error | null = null;
 
   for (const p of providers) {
-    const keysForProvider = enabledKeys
-      .filter((k) => k.provider === p)
-      .map((k) => ({ id: k.id, key: k.key }));
-
-    if (keysForProvider.length === 0) continue;
-
     try {
       const { result } = await tryWithRotation(
         (apiKey) => callAIProvider(p, materialText, questionCount, questionTypes, apiKey, options.fileData, options.fileType, options.fileName),
-        p,
-        undefined,
-        keysForProvider
+        p
       );
       return result;
     } catch (err) {
@@ -178,12 +167,12 @@ export async function analyzeAndGenerate(
       throw new Error("Too many requests. Please wait a moment and try again.");
     }
     if (msg.includes("401") || msg.includes("403") || msg.includes("invalid")) {
-      throw new Error("Invalid API key. Please check your key in Admin > Settings.");
+      throw new Error("Invalid API key. Please check your key in Vercel Environment Variables or Admin > Settings.");
     }
     throw new Error("Question generation failed. Please try again later.");
   }
 
-  throw new Error("No provider configured. Please add an API key in Admin > Settings.");
+  throw new Error("No API keys configured. Add a key in Vercel Environment Variables or Admin > Settings.");
 }
 
 // ─── AI Provider Routing ──────────────────────────────

@@ -173,17 +173,9 @@ export default function CreateQuizPage() {
         body.material_text = materialText;
       }
 
-      // Send API keys from localStorage to the server
-      const storedKeys = JSON.parse(localStorage.getItem("ollin_api_keys") || "[]");
-      const aiProvider = localStorage.getItem("ollin_ai_provider") || "groq";
-
       const res = await fetch("/api/generate-questions", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-keys": JSON.stringify(storedKeys),
-          "x-ai-provider": aiProvider,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
 

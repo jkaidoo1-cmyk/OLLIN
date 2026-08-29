@@ -1,11 +1,8 @@
 /**
  * API Key Rotation System
  *
- * Manages multiple API keys with automatic fallback.
- * When a key fails (rate limit, quota, auth error), it tries the next enabled key.
- * Records usage after each successful request.
- *
- * Provider: Groq (OpenAI-compatible API)
+ * Reads API keys from environment variables (Vercel) with file fallback (local dev).
+ * Env vars: GROQ_API_KEY (single), GROQ_API_KEYS (comma-separated), GEMINI_API_KEY
  */
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
@@ -20,60 +17,123 @@ interface ApiKeyEntry {
   total_requests: number;
   total_input_tokens: number;
   total_output_tokens: number;
-}
-
-interface PlatformConfig {
-  api_keys: ApiKeyEntry[];
-  ai_provider: string;
-}
-
-function loadConfig(): PlatformConfig {
-  const configPath = join(process.cwd(), ".ollin-config.json");
-  if (existsSync(configPath)) {
-    try {
-      const raw = JSON.parse(readFileSync(configPath, "utf-8"));
-      // Migrate old format (single key → array)
-      if (raw.openai_api_key && !raw.api_keys) {
-        return {
-          api_keys: [
-            {
-              id: "migrated",
-              key: raw.openai_api_key,
-              label: "Primary Key",
-              provider: (raw.ai_provider as "groq" | "gemini") || "groq",
-              enabled: true,
-              total_requests: 0,
-              total_input_tokens: 0,
-              total_output_tokens: 0,
-            },
-          ],
-          ai_provider: raw.ai_provider || "auto",
-        };
-      }
-      return raw;
-    } catch {
-      // ignore
-    }
-  }
-  return { api_keys: [], ai_provider: "auto" };
+  estimated_cost_usd?: number;
+  last_used_at?: string;
+  added_at?: string;
 }
 
 /**
- * Get the next available API key.
- * Returns the first enabled key that isn't exhausted.
- * Keys are tried in order of least usage first.
+ * Get API keys — first try env vars, then fall back to config file.
+ */
+function getEnvKeys(): ApiKeyEntry[] {
+  const keys: ApiKeyEntry[] = [];
+
+  // Groq keys from env
+  const groqSingle = process.env.GROQ_API_KEY;
+  const groqMulti = process.env.GROQ_API_KEYS;
+  if (groqMulti) {
+    groqMulti.split(",").forEach((k, i) => {
+      const trimmed = k.trim();
+      if (trimmed) {
+        keys.push({
+          id: `env-groq-${i}`,
+          key: trimmed,
+          label: `Groq Key ${i + 1}`,
+          provider: "groq",
+          enabled: true,
+          total_requests: 0,
+          total_input_tokens: 0,
+          total_output_tokens: 0,
+        });
+      }
+    });
+  } else if (groqSingle) {
+    keys.push({
+      id: "env-groq-0",
+      key: groqSingle.trim(),
+      label: "Groq Key",
+      provider: "groq",
+      enabled: true,
+      total_requests: 0,
+      total_input_tokens: 0,
+      total_output_tokens: 0,
+    });
+  }
+
+  // Gemini keys from env
+  const geminiSingle = process.env.GEMINI_API_KEY;
+  const geminiMulti = process.env.GEMINI_API_KEYS;
+  if (geminiMulti) {
+    geminiMulti.split(",").forEach((k, i) => {
+      const trimmed = k.trim();
+      if (trimmed) {
+        keys.push({
+          id: `env-gemini-${i}`,
+          key: trimmed,
+          label: `Gemini Key ${i + 1}`,
+          provider: "gemini",
+          enabled: true,
+          total_requests: 0,
+          total_input_tokens: 0,
+          total_output_tokens: 0,
+        });
+      }
+    });
+  } else if (geminiSingle) {
+    keys.push({
+      id: "env-gemini-0",
+      key: geminiSingle.trim(),
+      label: "Gemini Key",
+      provider: "gemini",
+      enabled: true,
+      total_requests: 0,
+      total_input_tokens: 0,
+      total_output_tokens: 0,
+    });
+  }
+
+  return keys;
+}
+
+function getFileKeys(): ApiKeyEntry[] {
+  try {
+    const configPath = join(process.cwd(), ".ollin-config.json");
+    if (!existsSync(configPath)) return [];
+    const raw = JSON.parse(readFileSync(configPath, "utf-8"));
+    if (raw.api_keys && Array.isArray(raw.api_keys)) {
+      return raw.api_keys;
+    }
+  } catch { /* ignore */ }
+  return [];
+}
+
+/**
+ * Get all API keys: env vars first, then file-based keys as fallback.
+ */
+export function getAllKeys(): ApiKeyEntry[] {
+  const envKeys = getEnvKeys();
+  const fileKeys = getFileKeys();
+
+  // If env keys exist, use those (admin set them in Vercel dashboard)
+  if (envKeys.length > 0) return envKeys;
+
+  // Otherwise fall back to file keys (local dev / admin added via Settings)
+  return fileKeys;
+}
+
+/**
+ * Get the next available API key for a provider.
  */
 export function getNextApiKey(preferredProvider?: string): {
   id: string;
   key: string;
   provider: string;
 } | null {
-  const config = loadConfig();
-  const enabledKeys = config.api_keys.filter((k) => k.enabled && k.key);
+  const allKeys = getAllKeys();
+  const enabledKeys = allKeys.filter((k) => k.enabled && k.key);
 
   if (enabledKeys.length === 0) return null;
 
-  // Sort by total requests (least used first) to distribute load
   const sorted = [...enabledKeys].sort(
     (a, b) => a.total_requests - b.total_requests
   );
@@ -90,27 +150,30 @@ export function getNextApiKey(preferredProvider?: string): {
 }
 
 /**
- * Get all enabled keys for a specific provider, sorted by least usage.
+ * Get all enabled keys for a specific provider.
  */
 export function getKeysForProvider(provider: string): Array<{
   id: string;
   key: string;
 }> {
-  const config = loadConfig();
-  return config.api_keys
+  const allKeys = getAllKeys();
+  return allKeys
     .filter((k) => k.enabled && k.key && k.provider === provider)
     .sort((a, b) => a.total_requests - b.total_requests)
     .map((k) => ({ id: k.id, key: k.key }));
 }
 
 /**
- * Record usage for a key after a successful API call.
+ * Record usage for a key (only works for file-based keys).
  */
 export async function recordKeyUsage(
   keyId: string,
   inputTokens: number,
   outputTokens: number
 ): Promise<void> {
+  // Skip recording for env-var keys (no file to write to)
+  if (keyId.startsWith("env-")) return;
+
   try {
     const configPath = join(process.cwd(), ".ollin-config.json");
     if (!existsSync(configPath)) return;
@@ -123,22 +186,16 @@ export async function recordKeyUsage(
     key.total_input_tokens = (key.total_input_tokens || 0) + inputTokens;
     key.total_output_tokens = (key.total_output_tokens || 0) + outputTokens;
     key.last_used_at = new Date().toISOString();
-    // Pricing estimate (per million tokens)
-    const costPerInput = 0.10 / 1_000_000;
-    const costPerOutput = 0.10 / 1_000_000;
-    key.estimated_cost_usd = (key.estimated_cost_usd || 0) +
-      inputTokens * costPerInput + outputTokens * costPerOutput;
 
     config.updated_at = new Date().toISOString();
     writeFileSync(configPath, JSON.stringify(config, null, 2));
   } catch {
-    // Non-critical — don't break the flow
+    // Non-critical
   }
 }
 
 /**
  * Try multiple keys in sequence until one succeeds.
- * Returns the result from the first successful call.
  */
 export async function tryWithRotation<T>(
   operation: (apiKey: string) => Promise<T>,
@@ -150,7 +207,7 @@ export async function tryWithRotation<T>(
 
   if (keys.length === 0) {
     throw new Error(
-      `No API keys configured for ${provider}. Add a key in Admin > Settings.`
+      `No API keys configured for ${provider}. Add a key in Vercel Environment Variables or Admin > Settings.`
     );
   }
 
@@ -164,7 +221,6 @@ export async function tryWithRotation<T>(
       const error = err instanceof Error ? err : new Error(String(err));
       lastError = error;
 
-      // Only try next key on recoverable errors
       const msg = error.message.toLowerCase();
       const isRecoverable =
         msg.includes("rate") ||
@@ -173,17 +229,16 @@ export async function tryWithRotation<T>(
         msg.includes("429") ||
         msg.includes("insufficient") ||
         msg.includes("billing") ||
-        msg.includes("auth") ||
         msg.includes("401") ||
         msg.includes("403");
 
       if (onError) onError(keyEntry.id, error);
 
       if (!isRecoverable) {
-        throw error; // Non-recoverable — don't try other keys
+        throw error;
       }
 
-      // Rate limit — wait and retry the same key
+      // Rate limit — wait and retry
       const isRateLimit = msg.includes("rate") || msg.includes("429") || msg.includes("limit");
       if (isRateLimit) {
         console.log("Rate limited, waiting 15s before retry...");
@@ -193,11 +248,8 @@ export async function tryWithRotation<T>(
           return { result, keyId: keyEntry.id };
         } catch (retryErr) {
           lastError = retryErr instanceof Error ? retryErr : new Error(String(retryErr));
-          console.error("Retry also failed:", lastError.message);
         }
       }
-
-      // Continue to next key
     }
   }
 
