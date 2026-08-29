@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { analyzeAndGenerate, extractExistingQuestions } from "@/lib/ai/content-analyzer";
 import { extractTextFromBase64, getRelevantText } from "@/lib/file-extract";
 
+interface ClientApiKey {
+  id: string;
+  key: string;
+  provider: string;
+  enabled: boolean;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -14,6 +21,16 @@ export async function POST(request: NextRequest) {
       question_types = ["multiple_choice"],
       mode = "generate",
     } = body;
+
+    // Read API keys from header (sent from the client's localStorage)
+    const keysHeader = request.headers.get("x-api-keys");
+    const providerHeader = request.headers.get("x-ai-provider") || "groq";
+    let clientKeys: ClientApiKey[] = [];
+    if (keysHeader) {
+      try {
+        clientKeys = JSON.parse(keysHeader);
+      } catch { /* ignore */ }
+    }
 
     // Check that we have either text or a file
     const hasText = material_text && material_text.trim().length >= 10;
@@ -56,10 +73,8 @@ export async function POST(request: NextRequest) {
       const isImageType = file_type.startsWith("image/");
 
       if (isImageType) {
-        // Images: send directly to AI vision (don't extract text)
         isImage = true;
       } else {
-        // PDF, DOCX, TXT: extract text server-side, then send text to AI
         const extracted = await extractTextFromBase64(file_data, file_type, file_name);
 
         if (extracted.error && !extracted.text) {
@@ -80,23 +95,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Compress and truncate text to save tokens
     finalText = getRelevantText(finalText, 4000);
 
-    // Call AI analysis engine
+    // Call AI — pass client keys and provider
     const { analysis, questions } = await analyzeAndGenerate(
       finalText,
       Math.min(question_count, 50),
       question_types,
       {
-        // Only pass image data for actual images; text is already extracted
         fileData: isImage ? file_data : undefined,
         fileType: isImage ? file_type : undefined,
         fileName: isImage ? file_name : undefined,
+        clientKeys,
+        provider: providerHeader,
       }
     );
 
-    // Validate and format generated questions
     const validatedQuestions = (questions as Record<string, unknown>[])
       .filter((q) => q.question && q.correctAnswer !== undefined)
       .map((q) => {

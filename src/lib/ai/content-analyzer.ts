@@ -8,7 +8,7 @@
  * Uses API key rotation: tries multiple keys, falls back on failure.
  */
 
-import { tryWithRotation, recordKeyUsage, getKeysForProvider } from "./key-rotation";
+import { tryWithRotation } from "./key-rotation";
 
 // ─── Types ─────────────────────────────────────────────
 
@@ -59,6 +59,8 @@ export interface AIOptions {
   fileData?: string;
   fileType?: string;
   fileName?: string;
+  clientKeys?: Array<{ id: string; key: string; provider: string; enabled: boolean }>;
+  provider?: string;
 }
 
 // ─── API Configuration ────────────────────────────────
@@ -133,46 +135,55 @@ export async function analyzeAndGenerate(
   questionTypes: string[],
   options: AIOptions = {}
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
-  // Try all configured providers (groq, gemini)
-  const providers = ["groq", "gemini"];
-  let lastProviderError: Error | null = null;
+  // Use client-provided keys (from localStorage via header)
+  const clientKeys = options.clientKeys || [];
+  const provider = options.provider || "groq";
 
-  for (const provider of providers) {
-    const keys = getKeysForProvider(provider);
-    if (keys.length === 0) continue;
+  const enabledKeys = clientKeys.filter((k) => k.enabled && k.key);
+
+  if (enabledKeys.length === 0) {
+    throw new Error("No API keys configured. Please add a key in Admin > Settings.");
+  }
+
+  // Group keys by provider
+  const providers = [...new Set(enabledKeys.map((k) => k.provider))];
+  let lastError: Error | null = null;
+
+  for (const p of providers) {
+    const keysForProvider = enabledKeys
+      .filter((k) => k.provider === p)
+      .map((k) => ({ id: k.id, key: k.key }));
+
+    if (keysForProvider.length === 0) continue;
 
     try {
-      const { result, keyId } = await tryWithRotation(
-        (apiKey) => callAIProvider(provider, materialText, questionCount, questionTypes, apiKey, options.fileData, options.fileType, options.fileName),
-        provider
+      const { result } = await tryWithRotation(
+        (apiKey) => callAIProvider(p, materialText, questionCount, questionTypes, apiKey, options.fileData, options.fileType, options.fileName),
+        p,
+        undefined,
+        keysForProvider
       );
-      // Record usage — rough estimate from original material length
-      const inputTokens = estimateTokens(materialText.slice(0, 2000)) + 200;
-      const outputTokens = estimateTokens(JSON.stringify(result.questions));
-      await recordKeyUsage(keyId, inputTokens, outputTokens);
       return result;
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
-      lastProviderError = error;
-      console.error(`${provider} API failed:`, error.message);
-      // Try next provider
+      lastError = error;
+      console.error(`${p} API failed:`, error.message);
       continue;
     }
   }
 
-  // All providers failed
-  if (lastProviderError) {
-    const msg = lastProviderError.message.toLowerCase();
+  if (lastError) {
+    const msg = lastError.message.toLowerCase();
     if (msg.includes("rate") || msg.includes("429") || msg.includes("limit")) {
       throw new Error("Too many requests. Please wait a moment and try again.");
     }
     if (msg.includes("401") || msg.includes("403") || msg.includes("invalid")) {
-      throw new Error("Invalid key. Please ask the administrator to check the settings.");
+      throw new Error("Invalid API key. Please check your key in Admin > Settings.");
     }
     throw new Error("Question generation failed. Please try again later.");
   }
 
-  throw new Error("No provider configured. Please ask the administrator to complete the setup in Settings.");
+  throw new Error("No provider configured. Please add an API key in Admin > Settings.");
 }
 
 // ─── AI Provider Routing ──────────────────────────────

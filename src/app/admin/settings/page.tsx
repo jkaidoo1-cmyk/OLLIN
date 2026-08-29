@@ -3,12 +3,12 @@
 import { useState, useEffect } from "react";
 import { Loader2, Plus, Trash2, Power, PowerOff, BarChart3, Key, AlertCircle } from "lucide-react";
 
-interface ApiKeyInfo {
+interface ApiKeyEntry {
   id: string;
+  key: string;
   label: string;
-  provider: string;
+  provider: "groq" | "gemini";
   enabled: boolean;
-  key_preview: string;
   added_at: string;
   last_used_at: string | null;
   total_requests: number;
@@ -17,8 +17,35 @@ interface ApiKeyInfo {
   estimated_cost_usd: number;
 }
 
+const STORAGE_KEY = "ollin_api_keys";
+const PROVIDER_KEY = "ollin_ai_provider";
+
+function loadKeys(): ApiKeyEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveKeys(keys: ApiKeyEntry[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(keys));
+}
+
+function maskKey(key: string): string {
+  if (key.length <= 8) return "****";
+  return key.slice(0, 3) + "..." + key.slice(-4);
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+  return n.toLocaleString();
+}
+
 export default function AdminSettingsPage() {
-  const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
+  const [keys, setKeys] = useState<ApiKeyEntry[]>([]);
   const [provider, setProvider] = useState("groq");
   const [loading, setLoading] = useState(true);
   const [newKey, setNewKey] = useState("");
@@ -28,48 +55,37 @@ export default function AdminSettingsPage() {
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
-    fetchConfig();
+    setKeys(loadKeys());
+    setProvider(localStorage.getItem(PROVIDER_KEY) || "groq");
+    setLoading(false);
   }, []);
 
-  const fetchConfig = async () => {
-    try {
-      const res = await fetch("/api/config");
-      const data = await res.json();
-      setKeys(data.api_keys || []);
-      setProvider(data.ai_provider || "groq");
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAddKey = async () => {
+  const handleAddKey = () => {
     if (!newKey.trim()) return;
     setAdding(true);
     setError("");
 
     try {
-      const res = await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "add",
-          key: newKey.trim(),
-          label: newLabel.trim() || `Key ${keys.length + 1}`,
-          provider,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setNewKey("");
-        setNewLabel("");
-        setSuccess("Key added successfully");
-        setTimeout(() => setSuccess(""), 3000);
-        fetchConfig();
-      } else {
-        setError(data.error || "Failed to add key");
-      }
+      const entry: ApiKeyEntry = {
+        id: `key-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        key: newKey.trim(),
+        label: newLabel.trim() || `Key ${keys.length + 1}`,
+        provider: provider as "groq" | "gemini",
+        enabled: true,
+        added_at: new Date().toISOString(),
+        last_used_at: null,
+        total_requests: 0,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        estimated_cost_usd: 0,
+      };
+      const updated = [...keys, entry];
+      saveKeys(updated);
+      setKeys(updated);
+      setNewKey("");
+      setNewLabel("");
+      setSuccess("Key added successfully");
+      setTimeout(() => setSuccess(""), 3000);
     } catch {
       setError("Failed to add key");
     } finally {
@@ -77,36 +93,27 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const handleRemoveKey = async (id: string) => {
-    try {
-      await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "remove", id }),
-      });
-      fetchConfig();
-    } catch {
-      // ignore
-    }
+  const handleRemoveKey = (id: string) => {
+    const updated = keys.filter((k) => k.id !== id);
+    saveKeys(updated);
+    setKeys(updated);
   };
 
-  const handleToggleKey = async (id: string, enabled: boolean) => {
-    try {
-      await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "toggle", id, enabled }),
-      });
-      fetchConfig();
-    } catch {
-      // ignore
-    }
+  const handleToggleKey = (id: string) => {
+    const updated = keys.map((k) => (k.id === id ? { ...k, enabled: !k.enabled } : k));
+    saveKeys(updated);
+    setKeys(updated);
+  };
+
+  const handleProviderChange = (p: string) => {
+    setProvider(p);
+    localStorage.setItem(PROVIDER_KEY, p);
   };
 
   const totalRequests = keys.reduce((s, k) => s + k.total_requests, 0);
-  const totalCost = keys.reduce((s, k) => s + k.estimated_cost_usd, 0);
   const totalInputTokens = keys.reduce((s, k) => s + k.total_input_tokens, 0);
   const totalOutputTokens = keys.reduce((s, k) => s + k.total_output_tokens, 0);
+  const totalCost = keys.reduce((s, k) => s + k.estimated_cost_usd, 0);
 
   return (
     <div>
@@ -124,7 +131,7 @@ export default function AdminSettingsPage() {
             </div>
             <select
               value={provider}
-              onChange={(e) => setProvider(e.target.value)}
+              onChange={(e) => handleProviderChange(e.target.value)}
               className="input-field w-full sm:w-auto text-sm"
             >
               <option value="groq">Groq</option>
@@ -145,7 +152,7 @@ export default function AdminSettingsPage() {
               type="password"
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
-              placeholder="API key (sk-...)"
+              placeholder="API key (gsk_...)"
               className="input-field text-sm"
             />
             <button onClick={handleAddKey} disabled={adding || !newKey.trim()} className="btn-primary w-full text-sm">
@@ -171,7 +178,7 @@ export default function AdminSettingsPage() {
             <div className="py-8 text-center">
               <Key className="w-8 h-8 text-[#ccc] mx-auto mb-2" />
               <p className="text-sm text-[#666]">No API keys configured yet.</p>
-              <p className="text-xs text-[#999] mt-1">Add a key above to enable AI-powered question generation.</p>
+              <p className="text-xs text-[#999] mt-1">Add a key above to enable question generation.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -184,12 +191,12 @@ export default function AdminSettingsPage() {
                       </div>
                       <div>
                         <p className="text-sm font-semibold text-[#333]">{k.label}</p>
-                        <p className="text-xs text-[#999]">{k.key_preview}</p>
+                        <p className="text-xs text-[#999]">{maskKey(k.key)}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleToggleKey(k.id, !k.enabled)}
+                        onClick={() => handleToggleKey(k.id)}
                         className={`p-1.5 rounded transition-colors ${k.enabled ? "text-green-600 hover:bg-green-50" : "text-[#999] hover:bg-gray-100"}`}
                         title={k.enabled ? "Disable" : "Enable"}
                       >
@@ -205,33 +212,24 @@ export default function AdminSettingsPage() {
                     </div>
                   </div>
 
-                  {/* Usage stats */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <UsageStat label="Requests" value={k.total_requests.toLocaleString()} />
-                    <UsageStat label="Input tokens" value={formatTokens(k.total_input_tokens)} />
-                    <UsageStat label="Output tokens" value={formatTokens(k.total_output_tokens)} />
-                    <UsageStat label="Est. cost" value={`$${k.estimated_cost_usd.toFixed(4)}`} />
-                  </div>
-
-                  {/* Usage bar */}
-                  {k.total_requests > 0 && (
-                    <div className="mt-3">
-                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden flex">
-                        <div
-                          className="h-full bg-green-500"
-                          style={{ width: `${Math.min((k.total_input_tokens / (k.total_input_tokens + k.total_output_tokens + 1)) * 100, 100)}%` }}
-                        />
-                        <div
-                          className="h-full bg-blue-500"
-                          style={{ width: `${Math.min((k.total_output_tokens / (k.total_input_tokens + k.total_output_tokens + 1)) * 100, 100)}%` }}
-                        />
-                      </div>
-                      <div className="flex justify-between text-[10px] text-[#999] mt-1">
-                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Input</span>
-                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" /> Output</span>
-                      </div>
+                    <div className="bg-[#f8f8f8] rounded p-2">
+                      <p className="text-[10px] text-[#999]">Requests</p>
+                      <p className="text-sm font-semibold text-[#333]">{k.total_requests.toLocaleString()}</p>
                     </div>
-                  )}
+                    <div className="bg-[#f8f8f8] rounded p-2">
+                      <p className="text-[10px] text-[#999]">Input tokens</p>
+                      <p className="text-sm font-semibold text-[#333]">{formatTokens(k.total_input_tokens)}</p>
+                    </div>
+                    <div className="bg-[#f8f8f8] rounded p-2">
+                      <p className="text-[10px] text-[#999]">Output tokens</p>
+                      <p className="text-sm font-semibold text-[#333]">{formatTokens(k.total_output_tokens)}</p>
+                    </div>
+                    <div className="bg-[#f8f8f8] rounded p-2">
+                      <p className="text-[10px] text-[#999]">Est. cost</p>
+                      <p className="text-sm font-semibold text-[#333]">${k.estimated_cost_usd.toFixed(4)}</p>
+                    </div>
+                  </div>
 
                   <p className="text-[10px] text-[#999] mt-2">
                     Added {new Date(k.added_at).toLocaleDateString()}
@@ -268,27 +266,28 @@ export default function AdminSettingsPage() {
               </div>
             </div>
 
-            {/* Per-key comparison chart */}
-            <div className="mt-6 space-y-3">
-              <p className="text-xs font-semibold text-[#999] uppercase tracking-wider">Per-Key Usage</p>
-              {keys.map((k) => {
-                const maxTokens = Math.max(...keys.map((x) => x.total_input_tokens + x.total_output_tokens), 1);
-                const total = k.total_input_tokens + k.total_output_tokens;
-                const pct = (total / maxTokens) * 100;
-                return (
-                  <div key={k.id} className="flex items-center gap-3">
-                    <span className="text-xs text-[#666] w-24 truncate">{k.label}</span>
-                    <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-green-500 to-blue-500 rounded"
-                        style={{ width: `${pct}%` }}
-                      />
+            {keys.length > 1 && (
+              <div className="mt-6 space-y-3">
+                <p className="text-xs font-semibold text-[#999] uppercase tracking-wider">Per-Key Usage</p>
+                {keys.map((k) => {
+                  const maxTokens = Math.max(...keys.map((x) => x.total_input_tokens + x.total_output_tokens), 1);
+                  const total = k.total_input_tokens + k.total_output_tokens;
+                  const pct = (total / maxTokens) * 100;
+                  return (
+                    <div key={k.id} className="flex items-center gap-3">
+                      <span className="text-xs text-[#666] w-24 truncate">{k.label}</span>
+                      <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-green-500 to-blue-500 rounded"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-[#999] w-16 text-right">{formatTokens(total)}</span>
                     </div>
-                    <span className="text-xs text-[#999] w-16 text-right">{formatTokens(total)}</span>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -301,14 +300,6 @@ export default function AdminSettingsPage() {
               <p className="font-medium text-[#333]">1.0.0</p>
             </div>
             <div>
-              <p className="text-[#999]">Environment</p>
-              <p className="font-medium text-[#333]">Development</p>
-            </div>
-            <div>
-              <p className="text-[#999]">Database</p>
-              <p className="font-medium text-[#333]">Supabase</p>
-            </div>
-            <div>
               <p className="text-[#999]">AI Provider</p>
               <p className="font-medium text-[#333] capitalize">{provider}</p>
             </div>
@@ -317,19 +308,4 @@ export default function AdminSettingsPage() {
       </div>
     </div>
   );
-}
-
-function UsageStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-[#f8f8f8] rounded p-2">
-      <p className="text-[10px] text-[#999]">{label}</p>
-      <p className="text-sm font-semibold text-[#333]">{value}</p>
-    </div>
-  );
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
-  return n.toLocaleString();
 }

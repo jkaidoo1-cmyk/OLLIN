@@ -143,9 +143,10 @@ export async function recordKeyUsage(
 export async function tryWithRotation<T>(
   operation: (apiKey: string) => Promise<T>,
   provider: string,
-  onError?: (keyId: string, error: Error) => void
+  onError?: (keyId: string, error: Error) => void,
+  providedKeys?: Array<{ id: string; key: string }>
 ): Promise<{ result: T; keyId: string }> {
-  const keys = getKeysForProvider(provider);
+  const keys = providedKeys || getKeysForProvider(provider);
 
   if (keys.length === 0) {
     throw new Error(
