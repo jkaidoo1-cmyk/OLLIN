@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Admin demo login
-    if (email === "jkaidoo1@mail.com" && password === "Flex$Ollin@admin1598") {
+    if (email === "jkaidoo1@mail.com" && password === "OllinAdmin1598") {
       return NextResponse.json({
         user: {
           id: "admin-001",

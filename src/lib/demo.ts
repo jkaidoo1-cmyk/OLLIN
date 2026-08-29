@@ -20,7 +20,7 @@ const DEMO_USERS_DEFAULT: DemoUser[] = [
     email: "jkaidoo1@mail.com",
     full_name: "Admin User",
     role: "admin",
-    password: "Flex$Ollin@admin1598",
+    password: "OllinAdmin1598",
   },
   {
     id: "demo-user-001",
