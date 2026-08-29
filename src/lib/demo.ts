@@ -37,7 +37,20 @@ export function getDemoUsers(): DemoUser[] {
   if (typeof window === "undefined") return DEMO_USERS_DEFAULT;
   const stored = localStorage.getItem(DEMO_USERS_KEY);
   if (stored) {
-    try { return JSON.parse(stored); } catch { /* ignore */ }
+    try {
+      const users: DemoUser[] = JSON.parse(stored);
+      // Always sync built-in accounts with current defaults (passwords may change between deploys)
+      let changed = false;
+      for (const defaultUser of DEMO_USERS_DEFAULT) {
+        const existing = users.find((u) => u.id === defaultUser.id);
+        if (existing && existing.password !== defaultUser.password) {
+          existing.password = defaultUser.password;
+          changed = true;
+        }
+      }
+      if (changed) localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(users));
+      return users;
+    } catch { /* ignore */ }
   }
   // Initialize with defaults
   localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(DEMO_USERS_DEFAULT));
