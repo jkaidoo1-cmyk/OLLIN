@@ -3,11 +3,11 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 
 const DEFAULT_COURSES = [
-  { id: "demo-course-001", code: "CSC 101", name: "Introduction to Computer Science", description: "Fundamentals of computing, algorithms, and programming concepts.", department: "Computer Science", program_id: "demo-program-001", created_by: "admin-001", created_at: new Date(Date.now() - 86400000 * 60).toISOString(), updated_at: new Date(Date.now() - 86400000 * 60).toISOString() },
-  { id: "demo-course-002", code: "BIO 201", name: "Cell Biology", description: "Cell structure, organelles, division, and molecular processes.", department: "Biology", program_id: "demo-program-002", created_by: "admin-001", created_at: new Date(Date.now() - 86400000 * 55).toISOString(), updated_at: new Date(Date.now() - 86400000 * 55).toISOString() },
-  { id: "demo-course-003", code: "HIS 301", name: "World History: Ancient Civilizations", description: "Mesopotamia, Egypt, Greece, and Rome.", department: "History", program_id: "demo-program-003", created_by: "admin-001", created_at: new Date(Date.now() - 86400000 * 50).toISOString(), updated_at: new Date(Date.now() - 86400000 * 50).toISOString() },
-  { id: "demo-course-004", code: "MTH 102", name: "Calculus I", description: "Limits, derivatives, and integrals.", department: "Mathematics", program_id: "demo-program-004", created_by: "admin-001", created_at: new Date(Date.now() - 86400000 * 45).toISOString(), updated_at: new Date(Date.now() - 86400000 * 45).toISOString() },
-  { id: "demo-course-005", code: "GST 101", name: "Communication Skills", description: "English language, writing, and presentation skills for all students.", department: "General Studies", program_id: null, created_by: "admin-001", created_at: new Date(Date.now() - 86400000 * 45).toISOString(), updated_at: new Date(Date.now() - 86400000 * 45).toISOString() },
+  { id: "demo-course-001", code: "CSC 101", name: "Introduction to Computer Science", description: "Fundamentals of computing, algorithms, and programming concepts.", department: "Computer Science", program_id: "demo-program-001", year: 1, created_by: "admin-001", created_at: new Date(Date.now() - 86400000 * 60).toISOString(), updated_at: new Date(Date.now() - 86400000 * 60).toISOString() },
+  { id: "demo-course-002", code: "BIO 201", name: "Cell Biology", description: "Cell structure, organelles, division, and molecular processes.", department: "Biology", program_id: "demo-program-002", year: 2, created_by: "admin-001", created_at: new Date(Date.now() - 86400000 * 55).toISOString(), updated_at: new Date(Date.now() - 86400000 * 55).toISOString() },
+  { id: "demo-course-003", code: "HIS 301", name: "World History: Ancient Civilizations", description: "Mesopotamia, Egypt, Greece, and Rome.", department: "History", program_id: "demo-program-003", year: 3, created_by: "admin-001", created_at: new Date(Date.now() - 86400000 * 50).toISOString(), updated_at: new Date(Date.now() - 86400000 * 50).toISOString() },
+  { id: "demo-course-004", code: "MTH 102", name: "Calculus I", description: "Limits, derivatives, and integrals.", department: "Mathematics", program_id: "demo-program-004", year: 1, created_by: "admin-001", created_at: new Date(Date.now() - 86400000 * 45).toISOString(), updated_at: new Date(Date.now() - 86400000 * 45).toISOString() },
+  { id: "demo-course-005", code: "GST 101", name: "Communication Skills", description: "English language, writing, and presentation skills for all students.", department: "General Studies", program_id: null, year: 1, created_by: "admin-001", created_at: new Date(Date.now() - 86400000 * 45).toISOString(), updated_at: new Date(Date.now() - 86400000 * 45).toISOString() },
 ];
 
 function getCoursesPath() {
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
   try {
     const demo = request.headers.get("x-demo-mode") === "true";
     const body = await request.json();
-    const { code, name, description, department, program_id } = body;
+    const { code, name, description, department, program_id, year } = body;
 
     if (!code || !code.trim()) {
       return NextResponse.json({ error: "Course code is required" }, { status: 400 });
@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
         description: description || null,
         department: department || null,
         program_id: program_id || null,
+        year: year || null,
         created_by: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

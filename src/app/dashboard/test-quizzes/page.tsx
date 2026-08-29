@@ -23,8 +23,14 @@ export default function TestQuizzesPage() {
 
   useEffect(() => {
     const savedQuizzes = getSavedQuizzesForStudent();
-    const allCourses = getDemoCourses();
+    let allCourses = getDemoCourses();
     const user = getDemoUser();
+
+    // Filter courses by student's current year
+    const studentYear = user?.current_year;
+    if (studentYear) {
+      allCourses = allCourses.filter((c) => !c.year || c.year === studentYear);
+    }
 
     // Group quizzes by course
     const courseMap = new Map<string, Quiz[]>();

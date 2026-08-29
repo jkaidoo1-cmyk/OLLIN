@@ -12,6 +12,7 @@ export interface DemoUser {
   full_name: string;
   role: "admin" | "student";
   password: string;
+  current_year?: number;
 }
 
 const DEMO_USERS_DEFAULT: DemoUser[] = [
@@ -28,6 +29,7 @@ const DEMO_USERS_DEFAULT: DemoUser[] = [
     full_name: "Alex Student",
     role: "student",
     password: "password",
+    current_year: 1,
   },
 ];
 
@@ -120,6 +122,7 @@ const DEMO_COURSES: Course[] = [
     description: "Fundamentals of computing, algorithms, and programming concepts.",
     department: "Computer Science",
     program_id: "demo-program-001",
+    year: 1,
     created_by: "admin-001",
     created_at: new Date(Date.now() - 86400000 * 60).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 60).toISOString(),
@@ -131,6 +134,7 @@ const DEMO_COURSES: Course[] = [
     description: "Cell structure, organelles, division, and molecular processes.",
     department: "Biology",
     program_id: "demo-program-002",
+    year: 2,
     created_by: "admin-001",
     created_at: new Date(Date.now() - 86400000 * 55).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 55).toISOString(),
@@ -142,6 +146,7 @@ const DEMO_COURSES: Course[] = [
     description: "Mesopotamia, Egypt, Greece, and Rome.",
     department: "History",
     program_id: "demo-program-003",
+    year: 3,
     created_by: "admin-001",
     created_at: new Date(Date.now() - 86400000 * 50).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 50).toISOString(),
@@ -153,6 +158,7 @@ const DEMO_COURSES: Course[] = [
     description: "Limits, derivatives, and integrals.",
     department: "Mathematics",
     program_id: "demo-program-004",
+    year: 1,
     created_by: "admin-001",
     created_at: new Date(Date.now() - 86400000 * 45).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 45).toISOString(),
@@ -164,6 +170,7 @@ const DEMO_COURSES: Course[] = [
     description: "English language, writing, and presentation skills for all students.",
     department: "General Studies",
     program_id: null,
+    year: 1,
     created_by: "admin-001",
     created_at: new Date(Date.now() - 86400000 * 45).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 45).toISOString(),
@@ -642,17 +649,20 @@ export function removeSavedQuiz(quizId: string, courseId: string): void {
 }
 
 export function getSavedQuizzesForStudent(): Quiz[] {
-  // Get quizzes saved by admin, filtered by the student's courses
+  // Get quizzes saved by admin, filtered by the student's courses and year
   const saved = getSavedQuizzes();
   const allQuizzes = getDemoQuizzes();
-  const allCourses = getDemoCourses();
+  let allCourses = getDemoCourses();
 
-  // Get student's program
   const user = getDemoUser();
   if (!user) return [];
 
-  // Find student's courses (program-specific + general courses)
-  // In demo mode, user has no program, so show all saved quizzes
+  // Filter courses by student's current year
+  const studentYear = user.current_year;
+  if (studentYear) {
+    allCourses = allCourses.filter((c) => !c.year || c.year === studentYear);
+  }
+
   const studentCourseIds = allCourses.map((c) => c.id);
 
   return saved

@@ -22,6 +22,7 @@ export default function AdminCoursesPage() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [formProgramId, setFormProgramId] = useState("");
   const [formDesc, setFormDesc] = useState("");
+  const [formYear, setFormYear] = useState<number | "">("");
   const [formError, setFormError] = useState("");
 
   const [pending, setPending] = useState<PendingAction[]>([]);
@@ -122,6 +123,7 @@ export default function AdminCoursesPage() {
       department: formDept || null,
       description: formDesc || null,
       program_id: formProgramId || null,
+      year: formYear || null,
       created_by: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -133,6 +135,7 @@ export default function AdminCoursesPage() {
     setFormDept("");
     setFormDesc("");
     setFormProgramId("");
+    setFormYear("");
     setShowForm(false);
   };
 
@@ -156,7 +159,7 @@ export default function AdminCoursesPage() {
             await fetch("/api/courses", {
               method: "POST",
               headers: { "Content-Type": "application/json", "x-demo-mode": "true" },
-              body: JSON.stringify({ code: action.course.code, name: action.course.name, department: action.course.department, description: action.course.description, program_id: action.course.program_id }),
+              body: JSON.stringify({ code: action.course.code, name: action.course.name, department: action.course.department, description: action.course.description, program_id: action.course.program_id, year: action.course.year }),
             });
           } else if (action.type === "delete") {
             await fetch(`/api/courses?id=${action.courseId}`, { method: "DELETE", headers: { "x-demo-mode": "true" } });
@@ -168,7 +171,7 @@ export default function AdminCoursesPage() {
             await fetch("/api/courses", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ code: action.course.code, name: action.course.name, department: action.course.department, description: action.course.description, program_id: action.course.program_id }),
+              body: JSON.stringify({ code: action.course.code, name: action.course.name, department: action.course.department, description: action.course.description, program_id: action.course.program_id, year: action.course.year }),
             });
           } else if (action.type === "delete") {
             await fetch(`/api/courses?id=${action.courseId}`, { method: "DELETE" });
@@ -260,9 +263,21 @@ export default function AdminCoursesPage() {
                 <input type="text" value={formDept} onChange={(e) => setFormDept(e.target.value)} placeholder="e.g. Computer Science" className="input-field text-sm" />
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-[#666] mb-1">Description</label>
-              <input type="text" value={formDesc} onChange={(e) => setFormDesc(e.target.value)} placeholder="Brief description of the course" className="input-field text-sm" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Year level</label>
+                <select value={formYear} onChange={(e) => setFormYear(e.target.value ? Number(e.target.value) : "")} className="input-field text-sm">
+                  <option value="">No year assigned</option>
+                  <option value={1}>Year 1</option>
+                  <option value={2}>Year 2</option>
+                  <option value={3}>Year 3</option>
+                  <option value={4}>Year 4</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Description</label>
+                <input type="text" value={formDesc} onChange={(e) => setFormDesc(e.target.value)} placeholder="Brief description of the course" className="input-field text-sm" />
+              </div>
             </div>
             <div className="flex items-center gap-2 pt-1">
               <button type="submit" className="btn-primary text-xs px-4 py-2 flex items-center gap-1.5">
@@ -315,6 +330,9 @@ export default function AdminCoursesPage() {
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {isPendingAdd && <span className="text-[10px] text-green-600 font-medium">NEW</span>}
                     {isPendingDelete && <span className="text-[10px] text-red-500 font-medium">REMOVED</span>}
+                    {course.year && (
+                      <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 hidden sm:inline">Year {course.year}</span>
+                    )}
                     {course.department && (
                       <span className="text-[10px] text-[#999] bg-slate-50 px-2 py-0.5 rounded border border-slate-100 hidden sm:inline">{course.department}</span>
                     )}

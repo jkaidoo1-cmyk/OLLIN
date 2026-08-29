@@ -30,6 +30,7 @@ export interface Course {
   description: string | null;
   department: string | null;
   program_id: string | null;
+  year?: number | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

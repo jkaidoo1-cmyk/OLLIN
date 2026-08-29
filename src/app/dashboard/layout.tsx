@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isDemoMode, getDemoUser, disableDemoMode, getUnreadCount } from "@/lib/demo";
+import type { DemoUser } from "@/lib/demo";
 import { useEffect, useState, useRef } from "react";
 import { Brain, LogOut, Bell } from "lucide-react";
 
@@ -23,6 +24,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [profileOpen, setProfileOpen] = useState(false);
   const [demo, setDemo] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [currentYear, setCurrentYear] = useState<number>(1);
   const supabase = createClient();
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -33,6 +35,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (demoUser) {
           setDemo(true);
           setUser({ email: demoUser.email, name: demoUser.full_name });
+          setCurrentYear(demoUser.current_year || 1);
           return;
         }
       }
@@ -177,6 +180,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     >
                       Test quizzes
                     </Link>
+                    {demo && (
+                      <div className="border-t border-[#e0e0e0] mt-1 pt-2 px-4 pb-1">
+                        <label className="block text-[10px] font-medium text-[#999] uppercase tracking-wider mb-1">My year</label>
+                        <select
+                          value={currentYear}
+                          onChange={(e) => {
+                            const y = Number(e.target.value);
+                            setCurrentYear(y);
+                            // Persist to localStorage
+                            const stored = localStorage.getItem("ollin_demo_users");
+                            if (stored) {
+                              const users: DemoUser[] = JSON.parse(stored);
+                              const u = getDemoUser();
+                              if (u) {
+                                const found = users.find((x) => x.id === u.id);
+                                if (found) {
+                                  found.current_year = y;
+                                  localStorage.setItem("ollin_demo_users", JSON.stringify(users));
+                                  localStorage.setItem("ollin_demo_user", JSON.stringify(found));
+                                }
+                              }
+                            }
+                          }}
+                          className="w-full text-sm border border-[#e0e0e0] rounded px-2 py-1.5 text-[#333] bg-white"
+                        >
+                          <option value={1}>Year 1</option>
+                          <option value={2}>Year 2</option>
+                          <option value={3}>Year 3</option>
+                          <option value={4}>Year 4</option>
+                        </select>
+                      </div>
+                    )}
                     <div className="border-t border-[#e0e0e0] mt-1 pt-1">
                       <button
                         onClick={() => { setProfileOpen(false); handleLogout(); }}

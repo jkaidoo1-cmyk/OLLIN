@@ -102,7 +102,18 @@ export default function CreateQuizPage() {
           headers: isDemo ? { "x-demo-mode": "true" } : {},
         });
         const data = await res.json();
-        setCourses(data.courses || []);
+        let fetchedCourses = data.courses || [];
+
+        // In demo mode, filter courses by student's current year
+        if (isDemo) {
+          const demoUser = getDemoUser();
+          const studentYear = demoUser?.current_year;
+          if (studentYear) {
+            fetchedCourses = fetchedCourses.filter((c: any) => !c.year || c.year === studentYear);
+          }
+        }
+
+        setCourses(fetchedCourses);
       } catch { /* ignore */ }
     };
     fetchCourses();
