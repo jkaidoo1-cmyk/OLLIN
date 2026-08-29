@@ -1,26 +1,145 @@
 @import "tailwindcss";
 
+/* ─── Design Tokens ───────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f0f0f0;
+  --foreground: #333333;
+  --primary: #006633;
+  --primary-hover: #005528;
+  --primary-light: #e6f0e8;
+
+  --header-bg: #006633;
+  --header-text: #ffffff;
+
+  --card-bg: #ffffff;
+  --card-border: #e0e0e0;
+
+  --sidebar-bg: #ffffff;
+
+  --gradient-primary: #006633;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-light: var(--primary-light);
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ─── Base ───────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  -webkit-font-smoothing: antialiased;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
 }
+
+a { text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ─── Scrollbar ───────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #ccc; border-radius: 99px; }
+
+/* ─── Card ───────────────────────────────────────── */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+}
+
+/* ─── Input ───────────────────────────────────────── */
+.input-field {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid #ccc;
+  background: #fff;
+  color: var(--foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color 150ms;
+}
+
+.input-field:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.input-field::placeholder { color: #999; }
+
+/* ─── Button ───────────────────────────────────────── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--primary);
+  color: white;
+  font-weight: 500;
+  font-size: 0.875rem;
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  transition: background 150ms;
+  line-height: 1.5;
+}
+
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ─── Badge ───────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.badge-primary { background: var(--primary-light); color: var(--primary); }
+.badge-success { background: #d4edda; color: #155724; }
+.badge-warning { background: #fff3cd; color: #856404; }
+.badge-danger  { background: #f8d7da; color: #721c24; }
+.badge-slate   { background: #e9ecef; color: #495057; }
+
+/* ─── Progress Bar ───────────────────────────────────────── */
+.progress-bar {
+  height: 4px;
+  background: #e0e0e0;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 99px;
+  transition: width 300ms ease;
+}
+
+/* ─── Spinner ───────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 1s linear infinite; }
+
+/* ─── Hide Next.js dev tools button ───────────────────── */
+nextjs-portal { display: none !important; }
