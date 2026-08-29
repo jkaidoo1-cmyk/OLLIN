@@ -59,11 +59,13 @@ export default function QuizPage() {
         }
         return;
       }
-      const { data } = await supabase.auth.getUser();
-      if (data.user) {
-        const name = data.user.user_metadata?.full_name || data.user.email?.split("@")[0] || "Student";
-        setCurrentUser({ name, isGuest: false });
-        setParticipantName(name);
+      if (supabase) {
+        const { data } = await supabase.auth.getUser();
+        if (data.user) {
+          const name = data.user.user_metadata?.full_name || data.user.email?.split("@")[0] || "Student";
+          setCurrentUser({ name, isGuest: false });
+          setParticipantName(name);
+        }
       }
     };
     checkUser();
@@ -105,24 +107,26 @@ export default function QuizPage() {
       }
 
       // Try Supabase
-      const { data, error: fetchError } = await supabase
-        .from("quizzes").select("*").eq("share_code", code).single();
+      if (supabase) {
+        const { data, error: fetchError } = await supabase
+          .from("quizzes").select("*").eq("share_code", code).single();
 
-      if (fetchError || !data) {
-        setError("Quiz not found. Check the code and try again.");
-        setLoading(false);
-        return;
-      }
-      if (data.status === "draft") {
-        setError("This quiz is not published yet.");
-        setLoading(false);
-        return;
+        if (!fetchError && data) {
+          if (data.status === "draft") {
+            setError("This quiz is not published yet.");
+            setLoading(false);
+            return;
+          }
+          setQuiz(data);
+          const { data: qData } = await supabase
+            .from("questions").select("*").eq("quiz_id", data.id).order("order_index");
+          if (qData) setQuestions(qData);
+          setLoading(false);
+          return;
+        }
       }
 
-      setQuiz(data);
-      const { data: qData } = await supabase
-        .from("questions").select("*").eq("quiz_id", data.id).order("order_index");
-      if (qData) setQuestions(qData);
+      setError("Quiz not found. Check the code and try again.");
       setLoading(false);
     };
     fetchQuiz();
@@ -165,15 +169,18 @@ export default function QuizPage() {
       return;
     }
 
-    const { data, error } = await supabase.from("quiz_attempts").insert({
-      quiz_id: quiz!.id,
-      participant_name: participantName.trim(),
-      total_questions: questions.length,
-      status: "in_progress",
-    }).select().single();
+    if (supabase) {
+      const { data, error } = await supabase.from("quiz_attempts").insert({
+        quiz_id: quiz!.id,
+        participant_name: participantName.trim(),
+        total_questions: questions.length,
+        status: "in_progress",
+      }).select().single();
 
-    if (error) { setError("Failed to start quiz."); return; }
-    setAttempt(data);
+      if (!error) {
+        setAttempt(data);
+      }
+    }
     setJoined(true);
   };
 
@@ -193,7 +200,7 @@ export default function QuizPage() {
     const score = Math.round((correct / questions.length) * 100);
 
     // Save to database for logged-in students (not guests, not demo)
-    if (attempt && !isGuest && !isDemoMode()) {
+    if (attempt && !isGuest && !isDemoMode() && supabase) {
       const timeTaken = quiz.time_limit_minutes
         ? quiz.time_limit_minutes * 60 - (timeLeft || 0)
         : null;

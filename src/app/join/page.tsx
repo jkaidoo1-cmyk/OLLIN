@@ -26,10 +26,12 @@ export default function JoinQuizPage() {
         }
         return;
       }
+      if (supabase) {
       const { data } = await supabase.auth.getUser();
       if (data.user) {
         setUserName(data.user.user_metadata?.full_name || data.user.email?.split("@")[0] || "User");
         setIsLoggedIn(true);
+      }
       }
     };
     check();

@@ -69,6 +69,7 @@ export default function QuizDetailPage() {
         return;
       }
 
+      if (!supabase) { setLoading(false); return; }
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) {
         router.push("/login");

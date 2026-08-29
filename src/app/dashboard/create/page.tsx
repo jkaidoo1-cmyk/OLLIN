@@ -82,14 +82,16 @@ export default function CreateQuizPage() {
         } else {
           const { createClient } = await import("@/lib/supabase/client");
           const supabase = createClient();
-          const { data: userData } = await supabase.auth.getUser();
-          if (userData.user) {
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("program_id")
-              .eq("id", userData.user.id)
-              .single();
-            programId = profile?.program_id || undefined;
+          if (supabase) {
+            const { data: userData } = await supabase.auth.getUser();
+            if (userData.user) {
+              const { data: profile } = await supabase
+                .from("profiles")
+                .select("program_id")
+                .eq("id", userData.user.id)
+                .single();
+              programId = profile?.program_id || undefined;
+            }
           }
         }
 
@@ -240,46 +242,48 @@ export default function CreateQuizPage() {
       // Real Supabase
       const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) { router.push("/login"); return; }
+      if (supabase) {
+        const { data: userData } = await supabase.auth.getUser();
+        if (!userData.user) { router.push("/login"); return; }
 
-      const { data: quiz, error: quizError } = await supabase
-        .from("quizzes")
-        .insert({
-          host_id: userData.user.id,
-          title: quizTitle || materialTitle || "Untitled Quiz",
-          description: null,
-          share_code: shareCode,
-          time_limit_minutes: timeLimit || null,
-          show_answers_after: "after_completion",
-          shuffle_questions: shuffleQuestions,
-          shuffle_options: true,
-          passing_score: 60,
-          course_id: selectedCourseId || null,
-          starts_at: startsAt ? new Date(startsAt).toISOString() : null,
-          ends_at: endsAt ? new Date(endsAt).toISOString() : null,
-          status: "published",
-        })
-        .select()
-        .single();
+        const { data: quiz, error: quizError } = await supabase
+          .from("quizzes")
+          .insert({
+            host_id: userData.user.id,
+            title: quizTitle || materialTitle || "Untitled Quiz",
+            description: null,
+            share_code: shareCode,
+            time_limit_minutes: timeLimit || null,
+            show_answers_after: "after_completion",
+            shuffle_questions: shuffleQuestions,
+            shuffle_options: true,
+            passing_score: 60,
+            course_id: selectedCourseId || null,
+            starts_at: startsAt ? new Date(startsAt).toISOString() : null,
+            ends_at: endsAt ? new Date(endsAt).toISOString() : null,
+            status: "published",
+          })
+          .select()
+          .single();
 
-      if (quizError) throw quizError;
+        if (quizError) throw quizError;
 
-      const questionInserts = questions.map((q, idx) => ({
-        quiz_id: quiz.id,
-        question_text: q.question,
-        question_type: q.type,
-        options: q.options || null,
-        correct_answer: q.correctAnswer,
-        explanation: q.explanation,
-        topic: q.topic || null,
-        difficulty: (q.difficulty || "medium") as "easy" | "medium" | "hard",
-        marks: 1,
-        order_index: idx,
-      }));
+        const questionInserts = questions.map((q, idx) => ({
+          quiz_id: quiz.id,
+          question_text: q.question,
+          question_type: q.type,
+          options: q.options || null,
+          correct_answer: q.correctAnswer,
+          explanation: q.explanation,
+          topic: q.topic || null,
+          difficulty: (q.difficulty || "medium") as "easy" | "medium" | "hard",
+          marks: 1,
+          order_index: idx,
+        }));
 
-      const { error: qError } = await supabase.from("questions").insert(questionInserts);
-      if (qError) throw qError;
+        const { error: qError } = await supabase.from("questions").insert(questionInserts);
+        if (qError) throw qError;
+      }
 
       setGeneratedCode(shareCode);
     } catch (err) {

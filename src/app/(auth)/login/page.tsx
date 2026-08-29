@@ -40,17 +40,24 @@ export default function LoginPage() {
       return;
     }
 
-    // Try Supabase
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    // Try Supabase (only if configured)
+    if (supabase) {
+      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (authError) {
-      setError("Invalid email or password.");
-      setLoading(false);
+      if (authError) {
+        setError("Invalid email or password.");
+        setLoading(false);
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
       return;
     }
 
-    router.push("/dashboard");
-    router.refresh();
+    setError("Invalid email or password.");
+    setLoading(false);
+    return;
   };
 
   const handleDemo = () => {

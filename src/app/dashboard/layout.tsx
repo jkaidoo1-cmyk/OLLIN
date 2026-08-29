@@ -37,6 +37,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
       }
 
+      if (!supabase) { router.push("/login"); return; }
       const { data } = await supabase.auth.getUser();
       if (!data.user) {
         router.push("/login");
@@ -81,7 +82,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.push("/");
       return;
     }
-    await supabase.auth.signOut();
+    if (supabase) await supabase.auth.signOut();
     router.push("/");
   };
 
