@@ -37,6 +37,8 @@ export async function GET() {
       source: k.id.startsWith("env-") ? "env" : "file",
       added_at: (k as any).added_at || null,
       last_used_at: (k as any).last_used_at || null,
+      last_error: (k as any).last_error || null,
+      last_error_at: (k as any).last_error_at || null,
       total_requests: k.total_requests,
       total_input_tokens: k.total_input_tokens,
       total_output_tokens: k.total_output_tokens,
@@ -95,6 +97,17 @@ export async function POST(request: NextRequest) {
     if (action === "toggle") {
       const key = config.api_keys.find((k: any) => k.id === body.id);
       if (key) key.enabled = body.enabled;
+      config.updated_at = new Date().toISOString();
+      writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === "clear_error") {
+      const key = config.api_keys.find((k: any) => k.id === body.id);
+      if (key) {
+        key.last_error = undefined;
+        key.last_error_at = undefined;
+      }
       config.updated_at = new Date().toISOString();
       writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
       return NextResponse.json({ success: true });

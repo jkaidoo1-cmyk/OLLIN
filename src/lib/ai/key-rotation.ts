@@ -20,6 +20,8 @@ interface ApiKeyEntry {
   estimated_cost_usd?: number;
   last_used_at?: string;
   added_at?: string;
+  last_error?: string;
+  last_error_at?: string;
 }
 
 /**
@@ -195,6 +197,63 @@ export async function recordKeyUsage(
 }
 
 /**
+ * Record a key failure (rate limit, quota exhausted, etc.)
+ */
+export function recordKeyError(keyId: string, errorMessage: string): void {
+  if (keyId.startsWith("env-")) return;
+
+  try {
+    const configPath = join(process.cwd(), ".ollin-config.json");
+    if (!existsSync(configPath)) return;
+
+    const config = JSON.parse(readFileSync(configPath, "utf-8"));
+    const key = config.api_keys?.find((k: { id: string }) => k.id === keyId);
+    if (!key) return;
+
+    // Only mark as error if it's a quota/rate/token issue
+    const msg = errorMessage.toLowerCase();
+    if (
+      msg.includes("rate") || msg.includes("429") || msg.includes("limit") ||
+      msg.includes("quota") || msg.includes("insufficient") ||
+      msg.includes("billing") || msg.includes("401") || msg.includes("403")
+    ) {
+      key.last_error = errorMessage;
+      key.last_error_at = new Date().toISOString();
+    }
+
+    config.updated_at = new Date().toISOString();
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+  } catch {
+    // Non-critical
+  }
+}
+
+/**
+ * Clear a key's error status (e.g. after a successful call).
+ */
+export function clearKeyError(keyId: string): void {
+  if (keyId.startsWith("env-")) return;
+
+  try {
+    const configPath = join(process.cwd(), ".ollin-config.json");
+    if (!existsSync(configPath)) return;
+
+    const config = JSON.parse(readFileSync(configPath, "utf-8"));
+    const key = config.api_keys?.find((k: { id: string }) => k.id === keyId);
+    if (!key) return;
+
+    if (key.last_error) {
+      key.last_error = undefined;
+      key.last_error_at = undefined;
+      config.updated_at = new Date().toISOString();
+      writeFileSync(configPath, JSON.stringify(config, null, 2));
+    }
+  } catch {
+    // Non-critical
+  }
+}
+
+/**
  * Try multiple keys in sequence until one succeeds.
  */
 export async function tryWithRotation<T>(
@@ -216,6 +275,7 @@ export async function tryWithRotation<T>(
   for (const keyEntry of keys) {
     try {
       const result = await operation(keyEntry.key);
+      clearKeyError(keyEntry.id);
       return { result, keyId: keyEntry.id };
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -232,6 +292,7 @@ export async function tryWithRotation<T>(
         msg.includes("401") ||
         msg.includes("403");
 
+      recordKeyError(keyEntry.id, error.message);
       if (onError) onError(keyEntry.id, error);
 
       if (!isRecoverable) {

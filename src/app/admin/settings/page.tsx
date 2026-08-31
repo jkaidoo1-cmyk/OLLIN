@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Plus, Trash2, Power, PowerOff, Key, AlertCircle, Info } from "lucide-react";
+import { Loader2, Plus, Trash2, Power, PowerOff, Key, AlertCircle, Info, XCircle } from "lucide-react";
 
 interface ApiKeyEntry {
   id: string;
@@ -17,6 +17,8 @@ interface ApiKeyEntry {
   total_input_tokens: number;
   total_output_tokens: number;
   estimated_cost_usd: number;
+  last_error: string | null;
+  last_error_at: string | null;
 }
 
 function formatTokens(n: number): string {
@@ -103,6 +105,17 @@ export default function AdminSettingsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "toggle", id, enabled }),
+      });
+      await fetchKeys();
+    } catch { /* ignore */ }
+  };
+
+  const handleClearError = async (id: string) => {
+    try {
+      await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clear_error", id }),
       });
       await fetchKeys();
     } catch { /* ignore */ }
@@ -207,6 +220,27 @@ export default function AdminSettingsPage() {
                   </div>
                 </div>
                 <div className="text-[11px] text-[#999] font-mono mb-2">{k.key_preview}</div>
+                {k.last_error && (
+                  <div className="text-[11px] px-2.5 py-1.5 bg-red-50 border border-red-200 rounded mb-2 flex items-start gap-2">
+                    <AlertCircle className="w-3.5 h-3.5 text-red-500 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-red-600 font-medium">Inaccessible</p>
+                      <p className="text-red-500 text-[10px] truncate">{k.last_error}</p>
+                      {k.last_error_at && (
+                        <p className="text-red-400 text-[10px] mt-0.5">
+                          {new Date(k.last_error_at).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleClearError(k.id)}
+                      className="text-red-400 hover:text-red-600 p-0.5"
+                      title="Dismiss"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
                 <div className="grid grid-cols-4 gap-2 text-[10px]">
                   <div>
                     <div className="text-[#999]">Requests</div>
