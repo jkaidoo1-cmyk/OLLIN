@@ -66,7 +66,7 @@ export interface AIOptions {
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "openai/gpt-oss-20b";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
-const GEMINI_MODEL = "gemini-3.6-flash";
+const GEMINI_MODEL = "gemini-3.7-flash";
 
 // ─── Token Estimation ───────────────────────────────────
 
@@ -139,7 +139,7 @@ export async function analyzeAndGenerate(
   const enabledKeys = allKeys.filter((k) => k.enabled && k.key);
 
   if (enabledKeys.length === 0) {
-    throw new Error("No API keys configured. Add a key in Vercel Environment Variables or Admin > Settings.");
+    throw new Error("No service configured. Please contact your administrator.");
   }
 
   // Group keys by provider
@@ -156,7 +156,7 @@ export async function analyzeAndGenerate(
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       lastError = error;
-      console.error(`${p} API failed:`, error.message);
+      console.error(`${p} provider failed:`, error.message);
       continue;
     }
   }
@@ -167,12 +167,12 @@ export async function analyzeAndGenerate(
       throw new Error("Too many requests. Please wait a moment and try again.");
     }
     if (msg.includes("401") || msg.includes("403") || msg.includes("invalid")) {
-      throw new Error("Invalid API key. Please check your key in Vercel Environment Variables or Admin > Settings.");
+      throw new Error("Service authentication failed. Please contact your administrator.");
     }
-    throw new Error("Question generation failed. Please try again later.");
+    throw new Error("Question generation failed. Please try again or contact your administrator.");
   }
 
-  throw new Error("No API keys configured. Add a key in Vercel Environment Variables or Admin > Settings.");
+  throw new Error("No service configured. Please contact your administrator.");
 }
 
 // ─── AI Provider Routing ──────────────────────────────
@@ -230,8 +230,7 @@ async function callGroqAPI(
   }
 
   const data = await response.json();
-  const textContent = data.choices?.[0]?.message?.content;
-  if (!textContent) throw new Error("Empty response from API");
+  const textContent = data.choices?.[0]?.message?.content;    if (!textContent) throw new Error("Empty response from service.");
 
   return parseAIJSONResponse(textContent);
 }
@@ -274,8 +273,7 @@ async function callGeminiAPI(
   }
 
   const data = await response.json();
-  const textContent = data.choices?.[0]?.message?.content;
-  if (!textContent) throw new Error("Empty response from API");
+  const textContent = data.choices?.[0]?.message?.content;    if (!textContent) throw new Error("Empty response from service.");
 
   return parseAIJSONResponse(textContent);
 }

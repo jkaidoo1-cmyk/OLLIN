@@ -207,7 +207,7 @@ export async function tryWithRotation<T>(
 
   if (keys.length === 0) {
     throw new Error(
-      `No API keys configured for ${provider}. Add a key in Vercel Environment Variables or Admin > Settings.`
+      `No service configured. Please contact your administrator.`
     );
   }
 
@@ -253,5 +253,5 @@ export async function tryWithRotation<T>(
     }
   }
 
-  throw lastError || new Error("All API keys failed");
+  throw lastError || new Error("All service attempts failed.");
 }
