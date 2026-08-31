@@ -121,6 +121,19 @@ export default function AdminSettingsPage() {
     } catch { /* ignore */ }
   };
 
+  // Determine key statuses
+  const enabledKeys = keys.filter((k) => k.enabled);
+  const activeKeyId = enabledKeys.length > 0
+    ? enabledKeys.reduce((min, k) => k.total_requests < min.total_requests ? k : min, enabledKeys[0]).id
+    : null;
+
+  const isExhausted = (k: ApiKeyEntry) => {
+    if (!k.last_error) return false;
+    const msg = k.last_error.toLowerCase();
+    return msg.includes("quota") || msg.includes("insufficient") ||
+           msg.includes("billing") || msg.includes("limit") || msg.includes("rate");
+  };
+
   // Aggregate stats
   const totalKeys = keys.length;
   const totalRequests = keys.reduce((s, k) => s + k.total_requests, 0);
@@ -176,6 +189,18 @@ export default function AdminSettingsPage() {
           </div>
         )}
 
+        {/* Legend */}
+        {keys.length > 1 && (
+          <div className="flex items-center gap-4 mb-3 text-[10px] text-[#999]">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Active
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" /> Exhausted
+            </span>
+          </div>
+        )}
+
         {/* Key list */}
         <div className="space-y-3 mb-4">
           {keys.length === 0 ? (
@@ -185,14 +210,31 @@ export default function AdminSettingsPage() {
               <p className="text-xs mt-1">Add a key below or set GROQ_API_KEY in Vercel Environment Variables.</p>
             </div>
           ) : (
-            keys.map((k) => (
-              <div key={k.id} className="border border-[#e0e0e0] rounded-lg p-3">
+            keys.map((k) => {
+              const active = k.id === activeKeyId;
+              const exhausted = isExhausted(k);
+              const borderColor = !k.enabled ? "border-[#e0e0e0]"
+                : active ? "border-green-300"
+                : exhausted ? "border-blue-300"
+                : "border-[#e0e0e0]";
+              return (
+              <div key={k.id} className={`border rounded-lg p-3 ${borderColor} ${!k.enabled ? "opacity-50" : ""}`}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-[#333]">{k.label}</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-[#666] uppercase">{k.provider}</span>
                     {k.source === "env" && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 border border-green-100">env</span>
+                    )}
+                    {k.enabled && active && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> Active
+                      </span>
+                    )}
+                    {k.enabled && exhausted && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Exhausted
+                      </span>
                     )}
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -260,7 +302,8 @@ export default function AdminSettingsPage() {
                   </div>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
 
