@@ -147,14 +147,25 @@ export default function AdminSettingsPage() {
       <h1 className="text-xl font-bold text-[#333] mb-6">Settings</h1>
 
       {/* Source indicator */}
-      {hint && (
-        <div className={`text-xs px-4 py-3 rounded-lg mb-6 flex items-start gap-2 ${
-          source === "env"
-            ? "bg-green-50 border border-green-200 text-green-700"
-            : "bg-amber-50 border border-amber-200 text-amber-700"
-        }`}>
+      {source === "env" ? (
+        <div className="text-xs px-4 py-3 rounded-lg mb-6 flex items-start gap-2 bg-green-50 border border-green-200 text-green-700">
           <Info className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{hint}</span>
+          <span>Keys are loaded from Vercel Environment Variables. They work from any device.</span>
+        </div>
+      ) : (
+        <div className="text-xs px-4 py-3 rounded-lg mb-6 bg-amber-50 border border-amber-200 text-amber-700">
+          <div className="flex items-start gap-2 mb-2">
+            <Info className="w-4 h-4 mt-0.5 shrink-0" />
+            <span className="font-medium">Keys added here only work on this server.</span>
+          </div>
+          <p className="ml-6 mb-2">To make keys work from any device, add them as Vercel Environment Variables:</p>
+          <ol className="ml-6 space-y-1 list-decimal">
+            <li>Go to <a href="https://vercel.com/dashboard" target="_blank" className="underline">Vercel Dashboard</a> → your OLLIN project</li>
+            <li>Go to <strong>Settings</strong> → <strong>Environment Variables</strong></li>
+            <li>Add: Name = <code className="bg-amber-100 px-1 rounded">GROQ_API_KEY</code>, Value = your key</li>
+            <li>Click Save, then redeploy</li>
+          </ol>
+          <p className="ml-6 mt-2 text-amber-600">For multiple keys with auto-fallback, use <code className="bg-amber-100 px-1 rounded">GROQ_API_KEYS</code> (comma-separated).</p>
         </div>
       )}
 
@@ -205,7 +216,7 @@ export default function AdminSettingsPage() {
             <div className="text-center py-6 text-sm text-[#999]">
               <Key className="w-8 h-8 mx-auto mb-2 text-[#ccc]" />
               <p>No API keys configured.</p>
-              <p className="text-xs mt-1">Add a key below or set GROQ_API_KEY in Vercel Environment Variables.</p>
+              <p className="text-xs mt-1">Add a key below (works locally) or set GROQ_API_KEY in Vercel Environment Variables (works everywhere).</p>
             </div>
           ) : (
             keys.map((k) => {
