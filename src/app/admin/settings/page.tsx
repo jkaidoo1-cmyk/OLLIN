@@ -31,7 +31,6 @@ export default function AdminSettingsPage() {
   const [keys, setKeys] = useState<ApiKeyEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [newKey, setNewKey] = useState("");
-  const [newLabel, setNewLabel] = useState("");
   const [newProvider, setNewProvider] = useState("groq");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
@@ -67,14 +66,13 @@ export default function AdminSettingsPage() {
         body: JSON.stringify({
           action: "add",
           key: newKey.trim(),
-          label: newLabel.trim() || `Key ${keys.length + 1}`,
+          label: `Key ${keys.length + 1}`,
           provider: newProvider,
         }),
       });
       const data = await res.json();
       if (data.success) {
         setNewKey("");
-        setNewLabel("");
         setSuccess("Key added successfully");
         await fetchKeys();
       } else {
@@ -311,7 +309,7 @@ export default function AdminSettingsPage() {
         {source === "file" && (
           <div className="border-t border-[#e0e0e0] pt-4">
             <h3 className="text-xs font-medium text-[#666] mb-2">Add API key</h3>
-            <div className="flex gap-2 mb-2">
+            <div className="flex gap-2">
               <select
                 value={newProvider}
                 onChange={(e) => setNewProvider(e.target.value)}
@@ -320,15 +318,6 @@ export default function AdminSettingsPage() {
                 <option value="groq">Groq</option>
                 <option value="gemini">Google Gemini</option>
               </select>
-              <input
-                type="text"
-                value={newLabel}
-                onChange={(e) => setNewLabel(e.target.value)}
-                placeholder="Label (e.g. Main key)"
-                className="input-field text-xs flex-1"
-              />
-            </div>
-            <div className="flex gap-2">
               <input
                 type="password"
                 value={newKey}

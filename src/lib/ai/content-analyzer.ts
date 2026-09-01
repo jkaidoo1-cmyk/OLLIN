@@ -59,6 +59,7 @@ export interface AIOptions {
   fileData?: string;
   fileType?: string;
   fileName?: string;
+  customInstructions?: string;
 }
 
 // ─── API Configuration ────────────────────────────────
@@ -101,11 +102,12 @@ export function buildDeepAnalysisAndQuestionPrompt(
   materialText: string,
   questionCount: number,
   questionTypes: string[],
-  fileName?: string
+  fileName?: string,
+  customInstructions?: string
 ): string {
-  const typeDesc = questionTypes.includes("multiple_choice")
-    ? "multiple choice"
-    : "true/false";
+  const typeDesc = questionTypes
+    .map((t) => t.replace(/_/g, " "))
+    .join(" and ");
 
   // Compress and truncate material
   const compressed = compressMaterial(materialText);
@@ -114,12 +116,16 @@ export function buildDeepAnalysisAndQuestionPrompt(
     ? compressed.slice(0, charLimit)
     : "Generate general academic questions.";
 
-  return `${questionCount} ${typeDesc} questions from this material. Be specific to the content.
+  const instructionsBlock = customInstructions
+    ? `\n\nAdditional instructions: ${customInstructions}`
+    : "";
+
+  return `${questionCount} ${typeDesc} questions from this material. Be specific to the content.${instructionsBlock}
 
 Material:
 ${textBlock}
 
-Rules: Plain text only, no markdown/symbols. Full sentences.
+Rules: Plain text only, no markdown/symbols. Full sentences. Use the question types requested above.
 
 JSON only:
 {"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"0","explanation":"","topic":"","difficulty":"medium"}]}`;
@@ -149,7 +155,7 @@ export async function analyzeAndGenerate(
   for (const p of providers) {
     try {
       const { result } = await tryWithRotation(
-        (apiKey) => callAIProvider(p, materialText, questionCount, questionTypes, apiKey, options.fileData, options.fileType, options.fileName),
+        (apiKey) => callAIProvider(p, materialText, questionCount, questionTypes, apiKey, options.fileData, options.fileType, options.fileName, options.customInstructions),
         p
       );
       return result;
@@ -185,12 +191,13 @@ async function callAIProvider(
   apiKey: string,
   fileData?: string,
   fileType?: string,
-  fileName?: string
+  fileName?: string,
+  customInstructions?: string
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
   if (provider === "gemini") {
-    return callGeminiAPI(materialText, questionCount, questionTypes, apiKey, fileData, fileType, fileName);
+    return callGeminiAPI(materialText, questionCount, questionTypes, apiKey, fileData, fileType, fileName, customInstructions);
   }
-  return callGroqAPI(materialText, questionCount, questionTypes, apiKey, fileData, fileType, fileName);
+  return callGroqAPI(materialText, questionCount, questionTypes, apiKey, fileData, fileType, fileName, customInstructions);
 }
 
 // ─── Groq API ─────────────────────────────────────────
@@ -202,9 +209,10 @@ async function callGroqAPI(
   apiKey: string,
   fileData?: string,
   fileType?: string,
-  fileName?: string
+  fileName?: string,
+  customInstructions?: string
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
-  const prompt = buildDeepAnalysisAndQuestionPrompt(materialText, questionCount, questionTypes, fileName);
+  const prompt = buildDeepAnalysisAndQuestionPrompt(materialText, questionCount, questionTypes, fileName, customInstructions);
 
   const maxTok = Math.min(4096, 256 + questionCount * 300);
   const response = await fetch(GROQ_API_URL, {
@@ -244,9 +252,10 @@ async function callGeminiAPI(
   apiKey: string,
   fileData?: string,
   fileType?: string,
-  fileName?: string
+  fileName?: string,
+  customInstructions?: string
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
-  const prompt = buildDeepAnalysisAndQuestionPrompt(materialText, questionCount, questionTypes, fileName);
+  const prompt = buildDeepAnalysisAndQuestionPrompt(materialText, questionCount, questionTypes, fileName, customInstructions);
 
   // Gemini uses OpenAI-compatible endpoint
   const maxTok2 = Math.min(4096, 256 + questionCount * 300);

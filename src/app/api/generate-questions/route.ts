@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
       question_count = 10,
       question_types = ["multiple_choice"],
       mode = "generate",
+      custom_instructions,
     } = body;
 
     // Check that we have either text or a file
@@ -83,12 +84,13 @@ export async function POST(request: NextRequest) {
     // Call AI — server-side keys from env vars or config file
     const { analysis, questions } = await analyzeAndGenerate(
       finalText,
-      Math.min(question_count, 50),
+      Math.min(question_count, 200),
       question_types,
       {
         fileData: isImage ? file_data : undefined,
         fileType: isImage ? file_type : undefined,
         fileName: isImage ? file_name : undefined,
+        customInstructions: custom_instructions,
       }
     );
 

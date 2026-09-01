@@ -52,6 +52,8 @@ export default function CreateQuizPage() {
   const [quizMode, setQuizMode] = useState<"self" | "host" | "both">("host");
 
   const [questionCount, setQuestionCount] = useState(10);
+  const [questionTypes, setQuestionTypes] = useState<string[]>(["multiple_choice"]);
+  const [customInstructions, setCustomInstructions] = useState("");
   const [timeLimit, setTimeLimit] = useState<number | "">("");
   const [shuffleQuestions, setShuffleQuestions] = useState(true);
   const [startsAt, setStartsAt] = useState("");
@@ -161,9 +163,13 @@ export default function CreateQuizPage() {
     try {
       const body: Record<string, unknown> = {
         question_count: questionCount,
-        question_types: ["multiple_choice"],
+        question_types: questionTypes.length > 0 ? questionTypes : ["multiple_choice"],
         mode: "generate",
       };
+
+      if (customInstructions.trim()) {
+        body.custom_instructions = customInstructions.trim();
+      }
 
       if (materialFileBase64 && materialFileType) {
         body.file_data = materialFileBase64;
@@ -310,6 +316,40 @@ export default function CreateQuizPage() {
 
   const deleteQuestion = (idx: number) => {
     setQuestions((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const addManualQuestion = () => {
+    setQuestions((prev) => [
+      ...prev,
+      {
+        type: "multiple_choice",
+        question: "",
+        options: ["", "", "", ""],
+        correctAnswer: "0",
+        explanation: "",
+        topic: "",
+        difficulty: "medium",
+      },
+    ]);
+    setEditingIdx(questions.length);
+  };
+
+  const updateQuestionOptions = (idx: number, optIdx: number, value: string) => {
+    setQuestions((prev) => {
+      const updated = [...prev];
+      const opts = [...(updated[idx].options || [])];
+      opts[optIdx] = value;
+      updated[idx] = { ...updated[idx], options: opts };
+      return updated;
+    });
+  };
+
+  const setCorrectAnswer = (idx: number, optIdx: number) => {
+    setQuestions((prev) => {
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], correctAnswer: String(optIdx) };
+      return updated;
+    });
   };
 
   const copyShareLink = () => {
@@ -512,17 +552,17 @@ export default function CreateQuizPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="text-xs font-medium text-[#666]">Questions</label>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 bg-green-50 text-green-600 rounded-full">{questionCount}</span>
-                </div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Number of questions</label>
                 <input
-                  type="range"
-                  min={3}
-                  max={30}
+                  type="number"
                   value={questionCount}
-                  onChange={(e) => setQuestionCount(Number(e.target.value))}
-                  className="w-full accent-green-600 cursor-pointer"
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val > 0) setQuestionCount(val);
+                  }}
+                  min={1}
+                  max={200}
+                  className="input-field text-sm"
                 />
               </div>
               <div>
@@ -537,6 +577,50 @@ export default function CreateQuizPage() {
                   className="input-field text-sm"
                 />
               </div>
+            </div>
+
+            {/* Question types */}
+            <div>
+              <label className="block text-xs font-medium text-[#666] mb-2">Question types</label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: "multiple_choice", label: "Multiple choice" },
+                  { value: "true_false", label: "True / False" },
+                  { value: "short_answer", label: "Short answer" },
+                  { value: "fill_blank", label: "Fill in the blank" },
+                ].map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => {
+                      setQuestionTypes((prev) =>
+                        prev.includes(t.value)
+                          ? prev.filter((v) => v !== t.value)
+                          : [...prev, t.value]
+                      );
+                    }}
+                    className={`px-3 py-1.5 rounded border text-xs font-medium transition-colors ${
+                      questionTypes.includes(t.value)
+                        ? "border-green-500 bg-green-50 text-green-700"
+                        : "border-[#e0e0e0] bg-white text-[#666] hover:border-[#ccc]"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom instructions */}
+            <div>
+              <label className="block text-xs font-medium text-[#666] mb-1">Custom instructions (optional)</label>
+              <textarea
+                value={customInstructions}
+                onChange={(e) => setCustomInstructions(e.target.value)}
+                placeholder="e.g. Focus on chapters 3-5, make questions harder, include more application-based questions..."
+                rows={2}
+                className="input-field text-sm resize-y"
+              />
             </div>
             <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-[#333]">
               <input
@@ -638,42 +722,125 @@ export default function CreateQuizPage() {
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
                       {idx + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
+                    </span>                  <div className="flex-1 min-w-0">
                       {editingIdx === idx ? (
-                        <input
-                          type="text"
-                          value={q.question}
-                          onChange={(e) => updateQuestion(idx, "question", e.target.value)}
-                          className="input-field mb-2 text-sm font-medium"
-                        />
+                        <>
+                          <input
+                            type="text"
+                            value={q.question}
+                            onChange={(e) => updateQuestion(idx, "question", e.target.value)}
+                            placeholder="Question text"
+                            className="input-field mb-2 text-sm font-medium"
+                          />
+                          <select
+                            value={q.type}
+                            onChange={(e) => updateQuestion(idx, "type", e.target.value)}
+                            className="input-field mb-2 text-xs"
+                          >
+                            <option value="multiple_choice">Multiple choice</option>
+                            <option value="true_false">True / False</option>
+                            <option value="short_answer">Short answer</option>
+                            <option value="fill_blank">Fill in the blank</option>
+                          </select>
+                          {q.type === "multiple_choice" && q.options && (
+                            <div className="space-y-1.5 mb-2">
+                              {q.options.map((opt, oi) => (
+                                <div key={oi} className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => setCorrectAnswer(idx, oi)}
+                                    className={`w-5 h-5 rounded-full border text-xs flex items-center justify-center flex-shrink-0 ${
+                                      String(oi) === q.correctAnswer
+                                        ? "border-green-500 bg-green-500 text-white"
+                                        : "border-[#ccc] text-[#999]"
+                                    }`}
+                                    title="Mark as correct"
+                                  >
+                                    {String.fromCharCode(65 + oi)}
+                                  </button>
+                                  <input
+                                    type="text"
+                                    value={opt}
+                                    onChange={(e) => updateQuestionOptions(idx, oi, e.target.value)}
+                                    placeholder={`Option ${String.fromCharCode(65 + oi)}`}
+                                    className="input-field text-xs flex-1"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {q.type === "true_false" && (
+                            <div className="flex gap-2 mb-2">
+                              {["true", "false"].map((val) => (
+                                <button
+                                  key={val}
+                                  onClick={() => updateQuestion(idx, "correctAnswer", val)}
+                                  className={`flex-1 py-1.5 rounded border text-xs font-medium ${
+                                    q.correctAnswer === val
+                                      ? "border-green-500 bg-green-50 text-green-700"
+                                      : "border-[#e0e0e0] text-[#666]"
+                                  }`}
+                                >
+                                  {val === "true" ? "True" : "False"}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {(q.type === "short_answer" || q.type === "fill_blank") && (
+                            <input
+                              type="text"
+                              value={q.correctAnswer}
+                              onChange={(e) => updateQuestion(idx, "correctAnswer", e.target.value)}
+                              placeholder="Correct answer"
+                              className="input-field text-xs mb-2"
+                            />
+                          )}
+                          <input
+                            type="text"
+                            value={q.explanation}
+                            onChange={(e) => updateQuestion(idx, "explanation", e.target.value)}
+                            placeholder="Explanation (shown after submission)"
+                            className="input-field text-xs"
+                          />
+                        </>
                       ) : (
-                        <p className="font-medium text-sm text-[#333]">{cleanText(q.question)}</p>
-                      )}
-
-                      {q.options && (
-                        <div className="mt-1.5 space-y-0.5">
-                          {q.options.map((opt, oi) => {
-                            const isCorrect = String(oi) === q.correctAnswer;
-                            return (
-                              <div
-                                key={oi}
-                                className={`text-xs px-2.5 py-1 rounded ${
-                                  isCorrect ? "bg-green-50 text-green-700 font-medium" : "text-[#666]"
-                                }`}
-                              >
-                                {String.fromCharCode(65 + oi)}. {cleanText(opt)}
-                                {isCorrect && " ✓"}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {q.explanation && (
-                        <p className="mt-1.5 text-xs text-[#666] bg-[#f8f8f8] rounded px-2.5 py-1.5">
-                          {cleanText(q.explanation)}
-                        </p>
+                        <>
+                          <p className="font-medium text-sm text-[#333]">{cleanText(q.question)}</p>
+                          <span className="inline-block text-[10px] px-1.5 py-0.5 bg-slate-100 text-[#666] rounded mt-1">
+                            {q.type.replace(/_/g, " ")}
+                          </span>
+                          {q.options && q.type === "multiple_choice" && (
+                            <div className="mt-1.5 space-y-0.5">
+                              {q.options.map((opt, oi) => {
+                                const isCorrect = String(oi) === q.correctAnswer;
+                                return (
+                                  <div
+                                    key={oi}
+                                    className={`text-xs px-2.5 py-1 rounded ${
+                                      isCorrect ? "bg-green-50 text-green-700 font-medium" : "text-[#666]"
+                                    }`}>
+                                    {String.fromCharCode(65 + oi)}. {cleanText(opt)}
+                                    {isCorrect && " ✓"}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {q.type === "true_false" && (
+                            <p className="text-xs text-[#666] mt-1">
+                              Answer: <span className="font-medium text-green-700">{q.correctAnswer === "true" ? "True" : "False"}</span>
+                            </p>
+                          )}
+                          {(q.type === "short_answer" || q.type === "fill_blank") && q.correctAnswer && (
+                            <p className="text-xs text-[#666] mt-1">
+                              Answer: <span className="font-medium text-green-700">{cleanText(q.correctAnswer)}</span>
+                            </p>
+                          )}
+                          {q.explanation && (
+                            <p className="mt-1.5 text-xs text-[#666] bg-[#f8f8f8] rounded px-2.5 py-1.5">
+                              {cleanText(q.explanation)}
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -695,6 +862,14 @@ export default function CreateQuizPage() {
                 </div>
               </div>
             ))}
+
+            {/* Add question manually */}
+            <button
+              onClick={addManualQuestion}
+              className="w-full py-2 border border-dashed border-[#ccc] rounded-lg text-xs font-medium text-[#666] hover:border-green-400 hover:text-green-600 transition-colors"
+            >
+              + Add question manually
+            </button>
 
             {/* Publish */}
             <button
