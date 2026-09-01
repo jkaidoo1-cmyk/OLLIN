@@ -17,7 +17,9 @@ function maskKey(key: string): string {
 // GET — read current config (merges env keys + file keys)
 export async function GET() {
   const allKeys = getAllKeys();
-  const source = process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS ? "env" : "file";
+  const hasEnvKeys = !!(process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS || process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS);
+  const hasFileKeys = allKeys.some((k) => !k.id.startsWith("env-"));
+  const source = hasEnvKeys ? "env" : "file";
 
   // Also get file-based config for usage stats
   let fileConfig: Record<string, unknown> = { api_keys: [], ai_provider: "auto" };

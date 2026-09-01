@@ -316,37 +316,38 @@ export default function AdminSettingsPage() {
           )}
         </div>
 
-        {/* Add new key form (only for file-based keys) */}
-        {source === "file" && (
-          <div className="border-t border-[#e0e0e0] pt-4">
-            <h3 className="text-xs font-medium text-[#666] mb-2">Add API key</h3>
-            <div className="flex gap-2">
-              <select
-                value={newProvider}
-                onChange={(e) => setNewProvider(e.target.value)}
-                className="input-field text-xs w-28"
-              >
-                <option value="groq">Groq</option>
-                <option value="gemini">Google Gemini</option>
-              </select>
-              <input
-                type="password"
-                value={newKey}
-                onChange={(e) => setNewKey(e.target.value)}
-                placeholder="API key"
-                className="input-field text-xs flex-1"
-              />
-              <button
-                onClick={handleAddKey}
-                disabled={!newKey.trim() || adding}
-                className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1 shrink-0"
-              >
-                {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                Add key
-              </button>
-            </div>
+        {/* Add new key form */}
+        <div className="border-t border-[#e0e0e0] pt-4">
+          <h3 className="text-xs font-medium text-[#666] mb-2">Add API key</h3>
+          <div className="flex gap-2">
+            <select
+              value={newProvider}
+              onChange={(e) => setNewProvider(e.target.value)}
+              className="input-field text-xs w-28"
+            >
+              <option value="groq">Groq</option>
+              <option value="gemini">Google Gemini</option>
+            </select>
+            <input
+              type="password"
+              value={newKey}
+              onChange={(e) => setNewKey(e.target.value)}
+              placeholder="API key"
+              className="input-field text-xs flex-1"
+            />
+            <button
+              onClick={handleAddKey}
+              disabled={!newKey.trim() || adding}
+              className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1 shrink-0"
+            >
+              {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+              Add key
+            </button>
           </div>
-        )}
+          {source === "env" && (
+            <p className="text-[10px] text-[#999] mt-1.5">Keys added here are stored locally and used as fallback when env vars are not set for that provider.</p>
+          )}
+        </div>
       </div>
 
       {/* Usage Summary */}

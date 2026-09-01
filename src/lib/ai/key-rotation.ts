@@ -110,17 +110,18 @@ function getFileKeys(): ApiKeyEntry[] {
 }
 
 /**
- * Get all API keys: env vars first, then file-based keys as fallback.
+ * Get all API keys: merge env vars + file-based keys.
+ * Env vars take priority for the same provider, but file keys are included.
  */
 export function getAllKeys(): ApiKeyEntry[] {
   const envKeys = getEnvKeys();
   const fileKeys = getFileKeys();
 
-  // If env keys exist, use those (admin set them in Vercel dashboard)
-  if (envKeys.length > 0) return envKeys;
+  // Merge: env keys first, then file keys that don't duplicate an env key's provider
+  const envProviders = new Set(envKeys.map((k) => k.provider));
+  const uniqueFileKeys = fileKeys.filter((k) => !envProviders.has(k.provider));
 
-  // Otherwise fall back to file keys (local dev / admin added via Settings)
-  return fileKeys;
+  return [...envKeys, ...uniqueFileKeys];
 }
 
 /**
