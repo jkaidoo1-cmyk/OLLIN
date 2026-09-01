@@ -319,11 +319,11 @@ export default function AdminSettingsPage() {
         {/* Add new key form */}
         <div className="border-t border-[#e0e0e0] pt-4">
           <h3 className="text-xs font-medium text-[#666] mb-2">Add API key</h3>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <select
               value={newProvider}
               onChange={(e) => setNewProvider(e.target.value)}
-              className="input-field text-xs w-28"
+              className="text-xs border border-[#ccc] rounded px-2 py-2 bg-white text-[#333]"
             >
               <option value="groq">Groq</option>
               <option value="gemini">Google Gemini</option>
@@ -332,13 +332,13 @@ export default function AdminSettingsPage() {
               type="password"
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
-              placeholder="API key"
-              className="input-field text-xs flex-1"
+              placeholder="Paste your API key here"
+              className="flex-1 text-xs border border-[#ccc] rounded px-3 py-2 bg-white text-[#333] outline-none focus:border-[#006633] focus:ring-1 focus:ring-[#006633]"
             />
             <button
               onClick={handleAddKey}
               disabled={!newKey.trim() || adding}
-              className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1 shrink-0"
+              className="btn-primary text-xs px-3 py-2 flex items-center gap-1 shrink-0"
             >
               {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
               Add key
