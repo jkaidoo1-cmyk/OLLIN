@@ -35,15 +35,38 @@ export default function AdminSettingsPage() {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [source, setSource] = useState<"env" | "file">("file");
+  const [source, setSource] = useState<"env" | "file" | "browser">("file");
   const [hint, setHint] = useState("");
+
+  // localStorage helpers for browser-persisted keys
+  const STORAGE_KEY = "ollin_api_keys";
+
+  function loadBrowserKeys(): ApiKeyEntry[] {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  }
+
+  function saveBrowserKeys(k: ApiKeyEntry[]) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(k));
+  }
 
   const fetchKeys = async () => {
     try {
       const res = await fetch("/api/config");
       const data = await res.json();
-      setKeys(data.api_keys || []);
-      setSource(data.source || "file");
+      const serverKeys = data.api_keys || [];
+      const serverSource = data.source || "file";
+
+      // Merge server keys + browser-persisted keys
+      const browserKeys = loadBrowserKeys();
+      const allIds = new Set(serverKeys.map((k: ApiKeyEntry) => k.id));
+      const uniqueBrowserKeys = browserKeys.filter((k) => !allIds.has(k.id));
+      const merged = [...serverKeys, ...uniqueBrowserKeys];
+
+      setKeys(merged);
+      setSource(merged.length > 0 ? (serverSource === "env" ? "env" : "browser") : serverSource);
       setHint(data.hint || "");
     } catch { /* ignore */ }
     setLoading(false);
@@ -59,64 +82,52 @@ export default function AdminSettingsPage() {
     setError("");
     setSuccess("");
 
-    try {
-      const res = await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "add",
-          key: newKey.trim(),
-          label: `Key ${keys.length + 1}`,
-          provider: newProvider,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setNewKey("");
-        setSuccess("Key added successfully");
-        await fetchKeys();
-      } else {
-        setError(data.error || "Failed to add key");
-      }
-    } catch {
-      setError("Failed to add key");
-    } finally {
-      setAdding(false);
-    }
+    const newEntry: ApiKeyEntry = {
+      id: `browser-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      key: newKey.trim(),
+      key_preview: newKey.trim().length > 8
+        ? newKey.trim().slice(0, 3) + "..." + newKey.trim().slice(-4)
+        : "****",
+      label: `Key ${keys.length + 1}`,
+      provider: newProvider as "groq" | "gemini",
+      enabled: true,
+      source: "file",
+      added_at: new Date().toISOString(),
+      last_used_at: null,
+      total_requests: 0,
+      total_input_tokens: 0,
+      total_output_tokens: 0,
+      estimated_cost_usd: 0,
+      last_error: null,
+      last_error_at: null,
+    };
+
+    // Save to localStorage (persists across refreshes)
+    const updated = [...keys, newEntry];
+    saveBrowserKeys(updated);
+    setKeys(updated);
+    setNewKey("");
+    setSuccess("Key added successfully");
+    setAdding(false);
   };
 
-  const handleRemoveKey = async (id: string) => {
+  const handleRemoveKey = (id: string) => {
     if (!confirm("Remove this API key?")) return;
-    try {
-      await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "remove", id }),
-      });
-      await fetchKeys();
-    } catch { /* ignore */ }
+    const updated = keys.filter((k) => k.id !== id);
+    saveBrowserKeys(updated);
+    setKeys(updated);
   };
 
-  const handleToggleKey = async (id: string, enabled: boolean) => {
-    try {
-      await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "toggle", id, enabled }),
-      });
-      await fetchKeys();
-    } catch { /* ignore */ }
+  const handleToggleKey = (id: string, enabled: boolean) => {
+    const updated = keys.map((k) => k.id === id ? { ...k, enabled } : k);
+    saveBrowserKeys(updated);
+    setKeys(updated);
   };
 
-  const handleClearError = async (id: string) => {
-    try {
-      await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "clear_error", id }),
-      });
-      await fetchKeys();
-    } catch { /* ignore */ }
+  const handleClearError = (id: string) => {
+    const updated = keys.map((k) => k.id === id ? { ...k, last_error: null, last_error_at: null } : k);
+    saveBrowserKeys(updated);
+    setKeys(updated);
   };
 
   // Determine key statuses
@@ -153,19 +164,11 @@ export default function AdminSettingsPage() {
           <span>Keys are loaded from Vercel Environment Variables. They work from any device.</span>
         </div>
       ) : (
-        <div className="text-xs px-4 py-3 rounded-lg mb-6 bg-amber-50 border border-amber-200 text-amber-700">
-          <div className="flex items-start gap-2 mb-2">
+        <div className="text-xs px-4 py-3 rounded-lg mb-6 bg-blue-50 border border-blue-200 text-blue-700">
+          <div className="flex items-start gap-2">
             <Info className="w-4 h-4 mt-0.5 shrink-0" />
-            <span className="font-medium">Keys added here only work on this server.</span>
+            <span>Keys are saved in your browser and persist across refreshes. They are used when generating questions.</span>
           </div>
-          <p className="ml-6 mb-2">To make keys work from any device, add them as Vercel Environment Variables:</p>
-          <ol className="ml-6 space-y-1 list-decimal">
-            <li>Go to <a href="https://vercel.com/dashboard" target="_blank" className="underline">Vercel Dashboard</a> → your OLLIN project</li>
-            <li>Go to <strong>Settings</strong> → <strong>Environment Variables</strong></li>
-            <li>Add: Name = <code className="bg-amber-100 px-1 rounded">GROQ_API_KEY</code>, Value = your key</li>
-            <li>Click Save, then redeploy</li>
-          </ol>
-          <p className="ml-6 mt-2 text-amber-600">For multiple keys with auto-fallback, use <code className="bg-amber-100 px-1 rounded">GROQ_API_KEYS</code> (comma-separated).</p>
         </div>
       )}
 

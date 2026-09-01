@@ -60,6 +60,7 @@ export interface AIOptions {
   fileType?: string;
   fileName?: string;
   customInstructions?: string;
+  clientKeys?: Array<{ id: string; key: string; provider: string }>;
 }
 
 // ─── API Configuration ────────────────────────────────
@@ -139,10 +140,16 @@ export async function analyzeAndGenerate(
   questionTypes: string[],
   options: AIOptions = {}
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
-  // Get all available providers from server-side keys
-  const { getAllKeys } = await import("./key-rotation");
-  const allKeys = getAllKeys();
-  const enabledKeys = allKeys.filter((k) => k.enabled && k.key);
+  // Use client keys from browser localStorage if provided, otherwise server-side keys
+  let enabledKeys: Array<{ id: string; key: string; provider: string }> = [];
+
+  if (options.clientKeys && options.clientKeys.length > 0) {
+    enabledKeys = options.clientKeys.filter((k) => k.key && k.provider);
+  } else {
+    const { getAllKeys } = await import("./key-rotation");
+    const allKeys = getAllKeys();
+    enabledKeys = allKeys.filter((k) => k.enabled && k.key);
+  }
 
   if (enabledKeys.length === 0) {
     throw new Error("No service configured. Please contact your administrator.");
@@ -153,10 +160,13 @@ export async function analyzeAndGenerate(
   let lastError: Error | null = null;
 
   for (const p of providers) {
+    const providerKeys = enabledKeys.filter((k) => k.provider === p);
     try {
       const { result } = await tryWithRotation(
         (apiKey) => callAIProvider(p, materialText, questionCount, questionTypes, apiKey, options.fileData, options.fileType, options.fileName, options.customInstructions),
-        p
+        p,
+        undefined,
+        providerKeys.map((k) => ({ id: k.id, key: k.key }))
       );
       return result;
     } catch (err) {
