@@ -9,7 +9,16 @@ import { enableDemoMode } from "@/lib/demo";
 export default function Home() {
   const router = useRouter();
 
-  const handleDemo = () => {
+  const handleDemo = async () => {
+    // Log in as the demo student through the API so the httpOnly session
+    // cookie is issued (needed for server-side auth on later calls).
+    try {
+      await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "demo@ollin.app", password: "password", demo: true }),
+      });
+    } catch { /* cookie is best-effort; localStorage demo still works */ }
     enableDemoMode();
     router.push("/dashboard");
   };

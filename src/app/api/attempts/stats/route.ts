@@ -4,6 +4,7 @@ import {
   readServerQuestions,
   readServerQuizzes,
 } from "@/lib/data";
+import { serverGetDemoQuizById, serverGetDemoQuestions } from "@/lib/server-demo";
 import { getSessionUser } from "@/lib/session";
 
 /**
@@ -18,7 +19,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "quiz_id is required" }, { status: 400 });
     }
 
-    const quiz = readServerQuizzes().find((q) => q.id === quizId);
+    const quiz =
+      readServerQuizzes().find((q) => q.id === quizId) ||
+      serverGetDemoQuizById(quizId) ||
+      null;
     if (!quiz) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
     }
@@ -65,7 +69,9 @@ export async function GET(request: NextRequest) {
     // Per-question list. Attempts currently store only totals, not per-question
     // answers, so correct_rate is null until that data exists — the UI hides
     // the bar rather than showing a fake 0%.
-    const questions = readServerQuestions().filter((q) => q.quiz_id === quizId);
+    const questions =
+      readServerQuestions().filter((q) => q.quiz_id === quizId) ||
+      serverGetDemoQuestions(quizId);
     const per_question = questions.map((q, i) => ({
       index: i + 1,
       question: q.question_text,
