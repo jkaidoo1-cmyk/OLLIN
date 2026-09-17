@@ -106,7 +106,13 @@ async function getSupabase() {
 
 async function getServerSupabase() {
   const { createClient } = await import("@/lib/supabase/server");
-  return createClient();
+  const client = await createClient();
+  if (!client) {
+    // No Supabase configured — every server path should be treated as
+    // file-backed demo storage rather than crashing with null.auth.
+    throw new Error("NO_BACKEND");
+  }
+  return client;
 }
 
 // ─── Quiz Operations ───────────────────────────────────

@@ -18,6 +18,7 @@ import {
   BookOpen,
   Trophy,
   TrendingUp,
+  BarChart3,
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -26,6 +27,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // Score distribution for the selected quiz (from the stats endpoint)
+  const [distribution, setDistribution] = useState<{ bucket: string; count: number }[]>([]);
+  const [distQuizId, setDistQuizId] = useState<string>("");
+  const [statsLoading, setStatsLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
@@ -94,6 +99,35 @@ export default function DashboardPage() {
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
+
+  // Load the score distribution for one quiz via the stats endpoint.
+  const loadDistribution = async (quizId: string) => {
+    if (!quizId) return;
+    setStatsLoading(true);
+    try {
+      const res = await fetch(`/api/attempts/stats?quiz_id=${encodeURIComponent(quizId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDistribution(data.distribution || []);
+      } else {
+        setDistribution([]);
+      }
+    } catch {
+      setDistribution([]);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  // Auto-select the first quiz that has attempts once the dashboard data lands.
+  const firstQuizWithAttempts = quizzes.find((q) => allAttempts.some((a) => a.quiz_id === q.id));
+  useEffect(() => {
+    if (!loading && !distQuizId && firstQuizWithAttempts) {
+      setDistQuizId(firstQuizWithAttempts.id);
+      loadDistribution(firstQuizWithAttempts.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, firstQuizWithAttempts?.id]);
 
   // Derived stats
   const publishedCount = quizzes.filter((q) => q.status === "published").length;
@@ -299,6 +333,59 @@ export default function DashboardPage() {
                     </div>
                   ))}
               </div>
+            </div>
+          )}
+
+          {/* Score Distribution */}
+          {quizzes.some((q) => allAttempts.some((a) => a.quiz_id === q.id)) && (
+            <div className="bg-white border border-[#e0e0e0] rounded-lg p-4">
+              <h2 className="text-sm font-semibold text-[#333] mb-3 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-[#006633]" />
+                Score Distribution
+              </h2>
+              {quizzes.some((q) => allAttempts.some((a) => a.quiz_id === q.id)) && (
+                <select
+                  className="w-full text-xs border border-[#e0e0e0] rounded-md px-2 py-1.5 bg-white text-[#333] mb-3"
+                  value={distQuizId || ""}
+                  onChange={(e) => {
+                    setDistQuizId(e.target.value);
+                    loadDistribution(e.target.value);
+                  }}
+                >
+                  {quizzes
+                    .filter((q) => allAttempts.some((a) => a.quiz_id === q.id))
+                    .map((q) => (
+                      <option key={q.id} value={q.id}>{q.title}</option>
+                    ))}
+                </select>
+              )}
+              {statsLoading ? (
+                <p className="text-xs text-[#999] text-center py-4">Loading…</p>
+              ) : distribution.length === 0 ? (
+                <p className="text-xs text-[#999] text-center py-4">Select a quiz to see results</p>
+              ) : (
+                <div className="flex items-end gap-1 h-24">
+                  {distribution.map((d) => {
+                    const max = Math.max(...distribution.map((x) => x.count), 1);
+                    return (
+                      <div key={d.bucket} className="flex-1 flex flex-col items-center gap-1 group relative">
+                        <div
+                          className={`w-full rounded-t ${d.count > 0 ? "bg-[#006633]" : "bg-[#f0f0f0]"}`}
+                          style={{ height: `${(d.count / max) * 80}px`, minHeight: d.count > 0 ? "4px" : "2px" }}
+                        />
+                        <span className="text-[8px] text-[#999] whitespace-nowrap">
+                          {d.bucket === "90-100" ? "90+" : d.bucket.split("-")[0]}
+                        </span>
+                        {d.count > 0 && (
+                          <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#333] text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                            {d.count} student{d.count !== 1 ? "s" : ""}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

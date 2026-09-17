@@ -81,6 +81,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleLogout = async () => {
     if (demo) {
+      // Clear the httpOnly session cookie server-side too.
+      try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
       disableDemoMode();
       router.push("/");
       return;

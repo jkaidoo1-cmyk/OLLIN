@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readDemoUsers, publicUser } from "@/lib/demo-users-store";
+import { createSessionCookie } from "@/lib/session";
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,7 +23,12 @@ export async function POST(request: NextRequest) {
       (u) => u.email.toLowerCase() === String(email).toLowerCase() && u.password === password
     );
     if (user) {
-      return NextResponse.json({ user: publicUser(user), demo: true });
+      const res = NextResponse.json({ user: publicUser(user), demo: true });
+      res.headers.append(
+        "Set-Cookie",
+        createSessionCookie({ id: user.id, email: user.email, role: user.role || "student" })
+      );
+      return res;
     }
 
     // Demo-flag logins never fall through to Supabase.

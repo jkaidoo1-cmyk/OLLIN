@@ -35,6 +35,12 @@ export async function POST(
     // Real Supabase update
     const { createClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
+    if (!supabase) {
+      return NextResponse.json(
+        { error: "No database backend configured" },
+        { status: 503 }
+      );
+    }
 
     const { data, error } = await supabase
       .from("quizzes")

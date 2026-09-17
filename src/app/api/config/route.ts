@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllKeys } from "@/lib/ai/key-rotation";
+import { getSessionAdmin } from "@/lib/session";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 
@@ -14,8 +15,11 @@ function maskKey(key: string): string {
   return key.slice(0, 3) + "..." + key.slice(-4);
 }
 
-// GET — read current config (merges env keys + file keys)
-export async function GET() {
+// GET — read current config (merges env keys + file keys) — admin only
+export async function GET(request: NextRequest) {
+  if (!getSessionAdmin(request)) {
+    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
   const allKeys = getAllKeys();
   const hasEnvKeys = !!(process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS || process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS);
   const hasFileKeys = allKeys.some((k) => !k.id.startsWith("env-"));
@@ -54,9 +58,12 @@ export async function GET() {
   });
 }
 
-// POST — add, remove, toggle keys (file-based, for local dev)
+// POST — add, remove, toggle keys (file-based, for local dev) — admin only
 export async function POST(request: NextRequest) {
   try {
+    if (!getSessionAdmin(request)) {
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    }
     const body = await request.json();
     const action = body.action;
 

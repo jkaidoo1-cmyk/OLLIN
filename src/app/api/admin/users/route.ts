@@ -4,6 +4,7 @@ import {
   writeDemoUsers,
   publicUser,
 } from "@/lib/demo-users-store";
+import { getSessionAdmin } from "@/lib/session";
 
 function isEmailTaken(users: any[], email: string, excludeId?: string) {
   const normalized = String(email).toLowerCase().trim();
@@ -19,6 +20,10 @@ export async function GET(request: NextRequest) {
     const demo = request.headers.get("x-demo-mode") === "true";
 
     if (demo) {
+      // Server-side auth: the request must carry a valid admin session cookie.
+      if (!getSessionAdmin(request)) {
+        return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+      }
       const users = readDemoUsers().map(publicUser);
       return NextResponse.json({ users });
     }
@@ -26,6 +31,12 @@ export async function GET(request: NextRequest) {
     // Real Supabase — use service role to list all users
     const { createClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
+    if (!supabase) {
+      return NextResponse.json(
+        { error: "No account backend configured. Use demo mode." },
+        { status: 503 }
+      );
+    }
 
     // Check current user is admin
     const { data: userData } = await supabase.auth.getUser();
@@ -74,6 +85,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (demo) {
+      // Server-side auth: only a valid admin session may create accounts.
+      if (!getSessionAdmin(request)) {
+        return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+      }
       const users = readDemoUsers();
       if (isEmailTaken(users, email)) {
         return NextResponse.json(
@@ -99,6 +114,12 @@ export async function POST(request: NextRequest) {
     // Real Supabase — use admin API to create user
     const { createClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
+    if (!supabase) {
+      return NextResponse.json(
+        { error: "No account backend configured. Use demo mode." },
+        { status: 503 }
+      );
+    }
 
     // Verify requester is admin
     const { data: userData } = await supabase.auth.getUser();
@@ -175,6 +196,10 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (demo) {
+      // Server-side auth: only a valid admin session may edit users.
+      if (!getSessionAdmin(request)) {
+        return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+      }
       const users = readDemoUsers();
       const user = users.find((u: any) => u.id === userId);
       if (!user) {
@@ -210,6 +235,12 @@ export async function PATCH(request: NextRequest) {
     // Real Supabase
     const { createClient, createAdminClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
+    if (!supabase) {
+      return NextResponse.json(
+        { error: "No account backend configured. Use demo mode." },
+        { status: 503 }
+      );
+    }
 
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) {
@@ -262,6 +293,10 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (demo) {
+      // Server-side auth: only a valid admin session may delete users.
+      if (!getSessionAdmin(request)) {
+        return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+      }
       const users = readDemoUsers();
       const target = users.find((u: any) => u.id === userId);
       if (!target) {

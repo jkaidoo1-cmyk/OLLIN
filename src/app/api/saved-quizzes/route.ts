@@ -3,6 +3,7 @@ import {
   readSavedQuizzes,
   writeSavedQuizzes,
 } from "@/lib/demo-saved-quizzes";
+import { getSessionAdmin } from "@/lib/session";
 
 // GET — list all saved quiz↔course links
 export async function GET() {
@@ -17,9 +18,12 @@ export async function GET() {
   }
 }
 
-// POST — save a quiz to a course (idempotent)
+// POST — save a quiz to a course (idempotent) — admin only
 export async function POST(request: NextRequest) {
   try {
+    if (!getSessionAdmin(request)) {
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    }
     const body = await request.json();
     const { quiz_id, course_id } = body;
 
@@ -44,9 +48,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE — remove a quiz from a course
+// DELETE — remove a quiz from a course — admin only
 export async function DELETE(request: NextRequest) {
   try {
+    if (!getSessionAdmin(request)) {
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    }
     const { searchParams } = new URL(request.url);
     const quiz_id = searchParams.get("quiz_id");
     const course_id = searchParams.get("course_id");

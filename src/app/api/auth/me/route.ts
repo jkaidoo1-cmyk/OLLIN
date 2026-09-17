@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET() {
   try {
-    const { createClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
+    if (!supabase) {
+      // No Supabase configured — check the local session cookie instead.
+      try {
+        const { getSessionUserFromCookieStore } = await import("@/lib/session");
+        const user = await getSessionUserFromCookieStore();
+        if (user) return NextResponse.json({ user: { ...user, full_name: user.email }, demo: true });
+      } catch { /* ignore */ }
+      return NextResponse.json({ user: null }, { status: 401 });
+    }
 
     const { data: userData } = await supabase.auth.getUser();
 

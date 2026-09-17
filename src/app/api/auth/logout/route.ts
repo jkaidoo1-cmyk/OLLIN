@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
+import { createLogoutCookie } from "@/lib/session";
 
 export async function POST() {
-  try {
-    const { createClient } = await import("@/lib/supabase/server");
-    const supabase = await createClient();
-    await supabase.auth.signOut();
-    return NextResponse.json({ success: true });
-  } catch {
-    return NextResponse.json({ success: true });
-  }
+  const res = NextResponse.json({ ok: true });
+  res.headers.append("Set-Cookie", createLogoutCookie());
+  return res;
 }
