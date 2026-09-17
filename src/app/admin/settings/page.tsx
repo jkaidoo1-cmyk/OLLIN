@@ -76,58 +76,102 @@ export default function AdminSettingsPage() {
     fetchKeys();
   }, []);
 
+  // Persist key changes to the server config file so every user on this
+  // deployment can generate questions (not just the admin's browser).
+  const callConfig = async (body: Record<string, unknown>) => {
+    const res = await fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Request failed");
+    return data;
+  };
+
+  const refreshFromServer = async () => {
+    try {
+      const res = await fetch("/api/config");
+      const data = await res.json();
+      const serverKeys = data.api_keys || [];
+      setKeys(serverKeys);
+      setSource(serverKeys.length > 0 ? (data.source === "env" ? "env" : "file") : data.source);
+      setHint(data.hint || "");
+    } catch { /* ignore */ }
+  };
+
   const handleAddKey = async () => {
     if (!newKey.trim()) return;
     setAdding(true);
     setError("");
     setSuccess("");
 
-    const newEntry: ApiKeyEntry = {
-      id: `browser-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      key: newKey.trim(),
-      key_preview: newKey.trim().length > 8
-        ? newKey.trim().slice(0, 3) + "..." + newKey.trim().slice(-4)
-        : "****",
-      label: `Key ${keys.length + 1}`,
-      provider: newProvider as "groq" | "gemini",
-      enabled: true,
-      source: "file",
-      added_at: new Date().toISOString(),
-      last_used_at: null,
-      total_requests: 0,
-      total_input_tokens: 0,
-      total_output_tokens: 0,
-      estimated_cost_usd: 0,
-      last_error: null,
-      last_error_at: null,
-    };
-
-    // Save to localStorage (persists across refreshes)
-    const updated = [...keys, newEntry];
-    saveBrowserKeys(updated);
-    setKeys(updated);
-    setNewKey("");
-    setSuccess("Key added successfully");
-    setAdding(false);
+    try {
+      const res = await callConfig({
+        action: "add",
+        key: newKey.trim(),
+        provider: newProvider,
+      });
+      // Mirror into localStorage so this browser can still generate even if the file is wiped
+      const stored = loadBrowserKeys().filter((k) => k.id !== res.id);
+      stored.push({
+        id: res.id,
+        key: newKey.trim(),
+        key_preview: newKey.trim().length > 8
+          ? newKey.trim().slice(0, 3) + "..." + newKey.trim().slice(-4)
+          : "****",
+        label: `Key ${keys.length + 1}`,
+        provider: newProvider as "groq" | "gemini",
+        enabled: true,
+        source: "file",
+        added_at: new Date().toISOString(),
+        last_used_at: null,
+        total_requests: 0,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        estimated_cost_usd: 0,
+        last_error: null,
+        last_error_at: null,
+      });
+      saveBrowserKeys(stored);
+      setNewKey("");
+      setSuccess("Key added. It now works for every user on this platform.");
+      await refreshFromServer();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add key");
+    } finally {
+      setAdding(false);
+    }
   };
 
-  const handleRemoveKey = (id: string) => {
+  const handleRemoveKey = async (id: string) => {
     if (!confirm("Remove this API key?")) return;
-    const updated = keys.filter((k) => k.id !== id);
-    saveBrowserKeys(updated);
-    setKeys(updated);
+    try {
+      await callConfig({ action: "remove", id });
+      saveBrowserKeys(loadBrowserKeys().filter((k) => k.id !== id));
+      setSuccess("Key removed");
+      await refreshFromServer();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove key");
+    }
   };
 
-  const handleToggleKey = (id: string, enabled: boolean) => {
-    const updated = keys.map((k) => k.id === id ? { ...k, enabled } : k);
-    saveBrowserKeys(updated);
-    setKeys(updated);
+  const handleToggleKey = async (id: string, enabled: boolean) => {
+    try {
+      await callConfig({ action: "toggle", id, enabled });
+      await refreshFromServer();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update key");
+    }
   };
 
-  const handleClearError = (id: string) => {
-    const updated = keys.map((k) => k.id === id ? { ...k, last_error: null, last_error_at: null } : k);
-    saveBrowserKeys(updated);
-    setKeys(updated);
+  const handleClearError = async (id: string) => {
+    try {
+      await callConfig({ action: "clear_error", id });
+      await refreshFromServer();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to clear error");
+    }
   };
 
   // Determine key statuses
@@ -167,7 +211,7 @@ export default function AdminSettingsPage() {
         <div className="text-xs px-4 py-3 rounded-lg mb-6 bg-blue-50 border border-blue-200 text-blue-700">
           <div className="flex items-start gap-2">
             <Info className="w-4 h-4 mt-0.5 shrink-0" />
-            <span>Keys are saved in your browser and persist across refreshes. They are used when generating questions.</span>
+            <span>Keys are saved on the server and used when generating questions for all users on this deployment.</span>
           </div>
         </div>
       )}
@@ -383,7 +427,7 @@ export default function AdminSettingsPage() {
         <h2 className="text-sm font-semibold text-[#333] mb-3">Platform</h2>
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="flex justify-between"><span className="text-[#999]">Version</span><span className="text-[#333]">1.0.0</span></div>
-          <div className="flex justify-between"><span className="text-[#999]">Key source</span><span className="text-[#333]">{source === "env" ? "Environment Variables" : "Local Config"}</span></div>
+          <div className="flex justify-between"><span className="text-[#999]">Key source</span><span className="text-[#333]">{source === "env" ? "Environment Variables" : "Server Config"}</span></div>
         </div>
       </div>
     </div>

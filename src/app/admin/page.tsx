@@ -105,8 +105,8 @@ export default function AdminOverviewPage() {
                   <p className="text-sm font-medium text-[#333]">{user.full_name}</p>
                   <p className="text-xs text-[#999]">{user.email}</p>
                 </div>
-                <span className={`badge ${user.role === "admin" ? "badge-danger" : user.role === "host" ? "badge-primary" : "badge-slate"}`}>
-                  {user.role}
+                <span className={`badge ${user.role === "admin" ? "badge-danger" : "badge-slate"}`}>
+                  {user.role === "admin" ? "admin" : "student"}
                 </span>
               </div>
             ))}

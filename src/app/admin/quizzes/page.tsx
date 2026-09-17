@@ -1,14 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getDemoQuestions, getDemoCourses, saveQuizToCourse, removeSavedQuiz, isQuizSavedToCourse } from "@/lib/demo";
-import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check } from "lucide-react";
+import {
+  getDemoQuestions,
+  saveQuizToCourse,
+  removeSavedQuiz,
+  isQuizSavedToCourse,
+  syncSavedQuizzesFromServer,
+  getDemoQuizzes,
+} from "@/lib/demo";
+import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, ExternalLink } from "lucide-react";
 
 export default function AdminQuizzesPage() {
   const [quizzes, setQuizzes] = useState<any[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [courses, setCourses] = useState<any[]>([]);
-  const [saveTarget, setSaveTarget] = useState<{ quizId: string; courseId: string } | null>(null);
+  const [questionsMap, setQuestionsMap] = useState<Record<string, any[]>>({});
+  const [error, setError] = useState("");
 
   const isDemo = typeof window !== "undefined" && localStorage.getItem("ollin_demo_user") !== null;
 
@@ -18,6 +26,8 @@ export default function AdminQuizzesPage() {
 
   const fetchQuizzesAndCourses = async () => {
     try {
+      await syncSavedQuizzesFromServer();
+
       // Fetch quizzes from API (server-side file)
       const res = await fetch("/api/quizzes", {
         headers: isDemo ? { "x-demo-mode": "true" } : {},
@@ -25,60 +35,86 @@ export default function AdminQuizzesPage() {
       const data = await res.json();
       const apiQuizzes = data.quizzes || [];
 
-      // Also get client-side quizzes from localStorage
-      let clientQuizzes: any[] = [];
-      try {
-        const stored = localStorage.getItem("ollin_demo_quizzes");
-        clientQuizzes = stored ? JSON.parse(stored) : [];
-      } catch { /* ignore */ }
-
-      // Merge: deduplicate by id
+      // Merge with any local-only (legacy) quizzes, dedupe by id
       const merged: any[] = [...apiQuizzes];
-      for (const cq of clientQuizzes) {
+      for (const cq of getDemoQuizzes()) {
         if (!merged.some((q) => q.id === cq.id)) {
           merged.push(cq);
         }
       }
       setQuizzes(merged);
 
-      // Fetch courses from API (server-side file)
+      // Fetch courses
       const resC = await fetch("/api/courses", {
         headers: isDemo ? { "x-demo-mode": "true" } : {},
       });
       const dataC = await resC.json();
-      const apiCourses = dataC.courses || [];
-
-      // Also get client-side courses from localStorage
-      let clientCourses: any[] = [];
-      try {
-        const stored = localStorage.getItem("ollin_demo_courses");
-        clientCourses = stored ? JSON.parse(stored) : [];
-      } catch { /* ignore */ }
-
-      const mergedCourses: any[] = [...apiCourses];
-      for (const cc of clientCourses) {
-        if (!mergedCourses.some((c) => c.id === cc.id)) {
-          mergedCourses.push(cc);
-        }
-      }
-      setCourses(mergedCourses);
+      setCourses(dataC.courses || []);
     } catch { /* ignore */ }
   };
 
+  // Load questions for a quiz from the server file (or local fallback)
+  const loadQuestions = async (quizId: string) => {
+    if (questionsMap[quizId]) return;
+    let qs: any[] = [];
+    try {
+      const res = await fetch(`/api/quizzes/${quizId}/questions?show_answers=true`, {
+        headers: isDemo ? { "x-demo-mode": "true" } : {},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        qs = data.questions || [];
+      }
+    } catch { /* ignore */ }
+    if (qs.length === 0) qs = getDemoQuestions(quizId);
+    setQuestionsMap((prev) => ({ ...prev, [quizId]: qs }));
+  };
+
   const toggleExpand = (id: string) => {
-    setExpandedId(expandedId === id ? null : id);
+    if (expandedId === id) {
+      setExpandedId(null);
+    } else {
+      setExpandedId(id);
+      loadQuestions(id);
+    }
   };
 
-  const handleSaveToCourse = (quizId: string, courseId: string) => {
-    saveQuizToCourse(quizId, courseId);
-    setSaveTarget(null);
-    // Re-render
+  const handleSaveToCourse = async (quizId: string, courseId: string) => {
+    await saveQuizToCourse(quizId, courseId);
+    await syncSavedQuizzesFromServer();
     setQuizzes([...quizzes]);
   };
 
-  const handleRemoveFromCourse = (quizId: string, courseId: string) => {
-    removeSavedQuiz(quizId, courseId);
+  const handleRemoveFromCourse = async (quizId: string, courseId: string) => {
+    await removeSavedQuiz(quizId, courseId);
+    await syncSavedQuizzesFromServer();
     setQuizzes([...quizzes]);
+  };
+
+  const handleDelete = async (quiz: any) => {
+    if (!confirm(`Delete "${quiz.title}" and all its questions?`)) return;
+    try {
+      const res = await fetch(`/api/quizzes/${quiz.id}`, {
+        method: "DELETE",
+        headers: isDemo ? { "x-demo-mode": "true" } : {},
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setError(d.error || "Failed to delete quiz");
+        return;
+      }
+      // Remove from local cache too
+      const remaining = getDemoQuizzes().filter((q) => q.id !== quiz.id);
+      localStorage.setItem("ollin_demo_quizzes", JSON.stringify(remaining));
+      setQuizzes((prev) => prev.filter((q) => q.id !== quiz.id));
+      if (expandedId === quiz.id) setExpandedId(null);
+      // Remove from saved-to-course associations
+      const { getSavedQuizzes } = await import("@/lib/demo");
+      const saved = getSavedQuizzes().filter((s) => s.quiz_id !== quiz.id);
+      localStorage.setItem("ollin_demo_saved_quizzes", JSON.stringify(saved));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete quiz");
+    }
   };
 
   return (
@@ -90,6 +126,10 @@ export default function AdminQuizzesPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="mb-4 text-xs px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded">{error}</div>
+      )}
+
       {quizzes.length === 0 ? (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
           <BookOpen className="w-8 h-8 text-[#ccc] mx-auto mb-3" />
@@ -99,7 +139,7 @@ export default function AdminQuizzesPage() {
       ) : (
         <div className="space-y-3">
           {quizzes.map((quiz: any) => {
-            const questions = getDemoQuestions(quiz.id);
+            const questions = questionsMap[quiz.id] || [];
             const isExpanded = expandedId === quiz.id;
 
             return (
@@ -113,7 +153,8 @@ export default function AdminQuizzesPage() {
                     <div className="flex items-center gap-3 mt-1">
                       <span className="text-xs text-[#999] font-mono">{quiz.share_code}</span>
                       <span className="text-xs text-[#999] flex items-center gap-1">
-                        <BookOpen className="w-3 h-3" /> {questions.length} questions
+                        <BookOpen className="w-3 h-3" />{" "}
+                        {questions.length > 0 ? `${questions.length} questions` : "…"}
                       </span>
                       {quiz.time_limit_minutes && (
                         <span className="text-xs text-[#999] flex items-center gap-1">
@@ -126,9 +167,26 @@ export default function AdminQuizzesPage() {
                     <span className={`badge ${quiz.status === "published" ? "badge-success" : quiz.status === "draft" ? "badge-warning" : "badge-slate"}`}>
                       {quiz.status}
                     </span>
-                    <span className="text-xs text-[#999]">
+                    <span className="text-xs text-[#999] hidden sm:inline">
                       {new Date(quiz.created_at).toLocaleDateString()}
                     </span>
+                    <a
+                      href={`/quiz/${quiz.share_code}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="p-1.5 rounded hover:bg-blue-50 text-[#999] hover:text-blue-600 transition-colors"
+                      title="Open quiz"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDelete(quiz); }}
+                      className="p-1.5 rounded hover:bg-red-50 text-[#999] hover:text-red-500 transition-colors"
+                      title="Delete quiz"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                     {isExpanded ? (
                       <ChevronUp className="w-4 h-4 text-[#999]" />
                     ) : (
@@ -137,7 +195,7 @@ export default function AdminQuizzesPage() {
                   </div>
                 </div>
 
-                {/* Expanded questions list */}
+                {/* Expanded: save-to-course + questions */}
                 {isExpanded && (
                   <div className="border-t border-[#e0e0e0] bg-[#f8f8f8] p-4">
                     {/* Save to course section */}
@@ -189,10 +247,14 @@ export default function AdminQuizzesPage() {
                                 </span>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs font-medium text-[#333]">{q.question_text}</p>
-                                  {q.options && (
+                                  {q.options && Array.isArray(q.options) && (
                                     <div className="mt-1.5 space-y-0.5">
                                       {q.options.map((opt: string, oi: number) => {
-                                        const isCorrect = String(oi) === q.correct_answer;
+                                        const isCorrect =
+                                          q.question_type === "true_false"
+                                            ? String(q.correct_answer).toLowerCase() ===
+                                              String(opt).toLowerCase()
+                                            : String(oi) === String(q.correct_answer);
                                         return (
                                           <p key={oi} className={`text-[11px] ${isCorrect ? "text-green-600 font-medium" : "text-[#666]"}`}>
                                             {String.fromCharCode(65 + oi)}. {opt}
@@ -201,6 +263,11 @@ export default function AdminQuizzesPage() {
                                         );
                                       })}
                                     </div>
+                                  )}
+                                  {(q.question_type === "short_answer" || q.question_type === "fill_blank") && q.correct_answer && (
+                                    <p className="text-[11px] text-green-600 font-medium mt-1">
+                                      Answer: {q.correct_answer}
+                                    </p>
                                   )}
                                   {q.explanation && (
                                     <p className="text-[10px] text-[#999] mt-1.5 bg-[#f0f0f0] rounded px-2 py-1">

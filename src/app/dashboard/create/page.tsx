@@ -251,6 +251,26 @@ export default function CreateQuizPage() {
           order_index: idx,
           created_at: new Date().toISOString(),
         }));
+        // Persist server-side (visible from any browser + admin panel) AND locally
+        try {
+          const saveRes = await fetch("/api/quizzes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-demo-mode": "true" },
+            body: JSON.stringify({
+              title: demoQuiz.title,
+              quiz: demoQuiz,
+              questions: demoQuestions,
+            }),
+          });
+          if (!saveRes.ok) {
+            const err = await saveRes.json();
+            throw new Error(err.error || "Failed to save quiz");
+          }
+        } catch (saveErr) {
+          setGenerateError(saveErr instanceof Error ? saveErr.message : "Failed to save quiz. Please try again.");
+          setPublishing(false);
+          return;
+        }
         addDemoQuiz(demoQuiz, demoQuestions);
         // Notify quiz creator
         const { addNotification } = await import("@/lib/demo");

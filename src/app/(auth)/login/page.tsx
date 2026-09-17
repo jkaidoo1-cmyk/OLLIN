@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
-import { enableDemoMode, authenticateDemoUser } from "@/lib/demo";
+import { enableDemoMode } from "@/lib/demo";
 import { Brain, Eye, EyeOff, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
@@ -14,50 +13,51 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
-  const supabase = createClient();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    // Check demo accounts first
-    const demoUser = authenticateDemoUser(email, password);
-    if (demoUser) {
-      enableDemoMode(demoUser);
-      // Add welcome notification
-      const { addNotification } = await import("@/lib/demo");
-      addNotification(
-        "Welcome to OLLIN",
-        "Start by creating your first quiz. Upload any study material and let the platform generate questions.",
-        "system"
-      );
-      if (demoUser.role === "admin") {
-        router.push("/admin");
-      } else {
-        router.push("/dashboard");
-      }
-      return;
-    }
+    try {
+      // Authenticate through the server: it checks the demo users file
+      // (accounts created by an admin work from any browser), then Supabase.
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
 
-    // Try Supabase (only if configured)
-    if (supabase) {
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-
-      if (authError) {
-        setError("Invalid email or password.");
+      if (!res.ok || !data.user) {
+        setError(data.error || "Invalid email or password.");
         setLoading(false);
         return;
       }
 
+      if (data.demo) {
+        enableDemoMode(data.user);
+        const { addNotification } = await import("@/lib/demo");
+        addNotification(
+          "Welcome to OLLIN",
+          "Start by creating your first quiz. Upload any study material and let the platform generate questions.",
+          "system"
+        );
+        if (data.user.role === "admin") {
+          router.push("/admin");
+        } else {
+          router.push("/dashboard");
+        }
+        return;
+      }
+
+      // Real Supabase session (cookie set by the API route)
       router.push("/dashboard");
       router.refresh();
-      return;
+    } catch {
+      setError("Unable to reach the server. Please try again.");
+      setLoading(false);
     }
-
-    setError("Invalid email or password.");
-    setLoading(false);
-    return;
   };
 
   const handleDemo = () => {

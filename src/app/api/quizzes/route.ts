@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createQuiz, getUserQuizzes } from "@/lib/data";
+import { createQuiz, getUserQuizzes, readServerQuizzes, writeServerQuizzes, readServerQuestions, writeServerQuestions } from "@/lib/data";
+import { Quiz, Question } from "@/lib/types";
 
-// GET — list user's quizzes
+// GET — list all quizzes
 export async function GET(request: NextRequest) {
   try {
     const demo = request.headers.get("x-demo-mode") === "true";
@@ -15,7 +16,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST — create a new quiz with questions
+// POST — create a new quiz with questions.
+// In demo mode, the client sends the fully-built quiz (`direct` mode) so it is
+// persisted to the server file and is visible from every browser / the admin panel.
 export async function POST(request: NextRequest) {
   try {
     const demo = request.headers.get("x-demo-mode") === "true";
@@ -28,6 +31,42 @@ export async function POST(request: NextRequest) {
 
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
       return NextResponse.json({ error: "At least one question is required" }, { status: 400 });
+    }
+
+    if (demo && body.quiz) {
+      // Direct-save path: persist the exact quiz object the client built
+      const quiz = body.quiz as Quiz;
+      const serverQuestions: Question[] = (body.questions || []).map(
+        (q: any, idx: number) => ({
+          id: q.id || `q-${Date.now()}-${idx}`,
+          quiz_id: quiz.id,
+          question_text: q.question_text || q.question,
+          question_type: q.question_type || q.type,
+          options: q.options || null,
+          correct_answer: q.correct_answer ?? q.correctAnswer,
+          explanation: q.explanation || null,
+          topic: q.topic || null,
+          difficulty: (q.difficulty || "medium") as "easy" | "medium" | "hard",
+          marks: q.marks ?? 1,
+          order_index: q.order_index ?? idx,
+          created_at: q.created_at || new Date().toISOString(),
+        })
+      );
+
+      const quizzes = readServerQuizzes();
+      const existingIdx = quizzes.findIndex((q) => q.id === quiz.id);
+      if (existingIdx >= 0) quizzes[existingIdx] = quiz;
+      else quizzes.unshift(quiz);
+      writeServerQuizzes(quizzes);
+
+      const allQuestions = readServerQuestions().filter((q) => q.quiz_id !== quiz.id);
+      allQuestions.push(...serverQuestions);
+      writeServerQuestions(allQuestions);
+
+      return NextResponse.json({
+        quiz,
+        code: quiz.share_code,
+      });
     }
 
     const result = await createQuiz(

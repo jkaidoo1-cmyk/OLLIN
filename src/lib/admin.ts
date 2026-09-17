@@ -1,6 +1,7 @@
 "use client";
 
 import { isDemoMode, getDemoUser, getDemoUsers } from "./demo";
+import { ADMIN_EMAIL } from "./demo-constants";
 
 export interface AdminUser {
   id: string;
@@ -16,30 +17,40 @@ export interface AdminStats {
   publishedQuizzes: number;
 }
 
-// Demo admin data
-const DEMO_ADMIN: AdminUser = {
-  id: "admin-001",
-  email: "jkaidoo1@mail.com",
-  full_name: "Admin User",
-  role: "admin",
-};
-
+/**
+ * Is the current session an admin?
+ * Demo sessions: any account whose role is "admin" (not just the seed email).
+ */
 export function isAdmin(): boolean {
   if (typeof window === "undefined") return false;
   if (!isDemoMode()) return false;
   const user = getDemoUser();
-  return user?.email === "jkaidoo1@mail.com";
+  if (!user) return false;
+  // Role-based, with a fallback for sessions created before roles existed.
+  return user.role === "admin" || user.email === ADMIN_EMAIL;
 }
 
 export function getAdminUser(): AdminUser | null {
   if (!isAdmin()) return null;
-  return DEMO_ADMIN;
+  const user = getDemoUser();
+  return {
+    id: user?.id || "admin-001",
+    email: user?.email || ADMIN_EMAIL,
+    full_name: user?.full_name || "Admin User",
+    role: "admin",
+  };
 }
 
 export function enableAdminMode(): AdminUser {
-  // Set the demo user as admin
-  localStorage.setItem("ollin_demo_user", JSON.stringify(DEMO_ADMIN));
-  return DEMO_ADMIN;
+  // Legacy helper — admin accounts should be created through the Users page now.
+  const admin = {
+    id: "admin-001",
+    email: ADMIN_EMAIL,
+    full_name: "Admin User",
+    role: "admin" as const,
+  };
+  localStorage.setItem("ollin_demo_user", JSON.stringify(admin));
+  return admin;
 }
 
 export function getAdminStats(): AdminStats {

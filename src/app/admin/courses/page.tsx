@@ -1,13 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Loader2, Trash2, BookOpen, Save, X, ChevronDown, ChevronUp, Clock } from "lucide-react";
+import { Plus, Loader2, Trash2, BookOpen, Save, X, ChevronDown, ChevronUp, Clock, Pen } from "lucide-react";
 import { Course, Program, Quiz } from "@/lib/types";
-import { getSavedQuizzes, removeSavedQuiz } from "@/lib/demo";
+import { getSavedQuizzes, removeSavedQuiz, syncSavedQuizzesFromServer } from "@/lib/demo";
 
 type PendingAction =
   | { type: "add"; course: Course }
+  | { type: "update"; course: Course }
   | { type: "delete"; courseId: string };
+
+interface EditState {
+  course: Course;
+  code: string;
+  name: string;
+  dept: string;
+  desc: string;
+  programId: string;
+  year: number | "";
+}
 
 export default function AdminCoursesPage() {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -27,6 +38,7 @@ export default function AdminCoursesPage() {
 
   const [pending, setPending] = useState<PendingAction[]>([]);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<EditState | null>(null);
 
   const isDemo = typeof window !== "undefined" && localStorage.getItem("ollin_demo_user") !== null;
 
@@ -35,12 +47,6 @@ export default function AdminCoursesPage() {
     fetchPrograms();
   }, []);
 
-  useEffect(() => {
-    if (expandedCourseId) {
-      loadCourseQuizzes(expandedCourseId);
-    }
-  }, [expandedCourseId]);
-
   const fetchCourses = async () => {
     setLoading(true);
     try {
@@ -48,8 +54,46 @@ export default function AdminCoursesPage() {
         headers: isDemo ? { "x-demo-mode": "true" } : {},
       });
       const data = await res.json();
-      setCourses(data.courses || []);
+      const courseList = data.courses || [];
+      setCourses(courseList);
+      // Preload quiz associations once (single fetch) so each course row shows its count
+      await loadAllQuizzesForCourses(courseList);
     } catch { /* ignore */ } finally { setLoading(false); }
+  };
+
+  // Bulk-load quizzes for every course in one pass (no per-course fetch spam)
+  const loadAllQuizzesForCourses = async (courseList: Course[]) => {
+    try {
+      await syncSavedQuizzesFromServer();
+      const saved = getSavedQuizzes();
+      if (courseList.length === 0 || saved.length === 0) return;
+
+      const res = await fetch("/api/quizzes", {
+        headers: isDemo ? { "x-demo-mode": "true" } : {},
+      });
+      const data = await res.json();
+      const apiQuizzes = data.quizzes || [];
+
+      let clientQuizzes: any[] = [];
+      try {
+        const stored = localStorage.getItem("ollin_demo_quizzes");
+        clientQuizzes = stored ? JSON.parse(stored) : [];
+      } catch { /* ignore */ }
+
+      const allQuizzes = [...apiQuizzes];
+      for (const cq of clientQuizzes) {
+        if (!allQuizzes.some((q: any) => q.id === cq.id)) {
+          allQuizzes.push(cq);
+        }
+      }
+
+      const byCourse: Record<string, any[]> = {};
+      for (const course of courseList) {
+        const ids = new Set(saved.filter((s) => s.course_id === course.id).map((s) => s.quiz_id));
+        byCourse[course.id] = allQuizzes.filter((q: any) => ids.has(q.id));
+      }
+      setCourseQuizzes(byCourse);
+    } catch { /* ignore */ }
   };
 
   const fetchPrograms = async () => {
@@ -62,41 +106,9 @@ export default function AdminCoursesPage() {
     } catch { /* ignore */ }
   };
 
-  const loadCourseQuizzes = async (courseId: string) => {
-    try {
-      // Fetch quizzes from the API
-      const res = await fetch("/api/quizzes", {
-        headers: isDemo ? { "x-demo-mode": "true" } : {},
-      });
-      const data = await res.json();
-      const apiQuizzes = data.quizzes || [];
-
-      // Also get client-side quizzes from localStorage (student-created)
-      let clientQuizzes: any[] = [];
-      try {
-        const stored = localStorage.getItem("ollin_demo_quizzes");
-        clientQuizzes = stored ? JSON.parse(stored) : [];
-      } catch { /* ignore */ }
-
-      // Merge: API quizzes + client quizzes (deduplicate by id)
-      const allQuizzes = [...apiQuizzes];
-      for (const cq of clientQuizzes) {
-        if (!allQuizzes.some((q: any) => q.id === cq.id)) {
-          allQuizzes.push(cq);
-        }
-      }
-
-      // Get saved quiz associations
-      const saved = getSavedQuizzes();
-      const courseQuizIds = saved.filter((s) => s.course_id === courseId).map((s) => s.quiz_id);
-      const matched = allQuizzes.filter((q: any) => courseQuizIds.includes(q.id));
-
-      setCourseQuizzes((prev) => ({ ...prev, [courseId]: matched }));
-    } catch { /* ignore */ }
-  };
-
-  const handleRemoveQuizFromCourse = (courseId: string, quizId: string) => {
-    removeSavedQuiz(quizId, courseId);
+  const handleRemoveQuizFromCourse = async (courseId: string, quizId: string) => {
+    await removeSavedQuiz(quizId, courseId);
+    await syncSavedQuizzesFromServer();
     setCourseQuizzes((prev) => ({
       ...prev,
       [courseId]: (prev[courseId] || []).filter((q) => q.id !== quizId),
@@ -144,6 +156,27 @@ export default function AdminCoursesPage() {
     setPending((prev) => [...prev, { type: "delete", courseId: id }]);
   };
 
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    if (!editing.code.trim() || !editing.name.trim()) {
+      setFormError("Code and name are required");
+      return;
+    }
+    const updated: Course = {
+      ...editing.course,
+      code: editing.code.trim(),
+      name: editing.name.trim(),
+      department: editing.dept || null,
+      description: editing.desc || null,
+      program_id: editing.programId || null,
+      year: editing.year || null,
+      updated_at: new Date().toISOString(),
+    };
+    setPending((prev) => [...prev, { type: "update", course: updated }]);
+    setEditing(null);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -151,6 +184,7 @@ export default function AdminCoursesPage() {
         let updated = [...courses];
         for (const action of pending) {
           if (action.type === "add") updated = [...updated, action.course];
+          else if (action.type === "update") updated = updated.map((c) => (c.id === action.course.id ? action.course : c));
           else if (action.type === "delete") updated = updated.filter((c) => c.id !== action.courseId);
         }
         setCourses(updated);
@@ -160,6 +194,12 @@ export default function AdminCoursesPage() {
               method: "POST",
               headers: { "Content-Type": "application/json", "x-demo-mode": "true" },
               body: JSON.stringify({ code: action.course.code, name: action.course.name, department: action.course.department, description: action.course.description, program_id: action.course.program_id, year: action.course.year }),
+            });
+          } else if (action.type === "update") {
+            await fetch("/api/courses", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", "x-demo-mode": "true" },
+              body: JSON.stringify({ id: action.course.id, code: action.course.code, name: action.course.name, department: action.course.department, description: action.course.description, program_id: action.course.program_id, year: action.course.year }),
             });
           } else if (action.type === "delete") {
             await fetch(`/api/courses?id=${action.courseId}`, { method: "DELETE", headers: { "x-demo-mode": "true" } });
@@ -172,6 +212,12 @@ export default function AdminCoursesPage() {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ code: action.course.code, name: action.course.name, department: action.course.department, description: action.course.description, program_id: action.course.program_id, year: action.course.year }),
+            });
+          } else if (action.type === "update") {
+            await fetch("/api/courses", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: action.course.id, code: action.course.code, name: action.course.name, department: action.course.department, description: action.course.description, program_id: action.course.program_id, year: action.course.year }),
             });
           } else if (action.type === "delete") {
             await fetch(`/api/courses?id=${action.courseId}`, { method: "DELETE" });
@@ -191,9 +237,11 @@ export default function AdminCoursesPage() {
 
       const { addNotification } = await import("@/lib/demo");
       const adds = pending.filter((a) => a.type === "add").length;
+      const updates = pending.filter((a) => a.type === "update").length;
       const deletes = pending.filter((a) => a.type === "delete").length;
       const parts: string[] = [];
       if (adds) parts.push(`${adds} course${adds > 1 ? "s" : ""} added`);
+      if (updates) parts.push(`${updates} course${updates > 1 ? "s" : ""} updated`);
       if (deletes) parts.push(`${deletes} course${deletes > 1 ? "s" : ""} removed`);
       addNotification("Courses updated", parts.join(", ") + ".", "system");
 
@@ -207,19 +255,13 @@ export default function AdminCoursesPage() {
     let result = [...courses];
     for (const action of pending) {
       if (action.type === "add") result.push(action.course);
+      else if (action.type === "update") result = result.map((c) => (c.id === action.course.id ? action.course : c));
       else if (action.type === "delete") result = result.filter((c) => c.id !== action.courseId);
     }
     return result;
   })();
 
-  // Load quizzes for all expanded courses when they change
-  useEffect(() => {
-    displayCourses.forEach((course) => {
-      if (!courseQuizzes[course.id]) {
-        loadCourseQuizzes(course.id);
-      }
-    });
-  }, [displayCourses.length]);
+
 
   return (
     <div className="pb-24">
@@ -232,6 +274,62 @@ export default function AdminCoursesPage() {
           <Plus className="w-3.5 h-3.5" /> Add course
         </button>
       </div>
+
+      {editing && (
+        <div className="bg-white border border-[#e0e0e0] rounded-lg p-5 mb-6">
+          <h2 className="text-sm font-semibold text-[#333] mb-4">Edit course</h2>
+          {formError && <div className="text-xs px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded mb-4">{formError}</div>}
+          <form onSubmit={handleEditSubmit} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Course code</label>
+                <input type="text" value={editing.code} onChange={(e) => setEditing({ ...editing, code: e.target.value })} required placeholder="e.g. CSC 101" className="input-field text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Course name</label>
+                <input type="text" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} required placeholder="e.g. Introduction to Computer Science" className="input-field text-sm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Program</label>
+                <select value={editing.programId} onChange={(e) => setEditing({ ...editing, programId: e.target.value })} className="input-field text-sm">
+                  <option value="">No program</option>
+                  {programs.map((p) => (
+                    <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Department</label>
+                <input type="text" value={editing.dept} onChange={(e) => setEditing({ ...editing, dept: e.target.value })} placeholder="e.g. Computer Science" className="input-field text-sm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Year level</label>
+                <select value={editing.year} onChange={(e) => setEditing({ ...editing, year: e.target.value ? Number(e.target.value) : "" })} className="input-field text-sm">
+                  <option value="">No year assigned</option>
+                  <option value={1}>Year 1</option>
+                  <option value={2}>Year 2</option>
+                  <option value={3}>Year 3</option>
+                  <option value={4}>Year 4</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Description</label>
+                <input type="text" value={editing.desc} onChange={(e) => setEditing({ ...editing, desc: e.target.value })} placeholder="Brief description of the course" className="input-field text-sm" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <button type="submit" className="btn-primary text-xs px-4 py-2 flex items-center gap-1.5">
+                <Save className="w-3.5 h-3.5" /> Add to changes
+              </button>
+              <button type="button" onClick={() => setEditing(null)} className="text-xs text-[#666] hover:text-[#333] px-3 py-2">Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {showForm && (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-5 mb-6">
@@ -297,6 +395,7 @@ export default function AdminCoursesPage() {
         <div className="space-y-2">
           {displayCourses.map((course) => {
             const isPendingAdd = pending.some((a) => a.type === "add" && a.course.id === course.id);
+            const isPendingUpdate = pending.some((a) => a.type === "update" && a.course.id === course.id);
             const isPendingDelete = pending.some((a) => a.type === "delete" && a.courseId === course.id);
             const isExpanded = expandedCourseId === course.id;
             const quizzes = courseQuizzes[course.id] || [];
@@ -304,6 +403,7 @@ export default function AdminCoursesPage() {
             return (
               <div key={course.id} className={`bg-white border rounded-lg overflow-hidden ${
                 isPendingAdd ? "border-green-300 bg-green-50/30" :
+                isPendingUpdate ? "border-amber-300 bg-amber-50/30" :
                 isPendingDelete ? "border-red-300 bg-red-50/30 opacity-50" :
                 "border-[#e0e0e0]"
               }`}>
@@ -329,6 +429,7 @@ export default function AdminCoursesPage() {
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {isPendingAdd && <span className="text-[10px] text-green-600 font-medium">NEW</span>}
+                    {isPendingUpdate && <span className="text-[10px] text-amber-600 font-medium">EDITED</span>}
                     {isPendingDelete && <span className="text-[10px] text-red-500 font-medium">REMOVED</span>}
                     {course.year && (
                       <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 hidden sm:inline">Year {course.year}</span>
@@ -336,8 +437,23 @@ export default function AdminCoursesPage() {
                     {course.department && (
                       <span className="text-[10px] text-[#999] bg-slate-50 px-2 py-0.5 rounded border border-slate-100 hidden sm:inline">{course.department}</span>
                     )}
-                    {!isPendingAdd && !isPendingDelete && (
+                    {!isPendingAdd && !isPendingUpdate && !isPendingDelete && (
                       <>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditing({
+                            course,
+                            code: course.code,
+                            name: course.name,
+                            dept: course.department || "",
+                            desc: course.description || "",
+                            programId: course.program_id || "",
+                            year: course.year || "",
+                          }); }}
+                          className="p-1.5 rounded hover:bg-amber-50 text-[#999] hover:text-amber-600 transition-colors"
+                          title="Edit course"
+                        >
+                          <Pen className="w-3.5 h-3.5" />
+                        </button>
                         <button onClick={(e) => { e.stopPropagation(); handleDelete(course.id); }} className="p-1.5 rounded hover:bg-red-50 text-[#999] hover:text-red-500 transition-colors" title="Delete course">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

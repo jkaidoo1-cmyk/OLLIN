@@ -85,6 +85,50 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PATCH — update a program
+// Demo: update the matching record in the demo file.
+// Real: update the record in Supabase (keep course code fields in sync).
+export async function PATCH(request: NextRequest) {
+  try {
+    const demo = request.headers.get("x-demo-mode") === "true";
+    const body = await request.json();
+    const id = body.id;
+    if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+
+    if (demo) {
+      const programs = readDemoPrograms();
+      const idx = programs.findIndex((p: any) => p.id === id);
+      if (idx < 0) return NextResponse.json({ error: "Program not found" }, { status: 404 });
+      const program = programs[idx];
+      if (body.code) program.code = String(body.code).trim();
+      if (body.name) program.name = String(body.name).trim();
+      if (body.department !== undefined) program.department = body.department || null;
+      if (body.description !== undefined) program.description = body.description || null;
+      program.updated_at = new Date().toISOString();
+      writeDemoPrograms(programs);
+      return NextResponse.json({ program });
+    }
+
+    const { updateProgram } = await import("@/lib/data");
+    const program = await updateProgram(
+      {
+        id,
+        code: body.code?.trim(),
+        name: body.name?.trim(),
+        department: body.department,
+        description: body.description,
+      },
+      false
+    );
+    return NextResponse.json({ program });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to update program" },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE — remove a program
 export async function DELETE(request: NextRequest) {
   try {

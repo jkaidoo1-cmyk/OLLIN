@@ -405,10 +405,19 @@ export function enableDemoMode(user?: DemoUser): DemoUser {
   if (!localStorage.getItem(DEMO_QUIZZES_KEY)) {
     localStorage.setItem(DEMO_QUIZZES_KEY, JSON.stringify(DEMO_QUIZZES));
   }
-  // Initialize users list if none exist
-  if (!localStorage.getItem(DEMO_USERS_KEY)) {
-    localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(DEMO_USERS_DEFAULT));
+  // Ensure the logged-in user exists in the client users list (so the profile
+  // year selector and admin edits can find them, even for admin-created accounts).
+  const users = getDemoUsers();
+  const existing = users.find((x) => x.id === u.id);
+  if (existing) {
+    existing.email = u.email;
+    existing.full_name = u.full_name;
+    existing.role = u.role;
+    if (u.current_year !== undefined) existing.current_year = u.current_year;
+  } else {
+    users.push({ ...u, password: u.password || "" });
   }
+  localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(users));
   return u;
 }
 
@@ -633,19 +642,102 @@ export function getSavedQuizzes(): SavedQuiz[] {
   }
 }
 
-export function saveQuizToCourse(quizId: string, courseId: string): void {
+function writeSavedQuizzesLocal(saved: SavedQuiz[]) {
+  localStorage.setItem(DEMO_SAVED_QUIZZES_KEY, JSON.stringify(saved));
+}
+
+/** Sync the local saved-quiz cache from the server file (single source of truth). */
+export async function syncSavedQuizzesFromServer(): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    const res = await fetch("/api/saved-quizzes");
+    if (!res.ok) return;
+    const data = await res.json();
+    const serverLinks: SavedQuiz[] = (data.saved || []).map((s: any) => ({
+      quiz_id: s.quiz_id,
+      course_id: s.course_id,
+      saved_at: s.saved_at || new Date().toISOString(),
+    }));
+    // Merge: server links win, keep any local-only links that haven't been synced yet
+    const localLinks = getSavedQuizzes();
+    const merged = [...serverLinks];
+    for (const l of localLinks) {
+      if (!merged.some((m) => m.quiz_id === l.quiz_id && m.course_id === l.course_id)) {
+        merged.push(l);
+      }
+    }
+    writeSavedQuizzesLocal(merged);
+  } catch { /* ignore */ }
+}
+
+/**
+ * Pull quizzes / courses / saved links from the server files into the local
+ * cache so student pages show data created in other browsers (and by admin).
+ */
+export async function syncDemoDataFromServer(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const headers: Record<string, string> = isDemoMode() ? { "x-demo-mode": "true" } : {};
+
+  // Quizzes (server file + defaults)
+  try {
+    const res = await fetch("/api/quizzes", { headers });
+    if (res.ok) {
+      const data = await res.json();
+      const serverQuizzes: Quiz[] = data.quizzes || [];
+      const local = getDemoQuizzes();
+      const merged = [...serverQuizzes];
+      for (const q of local) {
+        if (!merged.some((m) => m.id === q.id)) merged.push(q);
+      }
+      localStorage.setItem(DEMO_QUIZZES_KEY, JSON.stringify(merged));
+    }
+  } catch { /* ignore */ }
+
+  // Courses
+  try {
+    const res = await fetch("/api/courses", { headers });
+    if (res.ok) {
+      const data = await res.json();
+      const serverCourses: Course[] = data.courses || [];
+      const local = getDemoCourses();
+      const merged = [...serverCourses];
+      for (const c of local) {
+        if (!merged.some((m) => m.id === c.id)) merged.push(c);
+      }
+      localStorage.setItem(DEMO_COURSES_KEY, JSON.stringify(merged));
+    }
+  } catch { /* ignore */ }
+
+  // Saved quiz ↔ course links
+  await syncSavedQuizzesFromServer();
+}
+
+export async function saveQuizToCourse(quizId: string, courseId: string): Promise<void> {
   const saved = getSavedQuizzes();
   // Don't duplicate
   if (saved.some((s) => s.quiz_id === quizId && s.course_id === courseId)) return;
   saved.push({ quiz_id: quizId, course_id: courseId, saved_at: new Date().toISOString() });
-  localStorage.setItem(DEMO_SAVED_QUIZZES_KEY, JSON.stringify(saved));
+  writeSavedQuizzesLocal(saved);
+  // Persist to server file so other browsers / students see it
+  try {
+    await fetch("/api/saved-quizzes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quiz_id: quizId, course_id: courseId }),
+    });
+  } catch { /* ignore */ }
 }
 
-export function removeSavedQuiz(quizId: string, courseId: string): void {
+export async function removeSavedQuiz(quizId: string, courseId: string): Promise<void> {
   const saved = getSavedQuizzes().filter(
     (s) => !(s.quiz_id === quizId && s.course_id === courseId)
   );
-  localStorage.setItem(DEMO_SAVED_QUIZZES_KEY, JSON.stringify(saved));
+  writeSavedQuizzesLocal(saved);
+  try {
+    await fetch(`/api/saved-quizzes?quiz_id=${encodeURIComponent(quizId)}&course_id=${encodeURIComponent(courseId)}`, {
+      method: "DELETE",
+    });
+  } catch { /* ignore */ }
 }
 
 export function getSavedQuizzesForStudent(): Quiz[] {

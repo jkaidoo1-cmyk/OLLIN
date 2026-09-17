@@ -1,31 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { join } from "path";
+import {
+  readDemoUsers,
+  writeDemoUsers,
+  publicUser,
+} from "@/lib/demo-users-store";
 
-const USERS_KEY = "ollin_demo_users";
-const DEFAULT_USERS = [
-  { id: "admin-001", email: "jkaidoo1@mail.com", full_name: "Admin User", role: "admin", created_at: new Date(Date.now() - 86400000 * 60).toISOString() },
-  { id: "demo-user-001", email: "demo@ollin.app", full_name: "Alex Student", role: "student", created_at: new Date(Date.now() - 86400000 * 30).toISOString() },
-];
-
-function getUsersPath() {
-  return join(process.cwd(), ".ollin-users.json");
-}
-
-function readDemoUsers() {
-  const path = getUsersPath();
-  if (existsSync(path)) {
-    try {
-      return JSON.parse(readFileSync(path, "utf-8"));
-    } catch { /* ignore */ }
-  }
-  // Initialize with defaults
-  writeFileSync(path, JSON.stringify(DEFAULT_USERS, null, 2));
-  return DEFAULT_USERS;
-}
-
-function writeDemoUsers(users: unknown[]) {
-  writeFileSync(getUsersPath(), JSON.stringify(users, null, 2));
+function isEmailTaken(users: any[], email: string, excludeId?: string) {
+  const normalized = String(email).toLowerCase().trim();
+  return users.some(
+    (u) =>
+      u.email?.toLowerCase().trim() === normalized && u.id !== excludeId
+  );
 }
 
 // GET — list all users (admin only)
@@ -34,7 +19,7 @@ export async function GET(request: NextRequest) {
     const demo = request.headers.get("x-demo-mode") === "true";
 
     if (demo) {
-      const users = readDemoUsers();
+      const users = readDemoUsers().map(publicUser);
       return NextResponse.json({ users });
     }
 
@@ -90,17 +75,25 @@ export async function POST(request: NextRequest) {
 
     if (demo) {
       const users = readDemoUsers();
+      if (isEmailTaken(users, email)) {
+        return NextResponse.json(
+          { error: "An account with this email already exists" },
+          { status: 409 }
+        );
+      }
       const newUser = {
         id: `user-${Date.now()}`,
-        email,
-        full_name: full_name || email.split("@")[0],
+        email: String(email).toLowerCase().trim(),
+        full_name: full_name || String(email).split("@")[0],
         role: role || "student",
+        password: String(password),
         program_id: program_id || null,
+        current_year: role === "admin" ? undefined : 1,
         created_at: new Date().toISOString(),
       };
       users.push(newUser);
       writeDemoUsers(users);
-      return NextResponse.json({ user: newUser, message: "Account created (demo mode)" });
+      return NextResponse.json({ user: publicUser(newUser), message: "Account created (demo mode)" });
     }
 
     // Real Supabase — use admin API to create user
@@ -170,6 +163,93 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PATCH — update a user (name, role, program, or password reset) — admin only
+export async function PATCH(request: NextRequest) {
+  try {
+    const demo = request.headers.get("x-demo-mode") === "true";
+    const body = await request.json();
+    const userId = body.id;
+
+    if (!userId) {
+      return NextResponse.json({ error: "User ID is required" }, { status: 400 });
+    }
+
+    if (demo) {
+      const users = readDemoUsers();
+      const user = users.find((u: any) => u.id === userId);
+      if (!user) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+
+      if (body.email && isEmailTaken(users, body.email, userId)) {
+        return NextResponse.json(
+          { error: "An account with this email already exists" },
+          { status: 409 }
+        );
+      }
+
+      // Never allow an admin to demote/delete the final built-in admin via PATCH role
+      if (user.id === "admin-001" && body.role && body.role !== "admin") {
+        return NextResponse.json(
+          { error: "The built-in admin account cannot change role" },
+          { status: 400 }
+        );
+      }
+
+      if (body.email) user.email = String(body.email).toLowerCase().trim();
+      if (body.full_name !== undefined) user.full_name = body.full_name;
+      if (body.role) user.role = body.role;
+      if (body.program_id !== undefined) user.program_id = body.program_id || null;
+      if (body.current_year !== undefined) user.current_year = body.current_year;
+      if (body.password) user.password = String(body.password);
+
+      writeDemoUsers(users);
+      return NextResponse.json({ user: publicUser(user), message: "Account updated" });
+    }
+
+    // Real Supabase
+    const { createClient, createAdminClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", userData.user.id)
+      .single();
+    if (profile?.role !== "admin") {
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    }
+
+    const adminSupabase = await createAdminClient();
+    const updates: Record<string, unknown> = {};
+    if (body.full_name !== undefined) updates.full_name = body.full_name;
+    if (body.role) updates.role = body.role;
+    if (body.program_id !== undefined) updates.program_id = body.program_id || null;
+    if (Object.keys(updates).length > 0) {
+      await adminSupabase.from("profiles").update(updates).eq("id", userId);
+    }
+    if (body.password) {
+      const { error: pwError } = await adminSupabase.auth.admin.updateUserById(userId, {
+        password: String(body.password),
+      });
+      if (pwError) {
+        return NextResponse.json({ error: pwError.message }, { status: 400 });
+      }
+    }
+
+    return NextResponse.json({ message: "Account updated" });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to update user" },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE — remove a user (admin only)
 export async function DELETE(request: NextRequest) {
   try {
@@ -183,6 +263,17 @@ export async function DELETE(request: NextRequest) {
 
     if (demo) {
       const users = readDemoUsers();
+      const target = users.find((u: any) => u.id === userId);
+      if (!target) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+      // Never allow deleting admin accounts from the demo file.
+      if (target.role === "admin") {
+        return NextResponse.json(
+          { error: "Admin accounts cannot be deleted" },
+          { status: 400 }
+        );
+      }
       const filtered = users.filter((u: any) => u.id !== userId);
       writeDemoUsers(filtered);
       return NextResponse.json({ success: true, message: "User deleted (demo)" });

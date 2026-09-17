@@ -94,6 +94,52 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PATCH — update a course (code, name, program, year, etc.)
+export async function PATCH(request: NextRequest) {
+  try {
+    const demo = request.headers.get("x-demo-mode") === "true";
+    const body = await request.json();
+    const id = body.id;
+    if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+
+    if (demo) {
+      const courses = readDemoCourses();
+      const idx = courses.findIndex((c: any) => c.id === id);
+      if (idx < 0) return NextResponse.json({ error: "Course not found" }, { status: 404 });
+      const course = courses[idx];
+      if (body.code) course.code = String(body.code).trim();
+      if (body.name) course.name = String(body.name).trim();
+      if (body.description !== undefined) course.description = body.description || null;
+      if (body.department !== undefined) course.department = body.department || null;
+      if (body.program_id !== undefined) course.program_id = body.program_id || null;
+      if (body.year !== undefined) course.year = body.year || null;
+      course.updated_at = new Date().toISOString();
+      writeDemoCourses(courses);
+      return NextResponse.json({ course });
+    }
+
+    const { updateCourse } = await import("@/lib/data");
+    const course = await updateCourse(
+      {
+        id,
+        code: body.code?.trim(),
+        name: body.name?.trim(),
+        description: body.description,
+        department: body.department,
+        program_id: body.program_id,
+        year: body.year,
+      },
+      false
+    );
+    return NextResponse.json({ course });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to update course" },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE — remove a course
 export async function DELETE(request: NextRequest) {
   try {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { UserPlus, Loader2, Trash2, Shield, GraduationCap, Mail, Eye, EyeOff, Save, X, AlertCircle } from "lucide-react";
+import { UserPlus, Loader2, Trash2, Shield, GraduationCap, Mail, Eye, EyeOff, Save, X, AlertCircle, Pencil } from "lucide-react";
 import { Program } from "@/lib/types";
 
 interface User {
@@ -14,8 +14,18 @@ interface User {
 }
 
 type PendingAction =
-  | { type: "add"; user: User }
+  | { type: "add"; user: User; password: string }
+  | { type: "update"; user: User; password?: string }
   | { type: "delete"; userId: string };
+
+interface EditState {
+  id: string;
+  email: string;
+  full_name: string;
+  role: string;
+  program_id: string;
+  password: string; // empty = keep current
+}
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -33,9 +43,14 @@ export default function AdminUsersPage() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [formProgramId, setFormProgramId] = useState("");
 
+  // Edit state
+  const [editing, setEditing] = useState<EditState | null>(null);
+  const [showEditPassword, setShowEditPassword] = useState(false);
+
   // Pending changes
   const [pending, setPending] = useState<PendingAction[]>([]);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const isDemo = typeof window !== "undefined" && localStorage.getItem("ollin_demo_user") !== null;
 
@@ -51,8 +66,12 @@ export default function AdminUsersPage() {
         headers: isDemo ? { "x-demo-mode": "true" } : {},
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load users");
       setUsers(data.users || []);
-    } catch { /* ignore */ } finally { setLoading(false); }
+      setSaveError("");
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to load users");
+    } finally { setLoading(false); }
   };
 
   const fetchPrograms = async () => {
@@ -65,27 +84,90 @@ export default function AdminUsersPage() {
     } catch { /* ignore */ }
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError("");
-
-    // Stage the new user as a pending add
-    const newUser: User = {
-      id: `pending-${Date.now()}`,
-      email: formEmail,
-      full_name: formName,
-      role: formRole,
-      program_id: formProgramId || null,
-      created_at: new Date().toISOString(),
-    };
-
-    setPending((prev) => [...prev, { type: "add", user: newUser }]);
+  const resetForm = () => {
     setFormEmail("");
     setFormPassword("");
     setFormName("");
     setFormRole("student");
     setFormProgramId("");
     setShowForm(false);
+    setFormError("");
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError("");
+
+    if (!formEmail.trim() || !formPassword) {
+      setFormError("Email and password are required");
+      return;
+    }
+    if (formPassword.length < 6) {
+      setFormError("Password must be at least 6 characters");
+      return;
+    }
+    if (users.some((u) => u.email.toLowerCase() === formEmail.trim().toLowerCase())) {
+      setFormError("An account with this email already exists");
+      return;
+    }
+
+    const newUser: User = {
+      id: `pending-${Date.now()}`,
+      email: formEmail.trim(),
+      full_name: formName.trim() || formEmail.split("@")[0],
+      role: formRole,
+      program_id: formProgramId || null,
+      created_at: new Date().toISOString(),
+    };
+
+    setPending((prev) => [...prev, { type: "add", user: newUser, password: formPassword }]);
+    resetForm();
+  };
+
+  const handleStartEdit = (user: User) => {
+    setEditing({
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name,
+      role: user.role,
+      program_id: user.program_id || "",
+      password: "",
+    });
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    setFormError("");
+
+    if (editing.password && editing.password.length < 6) {
+      setFormError("Password must be at least 6 characters");
+      return;
+    }
+    if (
+      users.some(
+        (u) =>
+          u.id !== editing.id &&
+          u.email.toLowerCase() === editing.email.trim().toLowerCase()
+      )
+    ) {
+      setFormError("An account with this email already exists");
+      return;
+    }
+
+    const updated: User = {
+      ...users.find((u) => u.id === editing.id)!,
+      email: editing.email.trim(),
+      full_name: editing.full_name.trim() || editing.email.split("@")[0],
+      role: editing.role,
+      program_id: editing.program_id || null,
+    };
+
+    setPending((prev) => [
+      ...prev,
+      { type: "update", user: updated, password: editing.password || undefined },
+    ]);
+    setEditing(null);
   };
 
   const handleDelete = (userId: string) => {
@@ -95,65 +177,74 @@ export default function AdminUsersPage() {
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError("");
     try {
-      if (isDemo) {
-        // Apply pending changes to state directly in demo mode
-        let updated = [...users];
-        for (const action of pending) {
-          if (action.type === "add") {
-            updated = [...updated, action.user];
-          } else if (action.type === "delete") {
-            updated = updated.filter((u) => u.id !== action.userId);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (isDemo) headers["x-demo-mode"] = "true";
+
+      for (const action of pending) {
+        if (action.type === "add") {
+          const res = await fetch("/api/admin/users", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              email: action.user.email,
+              password: action.password,
+              full_name: action.user.full_name,
+              role: action.user.role,
+              program_id: action.user.program_id,
+            }),
+          });
+          if (!res.ok) {
+            const d = await res.json();
+            throw new Error(d.error || "Failed to create user");
+          }
+        } else if (action.type === "update") {
+          const res = await fetch("/api/admin/users", {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify({
+              id: action.user.id,
+              email: action.user.email,
+              full_name: action.user.full_name,
+              role: action.user.role,
+              program_id: action.user.program_id,
+              password: action.password,
+            }),
+          });
+          if (!res.ok) {
+            const d = await res.json();
+            throw new Error(d.error || "Failed to update user");
+          }
+        } else if (action.type === "delete") {
+          const res = await fetch(`/api/admin/users?id=${action.userId}`, {
+            method: "DELETE",
+            headers: isDemo ? { "x-demo-mode": "true" } : {},
+          });
+          if (!res.ok) {
+            const d = await res.json();
+            throw new Error(d.error || "Failed to delete user");
           }
         }
-        setUsers(updated);
-        // Also persist to the API for demo
-        for (const action of pending) {
-          if (action.type === "add") {
-            await fetch("/api/admin/users", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "x-demo-mode": "true" },
-              body: JSON.stringify({ email: action.user.email, password: "password123", full_name: action.user.full_name, role: action.user.role, program_id: action.user.program_id }),
-            });
-          } else if (action.type === "delete") {
-            await fetch(`/api/admin/users?id=${action.userId}`, { method: "DELETE", headers: { "x-demo-mode": "true" } });
-          }
-        }
-      } else {
-        // Production: apply via API
-        for (const action of pending) {
-          if (action.type === "add") {
-            await fetch("/api/admin/users", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ email: action.user.email, password: "password123", full_name: action.user.full_name, role: action.user.role, program_id: action.user.program_id }),
-            });
-          } else if (action.type === "delete") {
-            await fetch(`/api/admin/users?id=${action.userId}`, { method: "DELETE" });
-          }
-        }
-        await fetchUsers();
       }
 
-      // Sync localStorage with server file for auth compatibility
-      if (isDemo) {
-        try {
-          const res2 = await fetch("/api/admin/users", { headers: { "x-demo-mode": "true" } });
-          const data2 = await res2.json();
-          localStorage.setItem("ollin_demo_users", JSON.stringify(data2.users || []));
-        } catch { /* ignore */ }
-      }
+      // Always re-read from the server so the list + admin counts stay accurate
+      await fetchUsers();
 
       // Notify
       const { addNotification } = await import("@/lib/demo");
       const adds = pending.filter((a) => a.type === "add").length;
+      const updates = pending.filter((a) => a.type === "update").length;
       const deletes = pending.filter((a) => a.type === "delete").length;
       const parts: string[] = [];
       if (adds) parts.push(`${adds} user${adds > 1 ? "s" : ""} added`);
+      if (updates) parts.push(`${updates} user${updates > 1 ? "s" : ""} updated`);
       if (deletes) parts.push(`${deletes} user${deletes > 1 ? "s" : ""} removed`);
       addNotification("Users updated", parts.join(", ") + ".", "system");
 
       setPending([]);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Save failed — see message above");
     } finally {
       setSaving(false);
     }
@@ -161,6 +252,7 @@ export default function AdminUsersPage() {
 
   const handleDiscard = () => {
     setPending([]);
+    setSaveError("");
   };
 
   // Compute displayed users with pending changes applied
@@ -169,6 +261,8 @@ export default function AdminUsersPage() {
     for (const action of pending) {
       if (action.type === "add") {
         result.push(action.user);
+      } else if (action.type === "update") {
+        result = result.map((u) => (u.id === action.user.id ? action.user : u));
       } else if (action.type === "delete") {
         result = result.filter((u) => u.id !== action.userId);
       }
@@ -194,12 +288,18 @@ export default function AdminUsersPage() {
           <p className="text-xs text-[#999] mt-0.5">{displayUsers.length} accounts {pending.length > 0 && `(${pending.length} pending)`}</p>
         </div>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => { setShowForm(!showForm); setEditing(null); }}
           className="btn-primary text-xs flex items-center gap-1.5"
         >
           <UserPlus className="w-3.5 h-3.5" /> Create user
         </button>
       </div>
+
+      {saveError && (
+        <div className="mb-4 text-xs px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded flex items-center gap-2">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {saveError}
+        </div>
+      )}
 
       {/* Create User Form */}
       {showForm && (
@@ -220,7 +320,6 @@ export default function AdminUsersPage() {
                   type="text"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  required
                   placeholder="John Doe"
                   className="input-field text-sm"
                 />
@@ -292,7 +391,104 @@ export default function AdminUsersPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
+                onClick={resetForm}
+                className="text-xs text-[#666] hover:text-[#333] px-3 py-2"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Edit form */}
+      {editing && (
+        <div className="bg-white border border-[#e0e0e0] rounded-lg p-5 mb-6">
+          <h2 className="text-sm font-semibold text-[#333] mb-4">Edit account</h2>
+
+          {formError && (
+            <div className="text-xs px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded mb-4 flex items-center gap-2">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {formError}
+            </div>
+          )}
+
+          <form onSubmit={handleEditSubmit} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Full name</label>
+                <input
+                  type="text"
+                  value={editing.full_name}
+                  onChange={(e) => setEditing({ ...editing, full_name: e.target.value })}
+                  className="input-field text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Email</label>
+                <input
+                  type="email"
+                  value={editing.email}
+                  onChange={(e) => setEditing({ ...editing, email: e.target.value })}
+                  required
+                  className="input-field text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Role</label>
+                <select
+                  value={editing.role}
+                  onChange={(e) => setEditing({ ...editing, role: e.target.value })}
+                  className="input-field text-sm"
+                >
+                  <option value="student">Student</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Reset password</label>
+                <div className="relative">
+                  <input
+                    type={showEditPassword ? "text" : "password"}
+                    value={editing.password}
+                    onChange={(e) => setEditing({ ...editing, password: e.target.value })}
+                    placeholder="Leave blank to keep current"
+                    className="input-field text-sm pr-9"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPassword(!showEditPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#999] hover:text-[#666]"
+                  >
+                    {showEditPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-[#666] mb-1">Program</label>
+              <select
+                value={editing.program_id}
+                onChange={(e) => setEditing({ ...editing, program_id: e.target.value })}
+                className="input-field text-sm"
+              >
+                <option value="">No program</option>
+                {programs.map((p) => (
+                  <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button type="submit" className="btn-primary text-xs px-4 py-2">
+                Save to changes
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(null)}
                 className="text-xs text-[#666] hover:text-[#333] px-3 py-2"
               >
                 Cancel
@@ -311,6 +507,7 @@ export default function AdminUsersPage() {
         <div className="space-y-2">
           {displayUsers.map((user) => {
             const isPendingAdd = pending.some((a) => a.type === "add" && a.user.id === user.id);
+            const isPendingUpdate = pending.some((a) => a.type === "update" && a.user.id === user.id);
             const isPendingDelete = pending.some((a) => a.type === "delete" && a.userId === user.id);
 
             return (
@@ -318,6 +515,7 @@ export default function AdminUsersPage() {
                 key={user.id}
                 className={`bg-white border rounded-lg p-3.5 flex items-center gap-3 ${
                   isPendingAdd ? "border-green-300 bg-green-50/30" :
+                  isPendingUpdate ? "border-amber-300 bg-amber-50/30" :
                   isPendingDelete ? "border-red-300 bg-red-50/30 opacity-50" :
                   "border-[#e0e0e0]"
                 }`}
@@ -336,6 +534,7 @@ export default function AdminUsersPage() {
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {isPendingAdd && <span className="text-[10px] text-green-600 font-medium">NEW</span>}
+                  {isPendingUpdate && <span className="text-[10px] text-amber-600 font-medium">EDITED</span>}
                   {isPendingDelete && <span className="text-[10px] text-red-500 font-medium">REMOVED</span>}
                   <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${roleBadge(user.role)}`}>
                     {roleIcon(user.role)}
@@ -344,7 +543,16 @@ export default function AdminUsersPage() {
                   <span className="text-[10px] text-[#999] hidden sm:inline">
                     {new Date(user.created_at).toLocaleDateString()}
                   </span>
-                  {user.role !== "admin" && !isPendingAdd && !isPendingDelete && (
+                  {!isPendingAdd && !isPendingDelete && (
+                    <button
+                      onClick={() => handleStartEdit(user)}
+                      className="p-1.5 rounded hover:bg-slate-100 text-[#999] hover:text-[#333] transition-colors"
+                      title="Edit user"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {user.role !== "admin" && !isPendingAdd && !isPendingUpdate && !isPendingDelete && (
                     <button
                       onClick={() => handleDelete(user.id)}
                       className="p-1.5 rounded hover:bg-red-50 text-[#999] hover:text-red-500 transition-colors"

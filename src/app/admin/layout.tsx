@@ -21,19 +21,47 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isRealAdmin, setIsRealAdmin] = useState(false);
 
   useEffect(() => {
-    if (isDemoMode() && isAdmin()) {
-      setAuthorized(true);
-      setLoading(false);
-      return;
-    }
-    router.push("/login");
+    const checkAuth = async () => {
+      // Demo admin session
+      if (isDemoMode() && isAdmin()) {
+        setAuthorized(true);
+        setLoading(false);
+        return;
+      }
+
+      // Real (Supabase) admin session
+      try {
+        const res = await fetch("/api/auth/me");
+        const data = await res.json();
+        if (res.ok && data.user && data.user.role === "admin") {
+          setIsRealAdmin(true);
+          setAuthorized(true);
+          setLoading(false);
+          return;
+        }
+      } catch { /* not authenticated */ }
+
+      router.push("/login");
+    };
+    checkAuth();
   }, [router]);
 
-  const handleLogout = () => {
-    disableDemoMode();
+  const handleLogout = async () => {
+    if (isDemoMode()) {
+      disableDemoMode();
+      router.push("/");
+      return;
+    }
+    if (isRealAdmin) {
+      try {
+        await fetch("/api/auth/logout", { method: "POST" });
+      } catch { /* ignore */ }
+    }
     router.push("/");
+    router.refresh();
   };
 
   if (loading) {

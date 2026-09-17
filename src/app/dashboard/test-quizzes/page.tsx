@@ -7,6 +7,7 @@ import {
   getSavedQuizzesForStudent,
   getDemoQuizzes,
   getDemoUser,
+  syncDemoDataFromServer,
 } from "@/lib/demo";
 import { Quiz, Course } from "@/lib/types";
 import { BookOpen, Clock, Play, ChevronRight, Search } from "lucide-react";
@@ -22,40 +23,47 @@ export default function TestQuizzesPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    const savedQuizzes = getSavedQuizzesForStudent();
-    let allCourses = getDemoCourses();
-    const user = getDemoUser();
+    const load = async () => {
+      // Pull server-side data so quizzes saved by the admin (and quizzes created
+      // on other browsers) show up here too.
+      await syncDemoDataFromServer();
 
-    // Filter courses by student's current year
-    const studentYear = user?.current_year;
-    if (studentYear) {
-      allCourses = allCourses.filter((c) => !c.year || c.year === studentYear);
-    }
+      const savedQuizzes = getSavedQuizzesForStudent();
+      let allCourses = getDemoCourses();
+      const user = getDemoUser();
 
-    // Group quizzes by course
-    const courseMap = new Map<string, Quiz[]>();
-    for (const quiz of savedQuizzes) {
-      const courseId = quiz.course_id;
-      if (!courseId) continue;
-      if (!courseMap.has(courseId)) courseMap.set(courseId, []);
-      courseMap.get(courseId)!.push(quiz);
-    }
-
-    // Build list with courses that have saved quizzes
-    const result: CourseWithQuizzes[] = [];
-    for (const course of allCourses) {
-      const quizzes = courseMap.get(course.id);
-      if (quizzes && quizzes.length > 0) {
-        result.push({ course, quizzes });
+      // Filter courses by student's current year
+      const studentYear = user?.current_year;
+      if (studentYear) {
+        allCourses = allCourses.filter((c) => !c.year || c.year === studentYear);
       }
-    }
 
-    setCoursesWithQuizzes(result);
+      // Group quizzes by course
+      const courseMap = new Map<string, Quiz[]>();
+      for (const quiz of savedQuizzes) {
+        const courseId = quiz.course_id;
+        if (!courseId) continue;
+        if (!courseMap.has(courseId)) courseMap.set(courseId, []);
+        courseMap.get(courseId)!.push(quiz);
+      }
 
-    // Auto-select first course if only one
-    if (result.length === 1) {
-      setSelectedCourseId(result[0].course.id);
-    }
+      // Build list with courses that have saved quizzes
+      const result: CourseWithQuizzes[] = [];
+      for (const course of allCourses) {
+        const quizzes = courseMap.get(course.id);
+        if (quizzes && quizzes.length > 0) {
+          result.push({ course, quizzes });
+        }
+      }
+
+      setCoursesWithQuizzes(result);
+
+      // Auto-select first course if only one
+      if (result.length === 1) {
+        setSelectedCourseId(result[0].course.id);
+      }
+    };
+    load();
   }, []);
 
   const filteredQuizzes = coursesWithQuizzes

@@ -61,7 +61,7 @@ export function readServerQuizzes(): Quiz[] {
   return [];
 }
 
-function writeServerQuizzes(quizzes: Quiz[]) {
+export function writeServerQuizzes(quizzes: Quiz[]) {
   writeFileSync(getServerQuizzesPath(), JSON.stringify(quizzes, null, 2));
 }
 
@@ -73,7 +73,7 @@ export function readServerQuestions(): Question[] {
   return [];
 }
 
-function writeServerQuestions(questions: Question[]) {
+export function writeServerQuestions(questions: Question[]) {
   writeFileSync(getServerQuestionsPath(), JSON.stringify(questions, null, 2));
 }
 
@@ -618,6 +618,60 @@ export async function createProgram(
   return data;
 }
 
+export async function updateProgram(
+  input: { id: string; code?: string; name?: string; department?: string | null; description?: string | null },
+  demo?: boolean
+): Promise<Program> {
+  if (checkDemo(demo)) {
+    if (isServer) {
+      // Server-side file update
+      const path = join(process.cwd(), ".ollin-programs.json");
+      if (existsSync(path)) {
+        const programs = JSON.parse(readFileSync(path, "utf-8"));
+        const idx = programs.findIndex((p: any) => p.id === input.id);
+        if (idx >= 0) {
+          if (input.code) programs[idx].code = input.code;
+          if (input.name) programs[idx].name = input.name;
+          if (input.department !== undefined) programs[idx].department = input.department;
+          if (input.description !== undefined) programs[idx].description = input.description;
+          programs[idx].updated_at = new Date().toISOString();
+          writeFileSync(path, JSON.stringify(programs, null, 2));
+          return programs[idx];
+        }
+      }
+      throw new Error("Program not found");
+    }
+    // Client-side: update localStorage demo data
+    const { getDemoPrograms } = await import("./demo");
+    const programs = getDemoPrograms();
+    const idx = programs.findIndex((p) => p.id === input.id);
+    if (idx < 0) throw new Error("Program not found");
+    if (input.code) programs[idx].code = input.code;
+    if (input.name) programs[idx].name = input.name;
+    if (input.department !== undefined) programs[idx].department = input.department;
+    if (input.description !== undefined) programs[idx].description = input.description;
+    programs[idx].updated_at = new Date().toISOString();
+    localStorage.setItem("ollin_demo_programs", JSON.stringify(programs));
+    return programs[idx];
+  }
+
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("programs")
+    .update({
+      ...(input.code ? { code: input.code.toUpperCase() } : {}),
+      ...(input.name ? { name: input.name } : {}),
+      ...(input.department !== undefined ? { department: input.department } : {}),
+      ...(input.description !== undefined ? { description: input.description } : {}),
+    })
+    .eq("id", input.id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function deleteProgram(id: string, demo?: boolean): Promise<void> {
   if (checkDemo(demo)) {
     if (isServer) return;
@@ -713,6 +767,64 @@ export async function createCourse(
       department: input.department || null,
       program_id: input.program_id || null,
     })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateCourse(
+  input: { id: string; code?: string; name?: string; description?: string | null; department?: string | null; program_id?: string | null; year?: number | null },
+  demo?: boolean
+): Promise<Course> {
+  if (checkDemo(demo)) {
+    if (isServer) {
+      const path = join(process.cwd(), ".ollin-courses.json");
+      if (existsSync(path)) {
+        const courses = JSON.parse(readFileSync(path, "utf-8"));
+        const idx = courses.findIndex((c: any) => c.id === input.id);
+        if (idx >= 0) {
+          if (input.code) courses[idx].code = input.code;
+          if (input.name) courses[idx].name = input.name;
+          if (input.description !== undefined) courses[idx].description = input.description;
+          if (input.department !== undefined) courses[idx].department = input.department;
+          if (input.program_id !== undefined) courses[idx].program_id = input.program_id;
+          if (input.year !== undefined) courses[idx].year = input.year;
+          courses[idx].updated_at = new Date().toISOString();
+          writeFileSync(path, JSON.stringify(courses, null, 2));
+          return courses[idx];
+        }
+      }
+      throw new Error("Course not found");
+    }
+    const { getDemoCourses } = await import("./demo");
+    const courses = getDemoCourses();
+    const idx = courses.findIndex((c) => c.id === input.id);
+    if (idx < 0) throw new Error("Course not found");
+    if (input.code) courses[idx].code = input.code;
+    if (input.name) courses[idx].name = input.name;
+    if (input.description !== undefined) courses[idx].description = input.description;
+    if (input.department !== undefined) courses[idx].department = input.department;
+    if (input.program_id !== undefined) courses[idx].program_id = input.program_id;
+    if (input.year !== undefined) courses[idx].year = input.year;
+    courses[idx].updated_at = new Date().toISOString();
+    localStorage.setItem("ollin_demo_courses", JSON.stringify(courses));
+    return courses[idx];
+  }
+
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("courses")
+    .update({
+      ...(input.code ? { code: input.code.toUpperCase() } : {}),
+      ...(input.name ? { name: input.name } : {}),
+      ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.department !== undefined ? { department: input.department } : {}),
+      ...(input.program_id !== undefined ? { program_id: input.program_id } : {}),
+      ...(input.year !== undefined ? { year: input.year } : {}),
+    })
+    .eq("id", input.id)
     .select()
     .single();
 

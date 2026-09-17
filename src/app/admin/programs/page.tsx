@@ -1,12 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Loader2, Trash2, GraduationCap, Save, X } from "lucide-react";
+import { Plus, Loader2, Trash2, GraduationCap, Save, X, Pen } from "lucide-react";
 import { Program } from "@/lib/types";
 
 type PendingAction =
   | { type: "add"; program: Program }
+  | { type: "update"; program: Program }
   | { type: "delete"; programId: string };
+
+interface EditState {
+  program: Program;
+  code: string;
+  name: string;
+  dept: string;
+  desc: string;
+}
 
 export default function AdminProgramsPage() {
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -21,6 +30,7 @@ export default function AdminProgramsPage() {
 
   const [pending, setPending] = useState<PendingAction[]>([]);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<EditState | null>(null);
 
   const isDemo = typeof window !== "undefined" && localStorage.getItem("ollin_demo_user") !== null;
 
@@ -69,6 +79,25 @@ export default function AdminProgramsPage() {
     setPending((prev) => [...prev, { type: "delete", programId: id }]);
   };
 
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    if (!editing.code.trim() || !editing.name.trim()) {
+      setFormError("Code and name are required");
+      return;
+    }
+    const updated: Program = {
+      ...editing.program,
+      code: editing.code.trim(),
+      name: editing.name.trim(),
+      department: editing.dept || null,
+      description: editing.desc || null,
+      updated_at: new Date().toISOString(),
+    };
+    setPending((prev) => [...prev, { type: "update", program: updated }]);
+    setEditing(null);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -77,6 +106,8 @@ export default function AdminProgramsPage() {
         for (const action of pending) {
           if (action.type === "add") {
             updated = [...updated, action.program];
+          } else if (action.type === "update") {
+            updated = updated.map((p) => (p.id === action.program.id ? action.program : p));
           } else if (action.type === "delete") {
             updated = updated.filter((p) => p.id !== action.programId);
           }
@@ -90,6 +121,12 @@ export default function AdminProgramsPage() {
               headers: { "Content-Type": "application/json", "x-demo-mode": "true" },
               body: JSON.stringify({ code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description }),
             });
+          } else if (action.type === "update") {
+            await fetch("/api/programs", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", "x-demo-mode": "true" },
+              body: JSON.stringify({ id: action.program.id, code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description }),
+            });
           } else if (action.type === "delete") {
             await fetch(`/api/programs?id=${action.programId}`, { method: "DELETE", headers: { "x-demo-mode": "true" } });
           }
@@ -101,6 +138,12 @@ export default function AdminProgramsPage() {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description }),
+            });
+          } else if (action.type === "update") {
+            await fetch("/api/programs", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: action.program.id, code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description }),
             });
           } else if (action.type === "delete") {
             await fetch(`/api/programs?id=${action.programId}`, { method: "DELETE" });
@@ -120,9 +163,11 @@ export default function AdminProgramsPage() {
 
       const { addNotification } = await import("@/lib/demo");
       const adds = pending.filter((a) => a.type === "add").length;
+      const updates = pending.filter((a) => a.type === "update").length;
       const deletes = pending.filter((a) => a.type === "delete").length;
       const parts: string[] = [];
       if (adds) parts.push(`${adds} program${adds > 1 ? "s" : ""} added`);
+      if (updates) parts.push(`${updates} program${updates > 1 ? "s" : ""} updated`);
       if (deletes) parts.push(`${deletes} program${deletes > 1 ? "s" : ""} removed`);
       addNotification("Programs updated", parts.join(", ") + ".", "system");
 
@@ -136,6 +181,7 @@ export default function AdminProgramsPage() {
     let result = [...programs];
     for (const action of pending) {
       if (action.type === "add") result.push(action.program);
+      else if (action.type === "update") result = result.map((p) => (p.id === action.program.id ? action.program : p));
       else if (action.type === "delete") result = result.filter((p) => p.id !== action.programId);
     }
     return result;
@@ -152,6 +198,41 @@ export default function AdminProgramsPage() {
           <Plus className="w-3.5 h-3.5" /> Add program
         </button>
       </div>
+
+      {editing && (
+        <div className="bg-white border border-[#e0e0e0] rounded-lg p-5 mb-6">
+          <h2 className="text-sm font-semibold text-[#333] mb-4">Edit program</h2>
+          {formError && <div className="text-xs px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded mb-4">{formError}</div>}
+          <form onSubmit={handleEditSubmit} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Program code</label>
+                <input type="text" value={editing.code} onChange={(e) => setEditing({ ...editing, code: e.target.value })} required placeholder="e.g. BSc CS" className="input-field text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Program name</label>
+                <input type="text" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} required placeholder="e.g. BSc Computer Science" className="input-field text-sm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Department</label>
+                <input type="text" value={editing.dept} onChange={(e) => setEditing({ ...editing, dept: e.target.value })} placeholder="e.g. Computer Science" className="input-field text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">Description</label>
+                <input type="text" value={editing.desc} onChange={(e) => setEditing({ ...editing, desc: e.target.value })} placeholder="Brief description" className="input-field text-sm" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <button type="submit" className="btn-primary text-xs px-4 py-2 flex items-center gap-1.5">
+                <Save className="w-3.5 h-3.5" /> Add to changes
+              </button>
+              <button type="button" onClick={() => setEditing(null)} className="text-xs text-[#666] hover:text-[#333] px-3 py-2">Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {showForm && (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-5 mb-6">
@@ -198,10 +279,12 @@ export default function AdminProgramsPage() {
         <div className="space-y-2">
           {displayPrograms.map((prog) => {
             const isPendingAdd = pending.some((a) => a.type === "add" && a.program.id === prog.id);
+            const isPendingUpdate = pending.some((a) => a.type === "update" && a.program.id === prog.id);
             const isPendingDelete = pending.some((a) => a.type === "delete" && a.programId === prog.id);
             return (
               <div key={prog.id} className={`bg-white border rounded-lg p-4 flex items-center gap-3 ${
                 isPendingAdd ? "border-green-300 bg-green-50/30" :
+                isPendingUpdate ? "border-amber-300 bg-amber-50/30" :
                 isPendingDelete ? "border-red-300 bg-red-50/30 opacity-50" :
                 "border-[#e0e0e0]"
               }`}>
@@ -217,14 +300,30 @@ export default function AdminProgramsPage() {
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {isPendingAdd && <span className="text-[10px] text-green-600 font-medium">NEW</span>}
+                  {isPendingUpdate && <span className="text-[10px] text-amber-600 font-medium">EDITED</span>}
                   {isPendingDelete && <span className="text-[10px] text-red-500 font-medium">REMOVED</span>}
                   {prog.department && (
                     <span className="text-[10px] text-[#999] bg-slate-50 px-2 py-0.5 rounded border border-slate-100 hidden sm:inline">{prog.department}</span>
                   )}
-                  {!isPendingAdd && !isPendingDelete && (
-                    <button onClick={() => handleDelete(prog.id)} className="p-1.5 rounded hover:bg-red-50 text-[#999] hover:text-red-500 transition-colors" title="Delete">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                  {!isPendingAdd && !isPendingUpdate && !isPendingDelete && (
+                    <>
+                      <button
+                        onClick={() => setEditing({
+                          program: prog,
+                          code: prog.code,
+                          name: prog.name,
+                          dept: prog.department || "",
+                          desc: prog.description || "",
+                        })}
+                        className="p-1.5 rounded hover:bg-amber-50 text-[#999] hover:text-amber-600 transition-colors"
+                        title="Edit"
+                      >
+                        <Pen className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => handleDelete(prog.id)} className="p-1.5 rounded hover:bg-red-50 text-[#999] hover:text-red-500 transition-colors" title="Delete">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
