@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       .eq("id", data.user.id)
       .single();
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       user: {
         id: data.user.id,
         email: data.user.email,
@@ -67,6 +67,16 @@ export async function POST(request: NextRequest) {
       },
       session: data.session,
     });
+    // Also issue the app session cookie so admin/config APIs accept this login.
+    res.headers.append(
+      "Set-Cookie",
+      createSessionCookie({
+        id: data.user.id,
+        email: data.user.email || email,
+        role: (profile?.role as "admin" | "student") || "student",
+      })
+    );
+    return res;
   } catch (error) {
     console.error("Login error:", error);
     return NextResponse.json({ error: "Login failed" }, { status: 500 });

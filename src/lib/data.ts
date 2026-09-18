@@ -741,7 +741,7 @@ export async function getCourseById(
 }
 
 export async function createCourse(
-  input: { code: string; name: string; description?: string; department?: string; program_id?: string },
+  input: { code: string; name: string; description?: string; department?: string; program_id?: string; year?: number | null },
   demo?: boolean
 ): Promise<Course> {
   if (checkDemo(demo)) {
@@ -752,6 +752,7 @@ export async function createCourse(
       description: input.description || null,
       department: input.department || null,
       program_id: input.program_id || null,
+      year: input.year || null,
       created_by: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -772,6 +773,7 @@ export async function createCourse(
       description: input.description || null,
       department: input.department || null,
       program_id: input.program_id || null,
+      year: input.year || null,
     })
     .select()
     .single();

@@ -2,14 +2,37 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   readSavedQuizzes,
   writeSavedQuizzes,
+  type SavedQuizLink,
 } from "@/lib/demo-saved-quizzes";
 import { getSessionAdmin } from "@/lib/session";
+import { createAdminClient } from "@/lib/supabase/server";
 
-// GET — list all saved quiz↔course links
+/**
+ * Saved quiz↔course links.
+ * - Supabase configured → read/write the `saved_quizzes` table (service-role writes).
+ * - Otherwise → the server-side JSON file (single source of truth in file mode).
+ */
+
+async function sbReadSaved(): Promise<SavedQuizLink[] | null> {
+  const supabase = await createAdminClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("saved_quizzes")
+    .select("quiz_id, course_id, saved_at");
+  if (error) throw new Error(error.message);
+  return (data || []).map((r: any) => ({
+    quiz_id: r.quiz_id,
+    course_id: r.course_id,
+    saved_at: r.saved_at,
+  }));
+}
+
+// GET — list all saved quiz↔course links (public read; students use this)
 export async function GET() {
   try {
-    const links = readSavedQuizzes();
-    return NextResponse.json({ saved: links });
+    const sb = await sbReadSaved();
+    if (sb) return NextResponse.json({ saved: sb });
+    return NextResponse.json({ saved: readSavedQuizzes() });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to fetch saved quizzes" },
@@ -21,7 +44,7 @@ export async function GET() {
 // POST — save a quiz to a course (idempotent) — admin only
 export async function POST(request: NextRequest) {
   try {
-    if (!getSessionAdmin(request)) {
+    if (!(await getSessionAdmin(request))) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
     const body = await request.json();
@@ -32,6 +55,19 @@ export async function POST(request: NextRequest) {
         { error: "quiz_id and course_id are required" },
         { status: 400 }
       );
+    }
+
+    const supabase = await createAdminClient();
+    if (supabase) {
+      // Insert is idempotent thanks to the unique(quiz_id, course_id) constraint.
+      const { error } = await supabase
+        .from("saved_quizzes")
+        .upsert(
+          { quiz_id, course_id },
+          { onConflict: "quiz_id,course_id", ignoreDuplicates: true }
+        );
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ success: true });
     }
 
     const links = readSavedQuizzes();
@@ -51,7 +87,7 @@ export async function POST(request: NextRequest) {
 // DELETE — remove a quiz from a course — admin only
 export async function DELETE(request: NextRequest) {
   try {
-    if (!getSessionAdmin(request)) {
+    if (!(await getSessionAdmin(request))) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
     const { searchParams } = new URL(request.url);
@@ -63,6 +99,17 @@ export async function DELETE(request: NextRequest) {
         { error: "quiz_id and course_id are required" },
         { status: 400 }
       );
+    }
+
+    const supabase = await createAdminClient();
+    if (supabase) {
+      const { error } = await supabase
+        .from("saved_quizzes")
+        .delete()
+        .eq("quiz_id", quiz_id)
+        .eq("course_id", course_id);
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ success: true });
     }
 
     const links = readSavedQuizzes().filter(

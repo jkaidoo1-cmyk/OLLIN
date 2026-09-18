@@ -106,22 +106,48 @@ export interface SessionUser {
 }
 
 /**
- * Returns the authenticated user for this request, or null.
- * The user record is re-read from the users file so deleted users
- * lose access immediately even with a still-valid cookie.
+ * Resolve a session payload to a real user. File-mode users come from the
+ * users file (deleted users lose access immediately). Supabase-mode users
+ * (IDs not in the file) are validated against the `profiles` table.
  */
-export function getSessionUser(request: Request): SessionUser | null {
-  const payload = getSessionFromRequest(request);
-  if (!payload) return null;
+async function resolveSessionUser(
+  payload: SessionPayload
+): Promise<SessionUser | null> {
   const users = readDemoUsers();
   const user = users.find((u) => u.id === payload.userId);
-  if (!user) return null; // deleted — session revoked
-  return { id: user.id, email: user.email, role: user.role || "student" };
+  if (user) {
+    return { id: user.id, email: user.email, role: user.role || "student" };
+  }
+
+  // Not in the file store — if Supabase is configured, check profiles.
+  const { createClient } = await import("@/lib/supabase/server");
+  const supabase = await createClient();
+  if (!supabase) return null; // deleted — session revoked
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, email, role")
+    .eq("id", payload.userId)
+    .single();
+  if (!data) return null;
+  return { id: data.id, email: data.email, role: data.role || "student" };
+}
+
+/**
+ * Returns the authenticated user for this request, or null.
+ */
+export async function getSessionUser(request: Request): Promise<SessionUser | null> {
+  const payload = getSessionFromRequest(request);
+  if (!payload) return null;
+  try {
+    return await resolveSessionUser(payload);
+  } catch {
+    return null;
+  }
 }
 
 /** Returns the authenticated admin for this request, or null. */
-export function getSessionAdmin(request: Request): SessionUser | null {
-  const user = getSessionUser(request);
+export async function getSessionAdmin(request: Request): Promise<SessionUser | null> {
+  const user = await getSessionUser(request);
   if (!user) return null;
   return user.role === "admin" ? user : null;
 }
@@ -137,10 +163,11 @@ export async function getSessionUserFromCookieStore(): Promise<SessionUser | nul
   if (!token) return null;
   const payload = deserialize(token);
   if (!payload) return null;
-  const users = readDemoUsers();
-  const user = users.find((u) => u.id === payload.userId);
-  if (!user) return null;
-  return { id: user.id, email: user.email, role: user.role || "student" };
+  try {
+    return await resolveSessionUser(payload);
+  } catch {
+    return null;
+  }
 }
 
 export const SESSION_COOKIE_NAME = COOKIE_NAME;

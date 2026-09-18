@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { createCourse } = await import("@/lib/data");
-    const course = await createCourse({ code: code.trim(), name: name.trim(), description, department, program_id }, false);
+    const course = await createCourse({ code: code.trim(), name: name.trim(), description, department, program_id, year }, false);
     return NextResponse.json({ course });
   } catch (error) {
     return NextResponse.json(

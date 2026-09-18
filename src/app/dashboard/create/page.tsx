@@ -214,11 +214,17 @@ export default function CreateQuizPage() {
     setPublishing(true);
     try {
       const shareCode = quizMode === "self" ? `SELF-${Date.now()}` : generateQuizCode();
+      // Attribute the quiz to the actually logged-in user (not a hard-coded id)
+      let currentUserId = "demo-user-001";
+      try {
+        const raw = localStorage.getItem("ollin_demo_user");
+        if (raw) currentUserId = JSON.parse(raw).id || currentUserId;
+      } catch { /* keep default */ }
 
       if (isDemoMode()) {
         const demoQuiz: Quiz = {
           id: `demo-quiz-${Date.now()}`,
-          host_id: "demo-user-001",
+          host_id: currentUserId,
           title: quizTitle || materialTitle || "Untitled Quiz",
           description: null,
           share_code: shareCode || `SELF-${Date.now()}`,

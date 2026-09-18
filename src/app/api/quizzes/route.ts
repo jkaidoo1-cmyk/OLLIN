@@ -34,8 +34,30 @@ export async function POST(request: NextRequest) {
     }
 
     if (demo && body.quiz) {
-      // Direct-save path: persist the exact quiz object the client built
-      const quiz = body.quiz as Quiz;
+      // Direct-save path: normalize the client-built quiz before persisting,
+      // so a malformed payload can never poison the server file.
+      const raw = body.quiz as Partial<Quiz>;
+      const quizzesNow = readServerQuizzes();
+      const quiz: Quiz = {
+        id: raw.id || `demo-quiz-${Date.now()}`,
+        host_id: raw.host_id || "demo-user-001",
+        title: String(raw.title || title).trim() || "Untitled Quiz",
+        description: raw.description ?? null,
+        share_code: raw.share_code || `OLLIN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+        time_limit_minutes: raw.time_limit_minutes ?? null,
+        max_attempts: raw.max_attempts ?? 1,
+        show_answers_after: raw.show_answers_after || "after_completion",
+        shuffle_questions: raw.shuffle_questions ?? true,
+        shuffle_options: raw.shuffle_options ?? true,
+        passing_score: raw.passing_score ?? 60,
+        starts_at: raw.starts_at ?? null,
+        ends_at: raw.ends_at ?? null,
+        status: raw.status || "published",
+        course_id: raw.course_id ?? null,
+        material_id: raw.material_id ?? null,
+        created_at: raw.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
       const serverQuestions: Question[] = (body.questions || []).map(
         (q: any, idx: number) => ({
           id: q.id || `q-${Date.now()}-${idx}`,
@@ -53,7 +75,7 @@ export async function POST(request: NextRequest) {
         })
       );
 
-      const quizzes = readServerQuizzes();
+      const quizzes = quizzesNow;
       const existingIdx = quizzes.findIndex((q) => q.id === quiz.id);
       if (existingIdx >= 0) quizzes[existingIdx] = quiz;
       else quizzes.unshift(quiz);

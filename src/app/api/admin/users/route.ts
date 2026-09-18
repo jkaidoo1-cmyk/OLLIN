@@ -19,9 +19,14 @@ export async function GET(request: NextRequest) {
   try {
     const demo = request.headers.get("x-demo-mode") === "true";
 
-    if (demo) {
+    // File mode when the header is set OR Supabase is not configured —
+    // so a valid admin session cookie works even in a fresh browser.
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+
+    if (demo || !supabase) {
       // Server-side auth: the request must carry a valid admin session cookie.
-      if (!getSessionAdmin(request)) {
+      if (!(await getSessionAdmin(request))) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
       const users = readDemoUsers().map(publicUser);
@@ -29,14 +34,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Real Supabase — use service role to list all users
-    const { createClient } = await import("@/lib/supabase/server");
-    const supabase = await createClient();
-    if (!supabase) {
-      return NextResponse.json(
-        { error: "No account backend configured. Use demo mode." },
-        { status: 503 }
-      );
-    }
 
     // Check current user is admin
     const { data: userData } = await supabase.auth.getUser();
@@ -84,9 +81,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (demo) {
-      // Server-side auth: only a valid admin session may create accounts.
-      if (!getSessionAdmin(request)) {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+
+    if (demo || !supabase) {
+      // File mode: only a valid admin session may create accounts.
+      if (!(await getSessionAdmin(request))) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
       const users = readDemoUsers();
@@ -108,13 +108,12 @@ export async function POST(request: NextRequest) {
       };
       users.push(newUser);
       writeDemoUsers(users);
-      return NextResponse.json({ user: publicUser(newUser), message: "Account created (demo mode)" });
+      return NextResponse.json({ user: publicUser(newUser), message: "Account created" });
     }
 
     // Real Supabase — use admin API to create user
-    const { createClient } = await import("@/lib/supabase/server");
-    const supabase = await createClient();
     if (!supabase) {
+      // Unreachable in practice (file mode handled above), kept as a guard.
       return NextResponse.json(
         { error: "No account backend configured. Use demo mode." },
         { status: 503 }
@@ -148,6 +147,8 @@ export async function POST(request: NextRequest) {
         email_confirm: true,
         user_metadata: {
           full_name: full_name || email.split("@")[0],
+          role: role || "student",
+          current_year: role === "admin" ? null : 1,
         },
       });
 
@@ -155,7 +156,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: createError.message }, { status: 400 });
     }
 
-    // Update role and program if not defaults
+    // Update role, program, and year if not defaults
     const updates: Record<string, unknown> = {};
     if (role && role !== "student") updates.role = role;
     if (program_id) updates.program_id = program_id;
@@ -172,6 +173,8 @@ export async function POST(request: NextRequest) {
         email: newUser.user.email,
         full_name: full_name || email.split("@")[0],
         role: role || "student",
+        program_id: program_id || null,
+        current_year: role === "admin" ? null : 1,
       },
       message: "Account created successfully",
       temp_password: password,
@@ -195,9 +198,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "User ID is required" }, { status: 400 });
     }
 
-    if (demo) {
-      // Server-side auth: only a valid admin session may edit users.
-      if (!getSessionAdmin(request)) {
+    const { createClient, createAdminClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+
+    if (demo || !supabase) {
+      // File mode: only a valid admin session may edit users.
+      if (!(await getSessionAdmin(request))) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
       const users = readDemoUsers();
@@ -233,15 +239,6 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Real Supabase
-    const { createClient, createAdminClient } = await import("@/lib/supabase/server");
-    const supabase = await createClient();
-    if (!supabase) {
-      return NextResponse.json(
-        { error: "No account backend configured. Use demo mode." },
-        { status: 503 }
-      );
-    }
-
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -260,8 +257,17 @@ export async function PATCH(request: NextRequest) {
     if (body.full_name !== undefined) updates.full_name = body.full_name;
     if (body.role) updates.role = body.role;
     if (body.program_id !== undefined) updates.program_id = body.program_id || null;
+    if (body.current_year !== undefined) updates.current_year = body.current_year;
     if (Object.keys(updates).length > 0) {
       await adminSupabase.from("profiles").update(updates).eq("id", userId);
+    }
+    if (body.email) {
+      const { error: emailError } = await adminSupabase.auth.admin.updateUserById(userId, {
+        email: String(body.email).toLowerCase().trim(),
+      });
+      if (emailError) {
+        return NextResponse.json({ error: emailError.message }, { status: 400 });
+      }
     }
     if (body.password) {
       const { error: pwError } = await adminSupabase.auth.admin.updateUserById(userId, {
@@ -292,9 +298,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "User ID is required" }, { status: 400 });
     }
 
-    if (demo) {
-      // Server-side auth: only a valid admin session may delete users.
-      if (!getSessionAdmin(request)) {
+    const { createAdminClient } = await import("@/lib/supabase/server");
+    const adminSupabase = await createAdminClient();
+
+    if (demo || !adminSupabase) {
+      // File mode: only a valid admin session may delete users.
+      if (!(await getSessionAdmin(request))) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
       const users = readDemoUsers();
@@ -311,11 +320,8 @@ export async function DELETE(request: NextRequest) {
       }
       const filtered = users.filter((u: any) => u.id !== userId);
       writeDemoUsers(filtered);
-      return NextResponse.json({ success: true, message: "User deleted (demo)" });
+      return NextResponse.json({ success: true, message: "User deleted" });
     }
-
-    const { createAdminClient } = await import("@/lib/supabase/server");
-    const adminSupabase = await createAdminClient();
 
     const { error } = await adminSupabase.auth.admin.deleteUser(userId);
     if (error) throw error;

@@ -3,6 +3,7 @@ import { getAllKeys } from "@/lib/ai/key-rotation";
 import { getSessionAdmin } from "@/lib/session";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
+import { createAdminClient } from "@/lib/supabase/server";
 
 const CONFIG_PATH = join(process.cwd(), ".ollin-config.json");
 
@@ -15,59 +16,158 @@ function maskKey(key: string): string {
   return key.slice(0, 3) + "..." + key.slice(-4);
 }
 
-// GET — read current config (merges env keys + file keys) — admin only
-export async function GET(request: NextRequest) {
-  if (!getSessionAdmin(request)) {
-    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-  }
-  const allKeys = getAllKeys();
-  const hasEnvKeys = !!(process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS || process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS);
-  const hasFileKeys = allKeys.some((k) => !k.id.startsWith("env-"));
-  const source = hasEnvKeys ? "env" : "file";
+/**
+ * API key management.
+ * - Supabase configured → keys live in the `api_keys` table (service-role writes).
+ * - Otherwise → `.ollin-config.json` on the server (file mode).
+ * Env-var keys (GROQ_API_KEY etc.) always take precedence for *usage* —
+ * this route manages the admin-added key list + usage stats.
+ */
 
-  // Also get file-based config for usage stats
-  let fileConfig: Record<string, unknown> = { api_keys: [], ai_provider: "auto" };
-  try {
-    if (existsSync(CONFIG_PATH)) {
-      fileConfig = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
-    }
-  } catch { /* ignore */ }
-
-  return NextResponse.json({
-    api_keys: allKeys.map((k) => ({
-      id: k.id,
-      label: k.label,
-      provider: k.provider,
-      enabled: k.enabled,
-      key_preview: maskKey(k.key),
-      source: k.id.startsWith("env-") ? "env" : "file",
-      added_at: (k as any).added_at || null,
-      last_used_at: (k as any).last_used_at || null,
-      last_error: (k as any).last_error || null,
-      last_error_at: (k as any).last_error_at || null,
-      total_requests: k.total_requests,
-      total_input_tokens: k.total_input_tokens,
-      total_output_tokens: k.total_output_tokens,
-      estimated_cost_usd: (k as any).estimated_cost_usd || 0,
-    })),
-    ai_provider: (fileConfig as any).ai_provider || "auto",
-    source,
-    hint: source === "env"
-      ? "Keys are loaded from Vercel Environment Variables."
-      : "Keys are stored locally. Add GROQ_API_KEY to Vercel Environment Variables for production.",
-  });
+async function sbReadKeys(): Promise<any[] | null> {
+  const supabase = await createAdminClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase.from("api_keys").select("*").order("added_at");
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
-// POST — add, remove, toggle keys (file-based, for local dev) — admin only
+// GET — read current key list + usage stats — admin only
+export async function GET(request: NextRequest) {
+  if (!(await getSessionAdmin(request))) {
+    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
+  try {
+    const sbKeys = await sbReadKeys();
+    if (sbKeys) {
+      return NextResponse.json({
+        api_keys: sbKeys.map((k: any) => ({
+          id: k.id,
+          label: k.label,
+          provider: k.provider,
+          enabled: k.enabled,
+          key_preview: maskKey(k.key),
+          source: "supabase",
+          added_at: k.added_at,
+          last_used_at: k.last_used_at,
+          last_error: k.last_error || null,
+          last_error_at: k.last_error_at || null,
+          total_requests: Number(k.total_requests || 0),
+          total_input_tokens: Number(k.total_input_tokens || 0),
+          total_output_tokens: Number(k.total_output_tokens || 0),
+          estimated_cost_usd: Number(k.estimated_cost_usd || 0),
+        })),
+        ai_provider: "auto",
+        source: "supabase",
+        hint: "Keys are stored in your Supabase database.",
+      });
+    }
+
+    const allKeys = getAllKeys();
+    const hasEnvKeys = !!(process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS || process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS);
+    const source = hasEnvKeys ? "env" : "file";
+
+    return NextResponse.json({
+      api_keys: allKeys.map((k) => ({
+        id: k.id,
+        label: k.label,
+        provider: k.provider,
+        enabled: k.enabled,
+        key_preview: maskKey(k.key),
+        source: k.id.startsWith("env-") ? "env" : "file",
+        added_at: (k as any).added_at || null,
+        last_used_at: (k as any).last_used_at || null,
+        last_error: (k as any).last_error || null,
+        last_error_at: (k as any).last_error_at || null,
+        total_requests: k.total_requests,
+        total_input_tokens: k.total_input_tokens,
+        total_output_tokens: k.total_output_tokens,
+        estimated_cost_usd: (k as any).estimated_cost_usd || 0,
+      })),
+      ai_provider: "auto",
+      source,
+      hint: source === "env"
+        ? "Keys are loaded from Vercel Environment Variables."
+        : "Keys are stored on the server.",
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to load settings" },
+      { status: 500 }
+    );
+  }
+}
+
+// POST — add, remove, toggle keys, record usage — admin only
 export async function POST(request: NextRequest) {
   try {
-    if (!getSessionAdmin(request)) {
+    if (!(await getSessionAdmin(request))) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
     const body = await request.json();
     const action = body.action;
 
-    // Load existing file config
+    const supabase = await createAdminClient();
+
+    if (supabase) {
+      if (action === "add") {
+        const id = generateKeyId();
+        const { error } = await supabase.from("api_keys").insert({
+          id,
+          key: body.key,
+          label: body.label || "Key",
+          provider: body.provider || "groq",
+          enabled: true,
+        });
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ success: true, id });
+      }
+      if (action === "remove") {
+        const { error } = await supabase.from("api_keys").delete().eq("id", body.id);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ success: true });
+      }
+      if (action === "toggle") {
+        const { error } = await supabase
+          .from("api_keys")
+          .update({ enabled: !!body.enabled })
+          .eq("id", body.id);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ success: true });
+      }
+      if (action === "clear_error") {
+        const { error } = await supabase
+          .from("api_keys")
+          .update({ last_error: null, last_error_at: null })
+          .eq("id", body.id);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ success: true });
+      }
+      if (action === "record_usage") {
+        // Atomic increment via RPC-less pattern: read then write with service role.
+        const { data: key } = await supabase
+          .from("api_keys")
+          .select("total_requests, total_input_tokens, total_output_tokens")
+          .eq("id", body.id)
+          .single();
+        if (key) {
+          const { error } = await supabase
+            .from("api_keys")
+            .update({
+              total_requests: Number(key.total_requests || 0) + 1,
+              total_input_tokens: Number(key.total_input_tokens || 0) + (body.input_tokens || 0),
+              total_output_tokens: Number(key.total_output_tokens || 0) + (body.output_tokens || 0),
+              last_used_at: new Date().toISOString(),
+            })
+            .eq("id", body.id);
+          if (error) throw new Error(error.message);
+        }
+        return NextResponse.json({ success: true });
+      }
+      return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    }
+
+    // ── File mode (no Supabase) ──
     let config: any = { api_keys: [], ai_provider: "auto", updated_at: new Date().toISOString() };
     try {
       if (existsSync(CONFIG_PATH)) {
@@ -136,7 +236,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: "Failed to update settings" }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to update settings" },
+      { status: 500 }
+    );
   }
 }

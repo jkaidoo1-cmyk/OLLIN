@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
     }
 
-    const requester = getSessionUser(request);
+    const requester = await getSessionUser(request);
     const isCreator = !!requester && (requester.id === quiz.host_id || requester.role === "admin");
     if (!isCreator) {
       return NextResponse.json(
