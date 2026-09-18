@@ -6,8 +6,16 @@ import { Quiz, Question } from "@/lib/types";
 export async function GET(request: NextRequest) {
   try {
     const demo = request.headers.get("x-demo-mode") === "true";
-    const quizzes = await getUserQuizzes(demo);
-    return NextResponse.json({ quizzes });
+    try {
+      const quizzes = await getUserQuizzes(demo);
+      return NextResponse.json({ quizzes });
+    } catch (err) {
+      // NO_BACKEND (Supabase unconfigured or unavailable) → file-backed storage
+      if (err instanceof Error && err.message === "NO_BACKEND") {
+        return NextResponse.json({ quizzes: readServerQuizzes() });
+      }
+      throw err;
+    }
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to fetch quizzes" },

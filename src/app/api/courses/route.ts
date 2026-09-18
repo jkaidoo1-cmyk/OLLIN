@@ -40,8 +40,18 @@ export async function GET(request: NextRequest) {
     }
 
     const { getCourses } = await import("@/lib/data");
-    const courses = await getCourses(false, programId);
-    return NextResponse.json({ courses });
+    try {
+      const courses = await getCourses(false, programId);
+      return NextResponse.json({ courses });
+    } catch (err) {
+      // NO_BACKEND (Supabase unconfigured or unavailable) → file-backed storage
+      if (err instanceof Error && err.message === "NO_BACKEND") {
+        const all = readDemoCourses();
+        const courses = !programId ? all : all.filter((c: any) => c.program_id === programId || !c.program_id);
+        return NextResponse.json({ courses });
+      }
+      throw err;
+    }
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to fetch courses" },

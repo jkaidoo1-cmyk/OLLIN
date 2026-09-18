@@ -34,8 +34,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ programs: readDemoPrograms() });
     }
     const { getPrograms } = await import("@/lib/data");
-    const programs = await getPrograms(false);
-    return NextResponse.json({ programs });
+    try {
+      const programs = await getPrograms(false);
+      return NextResponse.json({ programs });
+    } catch (err) {
+      // NO_BACKEND (Supabase unconfigured or unavailable) → file-backed storage
+      if (err instanceof Error && err.message === "NO_BACKEND") {
+        return NextResponse.json({ programs: readDemoPrograms() });
+      }
+      throw err;
+    }
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to fetch programs" },

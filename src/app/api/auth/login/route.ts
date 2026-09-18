@@ -48,7 +48,9 @@ export async function POST(request: NextRequest) {
     });
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      // Backend availability issues were already filtered out by createClient()
+      // returning null — anything here is a genuine credential problem.
+      return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
     }
 
     // Look up the role from profiles
