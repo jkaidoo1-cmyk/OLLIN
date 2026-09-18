@@ -45,7 +45,33 @@ SUPABASE_SERVICE_ROLE_KEY=eyJ...service...
 
 Restart the dev server.
 
-## 5. Create the admin account
+## 5. Migrate existing data (optional but recommended)
+
+If you already created users, programs, courses, quizzes, or added API keys
+while running in file mode, import them into Supabase:
+
+```
+# Preview what would be migrated (no writes):
+node scripts/migrate-to-supabase.mjs --dry-run
+
+# Run the migration:
+node scripts/migrate-to-supabase.mjs
+```
+
+The script needs `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` in
+`.env.local` (step 4 above). It:
+
+- Creates real auth accounts for every user in `.ollin-users.json`, keeping
+  their existing passwords so everyone logs in as before
+- Remaps all old IDs (like `admin-001`) to proper UUIDs so references stay
+  intact across users, courses, quizzes, questions, saved links, attempts,
+  and API keys
+- Skips anything that already exists in Supabase — safe to re-run
+- Never modifies or deletes the `.ollin-*.json` files
+
+Note: attempts whose quiz no longer exists are skipped (they can't be linked).
+
+## 6. Create the admin account
 
 Because accounts are admin-created, bootstrap the first admin this way:
 
@@ -56,7 +82,7 @@ Because accounts are admin-created, bootstrap the first admin this way:
 
 Log in on the site with that email/password → you land on `/admin`.
 
-## 6. Deploy to Vercel
+## 7. Deploy to Vercel
 
 **Vercel Project → Settings → Environment Variables** — add the same three
 variables (plus your AI keys, see below) for Production + Preview, then
@@ -71,7 +97,7 @@ redeploys. Alternatively/additionally set:
 - `GROQ_API_KEY` — a single Groq key, or
 - `GROQ_API_KEYS` — comma-separated keys (auto-fallback rotation)
 
-## 7. What changes in Supabase mode
+## 8. What changes in Supabase mode
 
 | Thing | File mode | Supabase mode |
 |---|---|---|
