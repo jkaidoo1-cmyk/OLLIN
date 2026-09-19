@@ -9,19 +9,19 @@ export async function GET(
   try {
     const { id } = await params;
 
-    const demo = request.headers.get("x-demo-mode") === "true" || !request.headers.get("authorization");
+    const local = request.headers.get("x-local-mode") === "true" || !request.headers.get("authorization");
 
     // Try by ID first, then by share code
-    let quiz = await getQuizById(id, demo);
+    let quiz = await getQuizById(id, local);
     if (!quiz) {
-      quiz = await getQuizByCode(id, demo);
+      quiz = await getQuizByCode(id, local);
     }
 
     if (!quiz) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
     }
 
-    const questions = await getQuizQuestions(quiz.id, demo);
+    const questions = await getQuizQuestions(quiz.id, local);
 
     return NextResponse.json({ quiz, questions });
   } catch (error) {
@@ -38,9 +38,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const { id } = await params;
-    await deleteQuiz(id, demo);
+    await deleteQuiz(id, local);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(

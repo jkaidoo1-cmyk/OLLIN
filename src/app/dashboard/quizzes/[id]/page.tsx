@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { isDemoMode, getDemoQuizById, getDemoQuestions, getDemoAttempts } from "@/lib/demo";
+import { isLocalMode, getLocalQuizById, getLocalQuestions, getLocalAttempts } from "@/lib/local";
 import { Quiz, Question, QuizAttempt } from "@/lib/types";
 import {
   ArrowLeft,
@@ -45,13 +45,13 @@ export default function QuizDetailPage() {
 
   useEffect(() => {
     const fetchQuiz = async () => {
-      if (isDemoMode()) {
-        const demoQuiz = getDemoQuizById(quizId);
-        if (demoQuiz) {
-          setQuiz(demoQuiz);
-          setQuestions(getDemoQuestions(quizId));
+      if (isLocalMode()) {
+        const localQuiz = getLocalQuizById(quizId);
+        if (localQuiz) {
+          setQuiz(localQuiz);
+          setQuestions(getLocalQuestions(quizId));
           // Merge localStorage attempts + server-side attempts
-          const localAttempts = getDemoAttempts(quizId);
+          const localAttempts = getLocalAttempts(quizId);
           let serverAttempts: typeof localAttempts = [];
           try {
             const res = await fetch(`/api/attempts?quiz_id=${quizId}`);

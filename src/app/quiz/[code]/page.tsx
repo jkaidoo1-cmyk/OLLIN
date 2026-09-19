@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { isDemoMode, getDemoQuizByCode, getDemoQuestions, getDemoUser } from "@/lib/demo";
+import { isLocalMode, getLocalQuizByCode, getLocalQuestions, getLocalUser } from "@/lib/local";
 import { Quiz, Question, QuizAttempt } from "@/lib/types";
 import { Clock, Send, CheckCircle, AlertCircle, User } from "lucide-react";
 import { Logo } from "@/components/Logo";
@@ -52,11 +52,11 @@ export default function QuizPage() {
         setCurrentUser({ name: guestName, isGuest: true });
         return;
       }
-      if (isDemoMode()) {
-        const demoUser = getDemoUser();
-        if (demoUser) {
-          setCurrentUser({ name: demoUser.full_name, isGuest: false });
-          setParticipantName(demoUser.full_name);
+      if (isLocalMode()) {
+        const localUser = getLocalUser();
+        if (localUser) {
+          setCurrentUser({ name: localUser.full_name, isGuest: false });
+          setParticipantName(localUser.full_name);
         }
         return;
       }
@@ -74,7 +74,7 @@ export default function QuizPage() {
 
   useEffect(() => {
     const fetchQuiz = async () => {
-      // Always try the public API first (works for guests, demo, and logged-in users)
+      // Always try the public API first (works for guests, local, and logged-in users)
       try {
         const res = await fetch(`/api/quizzes/${code}`);
         if (res.ok) {
@@ -92,13 +92,13 @@ export default function QuizPage() {
         }
       } catch { /* fall through to other methods */ }
 
-      // Try demo mode localStorage
-      if (isDemoMode()) {
-        const demoQuiz = getDemoQuizByCode(code);
-        if (demoQuiz && demoQuiz.status !== "draft") {
-          setQuiz(demoQuiz);
-          setQuestions(getDemoQuestions(demoQuiz.id));
-        } else if (demoQuiz) {
+      // Try local mode localStorage
+      if (isLocalMode()) {
+        const localQuiz = getLocalQuizByCode(code);
+        if (localQuiz && localQuiz.status !== "draft") {
+          setQuiz(localQuiz);
+          setQuestions(getLocalQuestions(localQuiz.id));
+        } else if (localQuiz) {
           setError("This quiz is not published yet.");
         } else {
           setError("Quiz not found. Check the code and try again.");
@@ -165,7 +165,7 @@ export default function QuizPage() {
   const handleJoin = async () => {
     if (!participantName.trim()) return;
 
-    if (isGuest || isDemoMode()) {
+    if (isGuest || isLocalMode()) {
       setJoined(true);
       return;
     }
@@ -200,8 +200,8 @@ export default function QuizPage() {
 
     const score = Math.round((correct / questions.length) * 100);
 
-    // Save to database for logged-in students (not guests, not demo)
-    if (attempt && !isGuest && !isDemoMode() && supabase) {
+    // Save to database for logged-in students (not guests, not local)
+    if (attempt && !isGuest && !isLocalMode() && supabase) {
       const timeTaken = quiz.time_limit_minutes
         ? quiz.time_limit_minutes * 60 - (timeLeft || 0)
         : null;
@@ -249,10 +249,10 @@ export default function QuizPage() {
       });
     } catch { /* non-critical, continue */ }
 
-    // Also save to localStorage for demo mode
-    if (isDemoMode()) {
-      const { saveDemoAttempt } = await import("@/lib/demo");
-      saveDemoAttempt({
+    // Also save to localStorage for local mode
+    if (isLocalMode()) {
+      const { saveLocalAttempt } = await import("@/lib/local");
+      saveLocalAttempt({
         id: `att-${Date.now()}`,
         quiz_id: quiz.id,
         participant_name: participantName || "Anonymous",

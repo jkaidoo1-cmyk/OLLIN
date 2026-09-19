@@ -4,7 +4,7 @@ import {
   readServerQuestions,
   readServerQuizzes,
 } from "@/lib/data";
-import { serverGetDemoQuizById, serverGetDemoQuestions } from "@/lib/server-demo";
+import { serverGetLocalQuizById, serverGetLocalQuestions } from "@/lib/server-local";
 import { getSessionUser } from "@/lib/session";
 
 /**
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
     const quiz =
       readServerQuizzes().find((q) => q.id === quizId) ||
-      serverGetDemoQuizById(quizId) ||
+      serverGetLocalQuizById(quizId) ||
       null;
     if (!quiz) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     // the bar rather than showing a fake 0%.
     const questions =
       readServerQuestions().filter((q) => q.quiz_id === quizId) ||
-      serverGetDemoQuestions(quizId);
+      serverGetLocalQuestions(quizId);
     const per_question = questions.map((q, i) => ({
       index: i + 1,
       question: q.question_text,

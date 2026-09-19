@@ -5,9 +5,9 @@ import { Quiz, Question } from "@/lib/types";
 // GET — list all quizzes
 export async function GET(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     try {
-      const quizzes = await getUserQuizzes(demo);
+      const quizzes = await getUserQuizzes(local);
       return NextResponse.json({ quizzes });
     } catch (err) {
       // NO_BACKEND (Supabase unconfigured or unavailable) → file-backed storage
@@ -25,11 +25,11 @@ export async function GET(request: NextRequest) {
 }
 
 // POST — create a new quiz with questions.
-// In demo mode, the client sends the fully-built quiz (`direct` mode) so it is
+// In local mode, the client sends the fully-built quiz (`direct` mode) so it is
 // persisted to the server file and is visible from every browser / the admin panel.
 export async function POST(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const body = await request.json();
     const { title, description, time_limit_minutes, questions } = body;
 
@@ -41,13 +41,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "At least one question is required" }, { status: 400 });
     }
 
-    if (demo && body.quiz) {
+    if (local && body.quiz) {
       // Direct-save path: normalize the client-built quiz before persisting,
       // so a malformed payload can never poison the server file.
       const raw = body.quiz as Partial<Quiz>;
       const quizzesNow = readServerQuizzes();
       const quiz: Quiz = {
-        id: raw.id || `demo-quiz-${Date.now()}`,
+        id: raw.id || `local-quiz-${Date.now()}`,
         host_id: raw.host_id || "anonymous",
         title: String(raw.title || title).trim() || "Untitled Quiz",
         description: raw.description ?? null,
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
         time_limit_minutes: time_limit_minutes || undefined,
         questions,
       },
-      demo
+      local
     );
 
     return NextResponse.json({

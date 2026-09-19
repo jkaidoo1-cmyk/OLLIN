@@ -32,7 +32,7 @@ export default function AdminProgramsPage() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<EditState | null>(null);
 
-  const isDemo = typeof window !== "undefined" && localStorage.getItem("ollin_demo_user") !== null;
+  const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
 
   useEffect(() => { fetchPrograms(); }, []);
 
@@ -40,7 +40,7 @@ export default function AdminProgramsPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/programs", {
-        headers: isDemo ? { "x-demo-mode": "true" } : {},
+        headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       const data = await res.json();
       setPrograms(data.programs || []);
@@ -101,7 +101,7 @@ export default function AdminProgramsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      if (isDemo) {
+      if (isLocal) {
         let updated = [...programs];
         for (const action of pending) {
           if (action.type === "add") {
@@ -118,17 +118,17 @@ export default function AdminProgramsPage() {
           if (action.type === "add") {
             await fetch("/api/programs", {
               method: "POST",
-              headers: { "Content-Type": "application/json", "x-demo-mode": "true" },
+              headers: { "Content-Type": "application/json", "x-local-mode": "true" },
               body: JSON.stringify({ code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description }),
             });
           } else if (action.type === "update") {
             await fetch("/api/programs", {
               method: "PATCH",
-              headers: { "Content-Type": "application/json", "x-demo-mode": "true" },
+              headers: { "Content-Type": "application/json", "x-local-mode": "true" },
               body: JSON.stringify({ id: action.program.id, code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description }),
             });
           } else if (action.type === "delete") {
-            await fetch(`/api/programs?id=${action.programId}`, { method: "DELETE", headers: { "x-demo-mode": "true" } });
+            await fetch(`/api/programs?id=${action.programId}`, { method: "DELETE", headers: { "x-local-mode": "true" } });
           }
         }
       } else {
@@ -153,11 +153,11 @@ export default function AdminProgramsPage() {
       }
 
       // Sync localStorage with server file for student-side compatibility
-      if (isDemo) {
+      if (isLocal) {
         try {
-          const res2 = await fetch("/api/programs", { headers: { "x-demo-mode": "true" } });
+          const res2 = await fetch("/api/programs", { headers: { "x-local-mode": "true" } });
           const data2 = await res2.json();
-          localStorage.setItem("ollin_demo_programs", JSON.stringify(data2.programs || []));
+          localStorage.setItem("ollin_local_programs", JSON.stringify(data2.programs || []));
         } catch { /* ignore */ }
       }
 

@@ -1,7 +1,7 @@
 /**
- * Server-side demo user store (single source of truth for accounts).
+ * Server-side local user store (single source of truth for accounts).
  *
- * Demo accounts live in `.ollin-users.json` on the server so that:
+ * Local accounts live in `.ollin-users.json` on the server so that:
  *  - users created by an admin can log in from any browser,
  *  - deletions persist across page loads / different browsers,
  *  - admin overview counts reflect the same file the auth route checks.
@@ -12,9 +12,9 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
-import { DEFAULT_DEMO_USERS, ADMIN_PASSWORD } from "./demo-constants";
+import { DEFAULT_LOCAL_USERS, ADMIN_PASSWORD } from "./local-constants";
 
-export interface StoredDemoUser {
+export interface StoredLocalUser {
   id: string;
   email: string;
   full_name: string;
@@ -37,7 +37,7 @@ export function hashPassword(plain: string): string {
   return `scrypt:${salt.toString("hex")}:${hash.toString("hex")}`;
 }
 
-export function verifyPassword(plain: string, user: StoredDemoUser): boolean {
+export function verifyPassword(plain: string, user: StoredLocalUser): boolean {
   const stored = user.password_hash || user.password;
   if (!stored) return false;
   if (stored.startsWith("scrypt:")) {
@@ -63,8 +63,8 @@ function getUsersPath() {
   return join(process.cwd(), ".ollin-users.json");
 }
 
-function seedDefaults(): StoredDemoUser[] {
-  return DEFAULT_DEMO_USERS.map((u) => ({
+function seedDefaults(): StoredLocalUser[] {
+  return DEFAULT_LOCAL_USERS.map((u) => ({
     id: u.id,
     email: u.email,
     full_name: u.full_name,
@@ -76,16 +76,16 @@ function seedDefaults(): StoredDemoUser[] {
   }));
 }
 
-export function readDemoUsers(): StoredDemoUser[] {
+export function readLocalUsers(): StoredLocalUser[] {
   const path = getUsersPath();
   if (existsSync(path)) {
     try {
-      const users: StoredDemoUser[] = JSON.parse(readFileSync(path, "utf-8"));
+      const users: StoredLocalUser[] = JSON.parse(readFileSync(path, "utf-8"));
       // Migrate: ensure built-in accounts exist. Their password is managed
       // via ADMIN_PASSWORD comparisons in the auth route (hash upgrade is
       // lazy through verifyPassword), so seeding only fixes identity/role.
       let changed = false;
-      for (const def of DEFAULT_DEMO_USERS) {
+      for (const def of DEFAULT_LOCAL_USERS) {
         const existing = users.find((u) => u.id === def.id);
         if (!existing) {
           users.push({
@@ -112,18 +112,18 @@ export function readDemoUsers(): StoredDemoUser[] {
           changed = true;
         }
       }
-      if (changed) writeDemoUsers(users);
+      if (changed) writeLocalUsers(users);
       return users;
     } catch {
       /* fall through to reseed */
     }
   }
   const seeded = seedDefaults();
-  writeDemoUsers(seeded);
+  writeLocalUsers(seeded);
   return seeded;
 }
 
-export function writeDemoUsers(users: StoredDemoUser[]) {
+export function writeLocalUsers(users: StoredLocalUser[]) {
   // Serverless hosts (Vercel) have a read-only filesystem. Writes are
   // best-effort there: the seeded users still work for this warm instance,
   // and persistent storage comes from Supabase when configured.
@@ -135,7 +135,7 @@ export function writeDemoUsers(users: StoredDemoUser[]) {
 }
 
 /** Strip passwords before sending user records to the browser. */
-export function publicUser(u: StoredDemoUser) {
+export function publicUser(u: StoredLocalUser) {
   return {
     id: u.id,
     email: u.email,
@@ -147,5 +147,5 @@ export function publicUser(u: StoredDemoUser) {
   };
 }
 
-/** Demo credentials used by the built-in admin (kept in sync with demo-constants). */
-export const DEMO_ADMIN_PASSWORD = ADMIN_PASSWORD;
+/** Local credentials used by the built-in admin (kept in sync with local-constants). */
+export const LOCAL_ADMIN_PASSWORD = ADMIN_PASSWORD;

@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { generateQuizCode } from "@/lib/utils";
-import { isDemoMode, addDemoQuiz, getDemoUser } from "@/lib/demo";
+import { isLocalMode, addLocalQuiz, getLocalUser } from "@/lib/local";
 import { cleanText } from "@/lib/utils";
 import { Quiz, Course, Profile } from "@/lib/types";
 import {
@@ -75,12 +75,12 @@ export default function CreateQuizPage() {
   useEffect(() => {
     const fetchCourses = async () => {
       try {
-        const isDemo = isDemoMode();
+        const isLocal = isLocalMode();
         let programId: string | undefined;
 
-        if (isDemo) {
-          const user = getDemoUser();
-          // In demo, user has no program assigned — show all courses
+        if (isLocal) {
+          const user = getLocalUser();
+          // In local, user has no program assigned — show all courses
           programId = undefined;
         } else {
           const { createClient } = await import("@/lib/supabase/client");
@@ -102,15 +102,15 @@ export default function CreateQuizPage() {
         if (programId) params.set("program_id", programId);
 
         const res = await fetch(`/api/courses?${params.toString()}`, {
-          headers: isDemo ? { "x-demo-mode": "true" } : {},
+          headers: isLocal ? { "x-local-mode": "true" } : {},
         });
         const data = await res.json();
         let fetchedCourses = data.courses || [];
 
-        // In demo mode, filter courses by student's current year
-        if (isDemo) {
-          const demoUser = getDemoUser();
-          const studentYear = demoUser?.current_year;
+        // In local mode, filter courses by student's current year
+        if (isLocal) {
+          const localUser = getLocalUser();
+          const studentYear = localUser?.current_year;
           if (studentYear) {
             fetchedCourses = fetchedCourses.filter((c: any) => !c.year || c.year === studentYear);
           }
@@ -211,13 +211,13 @@ export default function CreateQuizPage() {
       // Attribute the quiz to the actually logged-in user (not a hard-coded id)
       let currentUserId = "";
       try {
-        const raw = localStorage.getItem("ollin_demo_user");
+        const raw = localStorage.getItem("ollin_local_user");
         if (raw) currentUserId = JSON.parse(raw).id || currentUserId;
       } catch { /* keep empty */ }
 
-      if (isDemoMode()) {
-        const demoQuiz: Quiz = {
-          id: `demo-quiz-${Date.now()}`,
+      if (isLocalMode()) {
+        const localQuiz: Quiz = {
+          id: `local-quiz-${Date.now()}`,
           host_id: currentUserId,
           title: quizTitle || materialTitle || "Untitled Quiz",
           description: null,
@@ -237,9 +237,9 @@ export default function CreateQuizPage() {
           updated_at: new Date().toISOString(),
         };
         // Convert GeneratedQ[] to Question[] for storage
-        const demoQuestions = questions.map((q, idx) => ({
-          id: `demo-q-${Date.now()}-${idx}`,
-          quiz_id: demoQuiz.id,
+        const localQuestions = questions.map((q, idx) => ({
+          id: `local-q-${Date.now()}-${idx}`,
+          quiz_id: localQuiz.id,
           question_text: q.question,
           question_type: q.type as "multiple_choice" | "true_false" | "short_answer" | "fill_blank",
           options: q.options || null,
@@ -255,11 +255,11 @@ export default function CreateQuizPage() {
         try {
           const saveRes = await fetch("/api/quizzes", {
             method: "POST",
-            headers: { "Content-Type": "application/json", "x-demo-mode": "true" },
+            headers: { "Content-Type": "application/json", "x-local-mode": "true" },
             body: JSON.stringify({
-              title: demoQuiz.title,
-              quiz: demoQuiz,
-              questions: demoQuestions,
+              title: localQuiz.title,
+              quiz: localQuiz,
+              questions: localQuestions,
             }),
           });
           if (!saveRes.ok) {
@@ -271,12 +271,12 @@ export default function CreateQuizPage() {
           setPublishing(false);
           return;
         }
-        addDemoQuiz(demoQuiz, demoQuestions);
+        addLocalQuiz(localQuiz, localQuestions);
         // Notify quiz creator
-        const { addNotification } = await import("@/lib/demo");
+        const { addNotification } = await import("@/lib/local");
         addNotification(
           "Quiz published",
-          `Your quiz "${demoQuiz.title}" is now live and ready for participants.`,
+          `Your quiz "${localQuiz.title}" is now live and ready for participants.`,
           "quiz"
         );
         setGeneratedCode(shareCode);

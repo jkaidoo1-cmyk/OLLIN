@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { isDemoMode, getDemoQuizzes } from "@/lib/demo";
+import { isLocalMode, getLocalQuizzes } from "@/lib/local";
 import { Quiz, Course } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
 import { Plus, Copy, CheckCircle, ExternalLink } from "lucide-react";
@@ -20,10 +20,10 @@ export default function MyQuizzesPage() {
 
   useEffect(() => {
     const fetchQuizzes = async () => {
-      if (isDemoMode()) {
-        setQuizzes(getDemoQuizzes());
+      if (isLocalMode()) {
+        setQuizzes(getLocalQuizzes());
         try {
-          const res = await fetch("/api/courses", { headers: { "x-demo-mode": "true" } });
+          const res = await fetch("/api/courses", { headers: { "x-local-mode": "true" } });
           const data = await res.json();
           setCourses(data.courses || []);
         } catch { /* ignore */ }

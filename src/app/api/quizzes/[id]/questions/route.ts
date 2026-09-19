@@ -8,14 +8,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const showAnswers = request.nextUrl.searchParams.get("show_answers") === "true";
     const { id } = await params;
 
     // Correct answers may only be fetched by the quiz creator or an admin.
     // Everyone else (participants, guests, anonymous) always gets stripped questions.
     if (showAnswers) {
-      const quiz = await getQuizById(id, demo);
+      const quiz = await getQuizById(id, local);
       const session = await getSessionUser(request);
       const isCreator = !!session && !!quiz && session.id === quiz.host_id;
       const isAdmin = !!session && session.role === "admin";
@@ -27,7 +27,7 @@ export async function GET(
       }
     }
 
-    const questions = await getQuizQuestions(id, demo);
+    const questions = await getQuizQuestions(id, local);
 
     if (!showAnswers) {
       const stripped = questions.map((q) => ({

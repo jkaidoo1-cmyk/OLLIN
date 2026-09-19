@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  readDemoUsers,
-  writeDemoUsers,
+  readLocalUsers,
+  writeLocalUsers,
   publicUser,
-} from "@/lib/demo-users-store";
+} from "@/lib/local-users-store";
 import { getSessionAdmin } from "@/lib/session";
-import { hashPassword } from "@/lib/demo-users-store";
+import { hashPassword } from "@/lib/local-users-store";
 
 function isEmailTaken(users: any[], email: string, excludeId?: string) {
   const normalized = String(email).toLowerCase().trim();
@@ -18,19 +18,19 @@ function isEmailTaken(users: any[], email: string, excludeId?: string) {
 // GET — list all users (admin only)
 export async function GET(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
 
     // File mode when the header is set OR Supabase is not configured —
     // so a valid admin session cookie works even in a fresh browser.
     const { createClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
 
-    if (demo || !supabase) {
+    if (local || !supabase) {
       // Server-side auth: the request must carry a valid admin session cookie.
       if (!(await getSessionAdmin(request))) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
-      const users = readDemoUsers().map(publicUser);
+      const users = readLocalUsers().map(publicUser);
       return NextResponse.json({ users });
     }
 
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
 // POST — create a new user account (admin only)
 export async function POST(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const body = await request.json();
     const { email, password, full_name, role, program_id } = body;
 
@@ -85,12 +85,12 @@ export async function POST(request: NextRequest) {
     const { createClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
 
-    if (demo || !supabase) {
+    if (local || !supabase) {
       // File mode: only a valid admin session may create accounts.
       if (!(await getSessionAdmin(request))) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
-      const users = readDemoUsers();
+      const users = readLocalUsers();
       if (isEmailTaken(users, email)) {
         return NextResponse.json(
           { error: "An account with this email already exists" },
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
         created_at: new Date().toISOString(),
       };
       users.push(newUser);
-      writeDemoUsers(users);
+      writeLocalUsers(users);
       return NextResponse.json({ user: publicUser(newUser), message: "Account created" });
     }
 
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
     if (!supabase) {
       // Unreachable in practice (file mode handled above), kept as a guard.
       return NextResponse.json(
-        { error: "No account backend configured. Use demo mode." },
+        { error: "No account backend configured. Use local mode." },
         { status: 503 }
       );
     }
@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
 // PATCH — update a user (name, role, program, or password reset) — admin only
 export async function PATCH(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const body = await request.json();
     const userId = body.id;
 
@@ -202,12 +202,12 @@ export async function PATCH(request: NextRequest) {
     const { createClient, createAdminClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
 
-    if (demo || !supabase) {
+    if (local || !supabase) {
       // File mode: only a valid admin session may edit users.
       if (!(await getSessionAdmin(request))) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
-      const users = readDemoUsers();
+      const users = readLocalUsers();
       const user = users.find((u: any) => u.id === userId);
       if (!user) {
         return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -220,7 +220,7 @@ export async function PATCH(request: NextRequest) {
         );
       }
 
-      // Never allow an admin to demote/delete the final built-in admin via PATCH role
+      // Never allow an admin to downgrade/remove the final built-in admin via PATCH role
       if (user.id === "admin-001" && body.role && body.role !== "admin") {
         return NextResponse.json(
           { error: "The built-in admin account cannot change role" },
@@ -238,7 +238,7 @@ export async function PATCH(request: NextRequest) {
         delete user.password;
       }
 
-      writeDemoUsers(users);
+      writeLocalUsers(users);
       return NextResponse.json({ user: publicUser(user), message: "Account updated" });
     }
 
@@ -294,7 +294,7 @@ export async function PATCH(request: NextRequest) {
 // DELETE — remove a user (admin only)
 export async function DELETE(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("id");
 
@@ -305,17 +305,17 @@ export async function DELETE(request: NextRequest) {
     const { createAdminClient } = await import("@/lib/supabase/server");
     const adminSupabase = await createAdminClient();
 
-    if (demo || !adminSupabase) {
+    if (local || !adminSupabase) {
       // File mode: only a valid admin session may delete users.
       if (!(await getSessionAdmin(request))) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
-      const users = readDemoUsers();
+      const users = readLocalUsers();
       const target = users.find((u: any) => u.id === userId);
       if (!target) {
         return NextResponse.json({ error: "User not found" }, { status: 404 });
       }
-      // Never allow deleting admin accounts from the demo file.
+      // Never allow deleting admin accounts from the local file.
       if (target.role === "admin") {
         return NextResponse.json(
           { error: "Admin accounts cannot be deleted" },
@@ -323,7 +323,7 @@ export async function DELETE(request: NextRequest) {
         );
       }
       const filtered = users.filter((u: any) => u.id !== userId);
-      writeDemoUsers(filtered);
+      writeLocalUsers(filtered);
       return NextResponse.json({ success: true, message: "User deleted" });
     }
 

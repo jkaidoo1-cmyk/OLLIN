@@ -9,7 +9,7 @@ export default function AdminOverviewPage() {
   const [recentQuizzes, setRecentQuizzes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const isDemo = typeof window !== "undefined" && localStorage.getItem("ollin_demo_user") !== null;
+  const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
 
   useEffect(() => {
     fetchOverview();
@@ -18,7 +18,7 @@ export default function AdminOverviewPage() {
   const fetchOverview = async () => {
     setLoading(true);
     try {
-      const fetchHeaders: Record<string, string> = isDemo ? { "x-demo-mode": "true" } : {};
+      const fetchHeaders: Record<string, string> = isLocal ? { "x-local-mode": "true" } : {};
 
       // Fetch all data from APIs (server-side file persistence)
       const [usersRes, quizzesRes] = await Promise.all([
@@ -35,7 +35,7 @@ export default function AdminOverviewPage() {
       // Also get client-side quizzes from localStorage
       let clientQuizzes: any[] = [];
       try {
-        const stored = localStorage.getItem("ollin_demo_quizzes");
+        const stored = localStorage.getItem("ollin_local_quizzes");
         clientQuizzes = stored ? JSON.parse(stored) : [];
       } catch { /* ignore */ }
 

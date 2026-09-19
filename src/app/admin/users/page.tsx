@@ -52,7 +52,7 @@ export default function AdminUsersPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
-  const isDemo = typeof window !== "undefined" && localStorage.getItem("ollin_demo_user") !== null;
+  const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
 
   useEffect(() => {
     fetchUsers();
@@ -63,7 +63,7 @@ export default function AdminUsersPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/users", {
-        headers: isDemo ? { "x-demo-mode": "true" } : {},
+        headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load users");
@@ -77,7 +77,7 @@ export default function AdminUsersPage() {
   const fetchPrograms = async () => {
     try {
       const res = await fetch("/api/programs", {
-        headers: isDemo ? { "x-demo-mode": "true" } : {},
+        headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       const data = await res.json();
       setPrograms(data.programs || []);
@@ -180,7 +180,7 @@ export default function AdminUsersPage() {
     setSaveError("");
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (isDemo) headers["x-demo-mode"] = "true";
+      if (isLocal) headers["x-local-mode"] = "true";
 
       for (const action of pending) {
         if (action.type === "add") {
@@ -219,7 +219,7 @@ export default function AdminUsersPage() {
         } else if (action.type === "delete") {
           const res = await fetch(`/api/admin/users?id=${action.userId}`, {
             method: "DELETE",
-            headers: isDemo ? { "x-demo-mode": "true" } : {},
+            headers: isLocal ? { "x-local-mode": "true" } : {},
           });
           if (!res.ok) {
             const d = await res.json();

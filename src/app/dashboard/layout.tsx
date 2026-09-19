@@ -4,8 +4,8 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { isDemoMode, getDemoUser, disableDemoMode, getUnreadCount } from "@/lib/demo";
-import type { DemoUser } from "@/lib/demo";
+import { isLocalMode, getLocalUser, disableLocalMode, getUnreadCount } from "@/lib/local";
+import type { LocalUser } from "@/lib/local";
 import { useEffect, useState, useRef } from "react";
 import { LogOut, Bell } from "lucide-react";
 
@@ -23,7 +23,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const [user, setUser] = useState<{ email: string; name: string } | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [demo, setDemo] = useState(false);
+  const [local, setLocal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [currentYear, setCurrentYear] = useState<number>(1);
   const supabase = createClient();
@@ -31,17 +31,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     const getUser = async () => {
-      if (isDemoMode()) {
-        const demoUser = getDemoUser();
-        if (demoUser) {
-          setUser({ email: demoUser.email, name: demoUser.full_name });
-          setCurrentYear(demoUser.current_year || 1);
+      if (isLocalMode()) {
+        const localUser = getLocalUser();
+        if (localUser) {
+          setUser({ email: localUser.email, name: localUser.full_name });
+          setCurrentYear(localUser.current_year || 1);
           // Show a storage notice only when the server is NOT persisting to
-          // Supabase — a healthy server session is not a demo.
+          // Supabase — a healthy server session is not a local.
           try {
             const res = await fetch("/api/backend-status");
             const data = await res.json();
-            if (data.backend !== "supabase") setDemo(true);
+            if (data.backend !== "supabase") setLocal(true);
           } catch { /* assume server fine */ }
           return;
         }
@@ -63,7 +63,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     const refresh = () => {
-      if (!isDemoMode()) return;
+      if (!isLocalMode()) return;
       getUnreadCount().then(setUnreadCount).catch(() => {});
     };
     refresh();
@@ -86,10 +86,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, []);
 
   const handleLogout = async () => {
-    if (demo) {
+    if (local) {
       // Clear the httpOnly session cookie server-side too.
       try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
-      disableDemoMode();
+      disableLocalMode();
       router.push("/");
       return;
     }
@@ -103,7 +103,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen">
-      {demo && (
+      {local && (
         <div className="bg-[#005528] text-white text-center py-1 text-xs font-medium">
           Limited storage — data is saved on this server only and may not persist
         </div>
@@ -188,7 +188,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     >
                       Test quizzes
                     </Link>
-                    {demo && (
+                    {local && (
                       <div className="border-t border-[#e0e0e0] mt-1 pt-2 px-4 pb-1">
                         <label className="block text-[10px] font-medium text-[#999] uppercase tracking-wider mb-1">My year</label>
                         <select
@@ -205,10 +205,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                               });
                             } catch { /* non-critical */ }
                             // Mirror locally so course filtering updates instantly
-                            const u = getDemoUser();
+                            const u = getLocalUser();
                             if (u) {
                               u.current_year = y;
-                              localStorage.setItem("ollin_demo_user", JSON.stringify(u));
+                              localStorage.setItem("ollin_local_user", JSON.stringify(u));
                             }
                           }}
                           className="w-full text-sm border border-[#e0e0e0] rounded px-2 py-1.5 text-[#333] bg-white"
@@ -226,7 +226,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
                       >
                         <LogOut className="w-4 h-4" />
-                        {demo ? "Exit demo" : "Log out"}
+                        {local ? "Exit local" : "Log out"}
                       </button>
                     </div>
                   </div>

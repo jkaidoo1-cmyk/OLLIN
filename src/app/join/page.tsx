@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, User } from "lucide-react";
 import { Logo } from "@/components/Logo";
-import { isDemoMode, getDemoUser } from "@/lib/demo";
+import { isLocalMode, getLocalUser } from "@/lib/local";
 import { createClient } from "@/lib/supabase/client";
 
 export default function JoinQuizPage() {
@@ -19,8 +19,8 @@ export default function JoinQuizPage() {
 
   useEffect(() => {
     const check = async () => {
-      if (isDemoMode()) {
-        const user = getDemoUser();
+      if (isLocalMode()) {
+        const user = getLocalUser();
         if (user) {
           setUserName(user.full_name || "User");
           setIsLoggedIn(true);

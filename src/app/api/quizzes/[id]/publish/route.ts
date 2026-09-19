@@ -6,9 +6,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const { id } = await params;
-    const quiz = await getQuizById(id, demo);
+    const quiz = await getQuizById(id, local);
 
     if (!quiz) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
@@ -18,16 +18,16 @@ export async function POST(
       return NextResponse.json({ quiz, code: quiz.share_code });
     }
 
-    // In demo mode, update local state
-    if (demo && typeof window !== "undefined") {
+    // In local mode, update local state
+    if (local && typeof window !== "undefined") {
       const quizzes = JSON.parse(
-        localStorage.getItem("ollin_demo_quizzes") || "[]"
+        localStorage.getItem("ollin_local_quizzes") || "[]"
       );
       const idx = quizzes.findIndex((q: { id: string }) => q.id === id);
       if (idx >= 0) {
         quizzes[idx].status = "published";
         quizzes[idx].updated_at = new Date().toISOString();
-        localStorage.setItem("ollin_demo_quizzes", JSON.stringify(quizzes));
+        localStorage.setItem("ollin_local_quizzes", JSON.stringify(quizzes));
       }
       return NextResponse.json({ quiz: quizzes[idx], code: quiz.share_code });
     }

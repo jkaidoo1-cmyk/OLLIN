@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Loader2, Trash2, BookOpen, Save, X, ChevronDown, ChevronUp, Clock, Pen } from "lucide-react";
 import { Course, Program, Quiz } from "@/lib/types";
-import { getSavedQuizzes, removeSavedQuiz, syncSavedQuizzesFromServer } from "@/lib/demo";
+import { getSavedQuizzes, removeSavedQuiz, syncSavedQuizzesFromServer } from "@/lib/local";
 
 type PendingAction =
   | { type: "add"; course: Course }
@@ -40,7 +40,7 @@ export default function AdminCoursesPage() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<EditState | null>(null);
 
-  const isDemo = typeof window !== "undefined" && localStorage.getItem("ollin_demo_user") !== null;
+  const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
 
   useEffect(() => {
     fetchCourses();
@@ -51,7 +51,7 @@ export default function AdminCoursesPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/courses", {
-        headers: isDemo ? { "x-demo-mode": "true" } : {},
+        headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       const data = await res.json();
       const courseList = data.courses || [];
@@ -69,14 +69,14 @@ export default function AdminCoursesPage() {
       if (courseList.length === 0 || saved.length === 0) return;
 
       const res = await fetch("/api/quizzes", {
-        headers: isDemo ? { "x-demo-mode": "true" } : {},
+        headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       const data = await res.json();
       const apiQuizzes = data.quizzes || [];
 
       let clientQuizzes: any[] = [];
       try {
-        const stored = localStorage.getItem("ollin_demo_quizzes");
+        const stored = localStorage.getItem("ollin_local_quizzes");
         clientQuizzes = stored ? JSON.parse(stored) : [];
       } catch { /* ignore */ }
 
@@ -99,7 +99,7 @@ export default function AdminCoursesPage() {
   const fetchPrograms = async () => {
     try {
       const res = await fetch("/api/programs", {
-        headers: isDemo ? { "x-demo-mode": "true" } : {},
+        headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       const data = await res.json();
       setPrograms(data.programs || []);
@@ -180,7 +180,7 @@ export default function AdminCoursesPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      if (isDemo) {
+      if (isLocal) {
         let updated = [...courses];
         for (const action of pending) {
           if (action.type === "add") updated = [...updated, action.course];
@@ -192,17 +192,17 @@ export default function AdminCoursesPage() {
           if (action.type === "add") {
             await fetch("/api/courses", {
               method: "POST",
-              headers: { "Content-Type": "application/json", "x-demo-mode": "true" },
+              headers: { "Content-Type": "application/json", "x-local-mode": "true" },
               body: JSON.stringify({ code: action.course.code, name: action.course.name, department: action.course.department, description: action.course.description, program_id: action.course.program_id, year: action.course.year }),
             });
           } else if (action.type === "update") {
             await fetch("/api/courses", {
               method: "PATCH",
-              headers: { "Content-Type": "application/json", "x-demo-mode": "true" },
+              headers: { "Content-Type": "application/json", "x-local-mode": "true" },
               body: JSON.stringify({ id: action.course.id, code: action.course.code, name: action.course.name, department: action.course.department, description: action.course.description, program_id: action.course.program_id, year: action.course.year }),
             });
           } else if (action.type === "delete") {
-            await fetch(`/api/courses?id=${action.courseId}`, { method: "DELETE", headers: { "x-demo-mode": "true" } });
+            await fetch(`/api/courses?id=${action.courseId}`, { method: "DELETE", headers: { "x-local-mode": "true" } });
           }
         }
       } else {
@@ -227,11 +227,11 @@ export default function AdminCoursesPage() {
       }
 
       // Sync localStorage with server file for student-side compatibility
-      if (isDemo) {
+      if (isLocal) {
         try {
-          const res2 = await fetch("/api/courses", { headers: { "x-demo-mode": "true" } });
+          const res2 = await fetch("/api/courses", { headers: { "x-local-mode": "true" } });
           const data2 = await res2.json();
-          localStorage.setItem("ollin_demo_courses", JSON.stringify(data2.courses || []));
+          localStorage.setItem("ollin_local_courses", JSON.stringify(data2.courses || []));
         } catch { /* ignore */ }
       }
 

@@ -2,11 +2,26 @@
 
 import { Quiz, Question, QuizAttempt, Course, Program } from "./types";
 
-const DEMO_USER_KEY = "ollin_demo_user";
-const DEMO_QUIZZES_KEY = "ollin_demo_quizzes";
-const DEMO_QUESTIONS_KEY = "ollin_demo_questions";
+// One-time migration: browsers that used the pre-rename `ollin_demo_*` keys
+// keep their session and data under the renamed `ollin_local_*` keys.
+if (typeof window !== "undefined") {
+  for (const name of ["user", "quizzes", "questions", "users", "programs", "courses", "attempts", "saved_quizzes", "notifications"]) {
+    const from = `ollin_demo_${name}`;
+    const to = `ollin_local_${name}`;
+    try {
+      if (localStorage.getItem(from) !== null && localStorage.getItem(to) === null) {
+        localStorage.setItem(to, localStorage.getItem(from)!);
+        localStorage.removeItem(from);
+      }
+    } catch { /* private mode etc. */ }
+  }
+}
 
-export interface DemoUser {
+const LOCAL_USER_KEY = "ollin_local_user";
+const LOCAL_QUIZZES_KEY = "ollin_local_quizzes";
+const LOCAL_QUESTIONS_KEY = "ollin_local_questions";
+
+export interface LocalUser {
   id: string;
   email: string;
   full_name: string;
@@ -15,7 +30,7 @@ export interface DemoUser {
   current_year?: number;
 }
 
-const DEMO_USERS_DEFAULT: DemoUser[] = [
+const LOCAL_USERS_DEFAULT: LocalUser[] = [
   {
     id: "admin-001",
     email: "jkaidoo1@mail.com",
@@ -25,81 +40,81 @@ const DEMO_USERS_DEFAULT: DemoUser[] = [
   },
 ];
 
-const DEMO_USERS_KEY = "ollin_demo_users";
+const LOCAL_USERS_KEY = "ollin_local_users";
 
-export function getDemoUsers(): DemoUser[] {
-  if (typeof window === "undefined") return DEMO_USERS_DEFAULT;
-  const stored = localStorage.getItem(DEMO_USERS_KEY);
+export function getLocalUsers(): LocalUser[] {
+  if (typeof window === "undefined") return LOCAL_USERS_DEFAULT;
+  const stored = localStorage.getItem(LOCAL_USERS_KEY);
   if (stored) {
     try {
-      const users: DemoUser[] = JSON.parse(stored);
+      const users: LocalUser[] = JSON.parse(stored);
       // Always sync built-in accounts with current defaults (passwords may change between deploys)
       let changed = false;
-      for (const defaultUser of DEMO_USERS_DEFAULT) {
+      for (const defaultUser of LOCAL_USERS_DEFAULT) {
         const existing = users.find((u) => u.id === defaultUser.id);
         if (existing && existing.password !== defaultUser.password) {
           existing.password = defaultUser.password;
           changed = true;
         }
       }
-      if (changed) localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(users));
+      if (changed) localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
       return users;
     } catch { /* ignore */ }
   }
   // Initialize with defaults
-  localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(DEMO_USERS_DEFAULT));
-  return DEMO_USERS_DEFAULT;
+  localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(LOCAL_USERS_DEFAULT));
+  return LOCAL_USERS_DEFAULT;
 }
 
-export function addDemoUser(user: DemoUser): void {
-  const users = getDemoUsers();
+export function addLocalUser(user: LocalUser): void {
+  const users = getLocalUsers();
   users.push(user);
-  localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(users));
+  localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
 }
 
-export function removeDemoUser(userId: string): void {
-  const users = getDemoUsers().filter((u) => u.id !== userId);
-  localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(users));
+export function removeLocalUser(userId: string): void {
+  const users = getLocalUsers().filter((u) => u.id !== userId);
+  localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
 }
 
 // All-users list includes admin + students (for admin panel display)
-export function getAllDemoUsers() {
-  return getDemoUsers();
+export function getAllLocalUsers() {
+  return getLocalUsers();
 }
 
-const DEMO_PROGRAMS: Program[] = [];
+const LOCAL_PROGRAMS: Program[] = [];
 
-const DEMO_COURSES: Course[] = [];
+const LOCAL_COURSES: Course[] = [];
 
-const DEMO_QUIZZES: Quiz[] = [];
+const LOCAL_QUIZZES: Quiz[] = [];
 
-const DEMO_QUESTIONS: Question[] = [];
+const LOCAL_QUESTIONS: Question[] = [];
 
-const DEMO_ATTEMPTS: QuizAttempt[] = [];
+const LOCAL_ATTEMPTS: QuizAttempt[] = [];
 
-// ─── Demo Mode API ─────────────────
+// ─── Local Mode API ─────────────────
 
-export function isDemoMode(): boolean {
+export function isLocalMode(): boolean {
   if (typeof window === "undefined") return false;
-  return localStorage.getItem(DEMO_USER_KEY) !== null;
+  return localStorage.getItem(LOCAL_USER_KEY) !== null;
 }
 
-export function getDemoUser(): DemoUser | null {
+export function getLocalUser(): LocalUser | null {
   if (typeof window === "undefined") return null;
-  const stored = localStorage.getItem(DEMO_USER_KEY);
+  const stored = localStorage.getItem(LOCAL_USER_KEY);
   return stored ? JSON.parse(stored) : null;
 }
 
-export function enableDemoMode(user?: DemoUser): DemoUser {
-  const u = user || DEMO_USERS_DEFAULT[1]; // default to student
-  localStorage.setItem(DEMO_USER_KEY, JSON.stringify(u));
+export function enableLocalMode(user?: LocalUser): LocalUser {
+  const u = user || LOCAL_USERS_DEFAULT[1]; // default to student
+  localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(u));
   // Only initialize quizzes if none exist yet — don't overwrite student-created quizzes
-  if (!localStorage.getItem(DEMO_QUIZZES_KEY)) {
-    localStorage.setItem(DEMO_QUIZZES_KEY, JSON.stringify(DEMO_QUIZZES));
+  if (!localStorage.getItem(LOCAL_QUIZZES_KEY)) {
+    localStorage.setItem(LOCAL_QUIZZES_KEY, JSON.stringify(LOCAL_QUIZZES));
   }
   // Ensure the logged-in user exists in the client users list (so the profile
   // year selector and admin edits can find them, even for admin-created accounts).
-  const users = getDemoUsers();
+  const users = getLocalUsers();
   const existing = users.find((x) => x.id === u.id);
   if (existing) {
     existing.email = u.email;
@@ -109,49 +124,49 @@ export function enableDemoMode(user?: DemoUser): DemoUser {
   } else {
     users.push({ ...u, password: u.password || "" });
   }
-  localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(users));
+  localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
   return u;
 }
 
 /**
- * Authenticate a demo user by email + password.
+ * Authenticate a local user by email + password.
  * Returns the user if credentials match, null otherwise.
  */
-export function authenticateDemoUser(email: string, password: string): DemoUser | null {
-  const users = getDemoUsers();
+export function authenticateLocalUser(email: string, password: string): LocalUser | null {
+  const users = getLocalUsers();
   const user = users.find(
     (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
   );
   return user || null;
 }
 
-export function disableDemoMode(): void {
-  localStorage.removeItem(DEMO_USER_KEY);
-  localStorage.removeItem(DEMO_QUIZZES_KEY);
+export function disableLocalMode(): void {
+  localStorage.removeItem(LOCAL_USER_KEY);
+  localStorage.removeItem(LOCAL_QUIZZES_KEY);
 }
 
-export function getDemoQuizzes(): Quiz[] {
-  const stored = localStorage.getItem(DEMO_QUIZZES_KEY);
-  return stored ? JSON.parse(stored) : DEMO_QUIZZES;
+export function getLocalQuizzes(): Quiz[] {
+  const stored = localStorage.getItem(LOCAL_QUIZZES_KEY);
+  return stored ? JSON.parse(stored) : LOCAL_QUIZZES;
 }
 
-export function getDemoQuizById(id: string): Quiz | undefined {
-  return getDemoQuizzes().find((q) => q.id === id);
+export function getLocalQuizById(id: string): Quiz | undefined {
+  return getLocalQuizzes().find((q) => q.id === id);
 }
 
-export function getDemoQuizByCode(code: string): Quiz | undefined {
-  return getDemoQuizzes().find((q) => q.share_code === code);
+export function getLocalQuizByCode(code: string): Quiz | undefined {
+  return getLocalQuizzes().find((q) => q.share_code === code);
 }
 
-export function getDemoQuestions(quizId: string): Question[] {
-  if (quizId === "demo-quiz-001") return DEMO_QUESTIONS;
-  const stored = getDemoAllQuestions();
+export function getLocalQuestions(quizId: string): Question[] {
+  if (quizId === "local-quiz-001") return LOCAL_QUESTIONS;
+  const stored = getLocalAllQuestions();
   return stored.filter((q) => q.quiz_id === quizId);
 }
 
-export function getDemoAttempts(quizId: string): QuizAttempt[] {
-  // Combine hardcoded demo attempts + saved attempts from localStorage
-  const saved = getDemoAttemptsForQuiz(quizId).map((a) => ({
+export function getLocalAttempts(quizId: string): QuizAttempt[] {
+  // Combine hardcoded local attempts + saved attempts from localStorage
+  const saved = getLocalAttemptsForQuiz(quizId).map((a) => ({
     id: a.id,
     quiz_id: a.quiz_id,
     participant_id: null,
@@ -167,58 +182,58 @@ export function getDemoAttempts(quizId: string): QuizAttempt[] {
     status: a.status as "completed",
     created_at: a.completed_at,
   }));
-  return [...DEMO_ATTEMPTS.filter((a) => a.quiz_id === quizId), ...saved];
+  return [...LOCAL_ATTEMPTS.filter((a) => a.quiz_id === quizId), ...saved];
 }
 
-const DEMO_COURSES_KEY = "ollin_demo_courses";
+const LOCAL_COURSES_KEY = "ollin_local_courses";
 
-export function getDemoCourses(): Course[] {
-  const stored = localStorage.getItem(DEMO_COURSES_KEY);
-  return stored ? JSON.parse(stored) : DEMO_COURSES;
+export function getLocalCourses(): Course[] {
+  const stored = localStorage.getItem(LOCAL_COURSES_KEY);
+  return stored ? JSON.parse(stored) : LOCAL_COURSES;
 }
 
-const DEMO_PROGRAMS_KEY = "ollin_demo_programs";
+const LOCAL_PROGRAMS_KEY = "ollin_local_programs";
 
-export function getDemoPrograms(): Program[] {
-  const stored = localStorage.getItem(DEMO_PROGRAMS_KEY);
-  return stored ? JSON.parse(stored) : DEMO_PROGRAMS;
+export function getLocalPrograms(): Program[] {
+  const stored = localStorage.getItem(LOCAL_PROGRAMS_KEY);
+  return stored ? JSON.parse(stored) : LOCAL_PROGRAMS;
 }
 
-export function addDemoProgram(program: Program): void {
-  const programs = getDemoPrograms();
+export function addLocalProgram(program: Program): void {
+  const programs = getLocalPrograms();
   programs.push(program);
-  localStorage.setItem(DEMO_PROGRAMS_KEY, JSON.stringify(programs));
+  localStorage.setItem(LOCAL_PROGRAMS_KEY, JSON.stringify(programs));
 }
 
-export function addDemoCourse(course: Course): void {
-  const courses = getDemoCourses();
+export function addLocalCourse(course: Course): void {
+  const courses = getLocalCourses();
   courses.push(course);
-  localStorage.setItem(DEMO_COURSES_KEY, JSON.stringify(courses));
+  localStorage.setItem(LOCAL_COURSES_KEY, JSON.stringify(courses));
 }
 
-export function addDemoQuiz(quiz: Quiz, questions?: Question[]): void {
+export function addLocalQuiz(quiz: Quiz, questions?: Question[]): void {
   if (typeof window === "undefined") return; // server can't use localStorage
-  const quizzes = getDemoQuizzes();
+  const quizzes = getLocalQuizzes();
   quizzes.unshift(quiz);
-  localStorage.setItem(DEMO_QUIZZES_KEY, JSON.stringify(quizzes));
+  localStorage.setItem(LOCAL_QUIZZES_KEY, JSON.stringify(quizzes));
   if (questions && questions.length > 0) {
-    const allQuestions = getDemoAllQuestions();
+    const allQuestions = getLocalAllQuestions();
     allQuestions.push(...questions);
-    localStorage.setItem(DEMO_QUESTIONS_KEY, JSON.stringify(allQuestions));
+    localStorage.setItem(LOCAL_QUESTIONS_KEY, JSON.stringify(allQuestions));
   }
 }
 
-function getDemoAllQuestions(): Question[] {
+function getLocalAllQuestions(): Question[] {
   if (typeof window === "undefined") return [];
-  const stored = localStorage.getItem(DEMO_QUESTIONS_KEY);
+  const stored = localStorage.getItem(LOCAL_QUESTIONS_KEY);
   return stored ? JSON.parse(stored) : [];
 }
 
-// ─── Demo Quiz Attempts (results) ─────
+// ─── Local Quiz Attempts (results) ─────
 
-const DEMO_ATTEMPTS_KEY = "ollin_demo_attempts";
+const LOCAL_ATTEMPTS_KEY = "ollin_local_attempts";
 
-export interface DemoAttempt {
+export interface LocalAttempt {
   id: string;
   quiz_id: string;
   participant_name: string;
@@ -231,20 +246,20 @@ export interface DemoAttempt {
   completed_at: string;
 }
 
-export function saveDemoAttempt(attempt: DemoAttempt): void {
-  const attempts = getDemoAllAttempts();
+export function saveLocalAttempt(attempt: LocalAttempt): void {
+  const attempts = getLocalAllAttempts();
   attempts.push(attempt);
-  localStorage.setItem(DEMO_ATTEMPTS_KEY, JSON.stringify(attempts));
+  localStorage.setItem(LOCAL_ATTEMPTS_KEY, JSON.stringify(attempts));
 }
 
-export function getDemoAttemptsForQuiz(quizId: string): DemoAttempt[] {
-  return getDemoAllAttempts().filter((a) => a.quiz_id === quizId);
+export function getLocalAttemptsForQuiz(quizId: string): LocalAttempt[] {
+  return getLocalAllAttempts().filter((a) => a.quiz_id === quizId);
 }
 
-function getDemoAllAttempts(): DemoAttempt[] {
+function getLocalAllAttempts(): LocalAttempt[] {
   if (typeof window === "undefined") return [];
   try {
-    const stored = localStorage.getItem(DEMO_ATTEMPTS_KEY);
+    const stored = localStorage.getItem(LOCAL_ATTEMPTS_KEY);
     return stored ? JSON.parse(stored) : [];
   } catch {
     return [];
@@ -320,7 +335,7 @@ export async function getUnreadCount(): Promise<number> {
 
 // ─── Admin-Saved Quizzes (published to courses) ─────
 
-const DEMO_SAVED_QUIZZES_KEY = "ollin_demo_saved_quizzes";
+const LOCAL_SAVED_QUIZZES_KEY = "ollin_local_saved_quizzes";
 
 export interface SavedQuiz {
   quiz_id: string;
@@ -331,7 +346,7 @@ export interface SavedQuiz {
 export function getSavedQuizzes(): SavedQuiz[] {
   if (typeof window === "undefined") return [];
   try {
-    const stored = localStorage.getItem(DEMO_SAVED_QUIZZES_KEY);
+    const stored = localStorage.getItem(LOCAL_SAVED_QUIZZES_KEY);
     return stored ? JSON.parse(stored) : [];
   } catch {
     return [];
@@ -339,7 +354,7 @@ export function getSavedQuizzes(): SavedQuiz[] {
 }
 
 function writeSavedQuizzesLocal(saved: SavedQuiz[]) {
-  localStorage.setItem(DEMO_SAVED_QUIZZES_KEY, JSON.stringify(saved));
+  localStorage.setItem(LOCAL_SAVED_QUIZZES_KEY, JSON.stringify(saved));
 }
 
 /** Sync the local saved-quiz cache from the server file (single source of truth). */
@@ -370,9 +385,9 @@ export async function syncSavedQuizzesFromServer(): Promise<void> {
  * Pull quizzes / courses / saved links from the server files into the local
  * cache so student pages show data created in other browsers (and by admin).
  */
-export async function syncDemoDataFromServer(): Promise<void> {
+export async function syncLocalDataFromServer(): Promise<void> {
   if (typeof window === "undefined") return;
-  const headers: Record<string, string> = isDemoMode() ? { "x-demo-mode": "true" } : {};
+  const headers: Record<string, string> = isLocalMode() ? { "x-local-mode": "true" } : {};
 
   // Quizzes (server file + defaults)
   try {
@@ -380,12 +395,12 @@ export async function syncDemoDataFromServer(): Promise<void> {
     if (res.ok) {
       const data = await res.json();
       const serverQuizzes: Quiz[] = data.quizzes || [];
-      const local = getDemoQuizzes();
+      const local = getLocalQuizzes();
       const merged = [...serverQuizzes];
       for (const q of local) {
         if (!merged.some((m) => m.id === q.id)) merged.push(q);
       }
-      localStorage.setItem(DEMO_QUIZZES_KEY, JSON.stringify(merged));
+      localStorage.setItem(LOCAL_QUIZZES_KEY, JSON.stringify(merged));
     }
   } catch { /* ignore */ }
 
@@ -395,12 +410,12 @@ export async function syncDemoDataFromServer(): Promise<void> {
     if (res.ok) {
       const data = await res.json();
       const serverCourses: Course[] = data.courses || [];
-      const local = getDemoCourses();
+      const local = getLocalCourses();
       const merged = [...serverCourses];
       for (const c of local) {
         if (!merged.some((m) => m.id === c.id)) merged.push(c);
       }
-      localStorage.setItem(DEMO_COURSES_KEY, JSON.stringify(merged));
+      localStorage.setItem(LOCAL_COURSES_KEY, JSON.stringify(merged));
     }
   } catch { /* ignore */ }
 
@@ -439,10 +454,10 @@ export async function removeSavedQuiz(quizId: string, courseId: string): Promise
 export function getSavedQuizzesForStudent(): Quiz[] {
   // Get quizzes saved by admin, filtered by the student's courses and year
   const saved = getSavedQuizzes();
-  const allQuizzes = getDemoQuizzes();
-  let allCourses = getDemoCourses();
+  const allQuizzes = getLocalQuizzes();
+  let allCourses = getLocalCourses();
 
-  const user = getDemoUser();
+  const user = getLocalUser();
   if (!user) return [];
 
   // Filter courses by student's current year

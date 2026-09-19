@@ -3,12 +3,12 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  getDemoCourses,
+  getLocalCourses,
   getSavedQuizzesForStudent,
-  getDemoQuizzes,
-  getDemoUser,
-  syncDemoDataFromServer,
-} from "@/lib/demo";
+  getLocalQuizzes,
+  getLocalUser,
+  syncLocalDataFromServer,
+} from "@/lib/local";
 import { Quiz, Course } from "@/lib/types";
 import { BookOpen, Clock, Play, ChevronRight, Search } from "lucide-react";
 
@@ -26,11 +26,11 @@ export default function TestQuizzesPage() {
     const load = async () => {
       // Pull server-side data so quizzes saved by the admin (and quizzes created
       // on other browsers) show up here too.
-      await syncDemoDataFromServer();
+      await syncLocalDataFromServer();
 
       const savedQuizzes = getSavedQuizzesForStudent();
-      let allCourses = getDemoCourses();
-      const user = getDemoUser();
+      let allCourses = getLocalCourses();
+      const user = getLocalUser();
 
       // Filter courses by student's current year
       const studentYear = user?.current_year;

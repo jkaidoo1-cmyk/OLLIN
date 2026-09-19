@@ -7,7 +7,7 @@
 import { createHmac, timingSafeEqual, randomBytes } from "crypto";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
-import { readDemoUsers } from "./demo-users-store";
+import { readLocalUsers } from "./local-users-store";
 
 const COOKIE_NAME = "ollin_session";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -121,7 +121,7 @@ export interface SessionUser {
 async function resolveSessionUser(
   payload: SessionPayload
 ): Promise<SessionUser | null> {
-  const users = readDemoUsers();
+  const users = readLocalUsers();
   const user = users.find((u) => u.id === payload.userId);
   if (user) {
     return { id: user.id, email: user.email, role: user.role || "student" };

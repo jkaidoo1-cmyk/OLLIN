@@ -1,7 +1,7 @@
 "use client";
 
-import { isDemoMode, getDemoUser, getDemoUsers } from "./demo";
-import { ADMIN_EMAIL } from "./demo-constants";
+import { isLocalMode, getLocalUser, getLocalUsers } from "./local";
+import { ADMIN_EMAIL } from "./local-constants";
 
 export interface AdminUser {
   id: string;
@@ -19,12 +19,12 @@ export interface AdminStats {
 
 /**
  * Is the current session an admin?
- * Demo sessions: any account whose role is "admin" (not just the seed email).
+ * Local sessions: any account whose role is "admin" (not just the seed email).
  */
 export function isAdmin(): boolean {
   if (typeof window === "undefined") return false;
-  if (!isDemoMode()) return false;
-  const user = getDemoUser();
+  if (!isLocalMode()) return false;
+  const user = getLocalUser();
   if (!user) return false;
   // Role-based, with a fallback for sessions created before roles existed.
   return user.role === "admin" || user.email === ADMIN_EMAIL;
@@ -32,7 +32,7 @@ export function isAdmin(): boolean {
 
 export function getAdminUser(): AdminUser | null {
   if (!isAdmin()) return null;
-  const user = getDemoUser();
+  const user = getLocalUser();
   return {
     id: user?.id || "admin-001",
     email: user?.email || ADMIN_EMAIL,
@@ -49,7 +49,7 @@ export function enableAdminMode(): AdminUser {
     full_name: "Admin User",
     role: "admin" as const,
   };
-  localStorage.setItem("ollin_demo_user", JSON.stringify(admin));
+  localStorage.setItem("ollin_local_user", JSON.stringify(admin));
   return admin;
 }
 
@@ -60,7 +60,7 @@ export function getAdminStats(): AdminStats {
   let totalAttempts = 0;
   for (const quiz of quizzes) {
     try {
-      const stored = localStorage.getItem("ollin_demo_attempts");
+      const stored = localStorage.getItem("ollin_local_attempts");
       if (stored) {
         const allAttempts = JSON.parse(stored);
         totalAttempts += allAttempts.filter((a: any) => a.quiz_id === quiz.id).length;
@@ -77,13 +77,13 @@ export function getAdminStats(): AdminStats {
 
 export function getAllUsers() {
   if (typeof window === "undefined") return [];
-  return getDemoUsers();
+  return getLocalUsers();
 }
 
 export function getAllQuizzes() {
   if (typeof window === "undefined") return [];
   try {
-    const stored = localStorage.getItem("ollin_demo_quizzes");
+    const stored = localStorage.getItem("ollin_local_quizzes");
     return stored ? JSON.parse(stored) : [];
   } catch {
     return [];

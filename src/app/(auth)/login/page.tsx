@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { enableDemoMode, type DemoUser } from "@/lib/demo";
+import { enableLocalMode, type LocalUser } from "@/lib/local";
 import { Logo } from "@/components/Logo";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
@@ -21,7 +21,7 @@ export default function LoginPage() {
     setError("");
 
     try {
-      // Authenticate through the server: it checks the demo users file
+      // Authenticate through the server: it checks the local users file
       // (accounts created by an admin work from any browser), then Supabase.
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -36,8 +36,8 @@ export default function LoginPage() {
         return;
       }
 
-      if (data.demo) {
-        enableDemoMode(data.user);
+      if (data.local) {
+        enableLocalMode(data.user);
         if (data.user.role === "admin") {
           router.push("/admin");
         } else {

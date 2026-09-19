@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import {
-  getDemoQuestions,
+  getLocalQuestions,
   saveQuizToCourse,
   removeSavedQuiz,
   isQuizSavedToCourse,
   syncSavedQuizzesFromServer,
-  getDemoQuizzes,
-} from "@/lib/demo";
+  getLocalQuizzes,
+} from "@/lib/local";
 import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, ExternalLink } from "lucide-react";
 
 export default function AdminQuizzesPage() {
@@ -18,7 +18,7 @@ export default function AdminQuizzesPage() {
   const [questionsMap, setQuestionsMap] = useState<Record<string, any[]>>({});
   const [error, setError] = useState("");
 
-  const isDemo = typeof window !== "undefined" && localStorage.getItem("ollin_demo_user") !== null;
+  const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
 
   useEffect(() => {
     fetchQuizzesAndCourses();
@@ -30,14 +30,14 @@ export default function AdminQuizzesPage() {
 
       // Fetch quizzes from API (server-side file)
       const res = await fetch("/api/quizzes", {
-        headers: isDemo ? { "x-demo-mode": "true" } : {},
+        headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       const data = await res.json();
       const apiQuizzes = data.quizzes || [];
 
       // Merge with any local-only (legacy) quizzes, dedupe by id
       const merged: any[] = [...apiQuizzes];
-      for (const cq of getDemoQuizzes()) {
+      for (const cq of getLocalQuizzes()) {
         if (!merged.some((q) => q.id === cq.id)) {
           merged.push(cq);
         }
@@ -46,7 +46,7 @@ export default function AdminQuizzesPage() {
 
       // Fetch courses
       const resC = await fetch("/api/courses", {
-        headers: isDemo ? { "x-demo-mode": "true" } : {},
+        headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       const dataC = await resC.json();
       setCourses(dataC.courses || []);
@@ -59,14 +59,14 @@ export default function AdminQuizzesPage() {
     let qs: any[] = [];
     try {
       const res = await fetch(`/api/quizzes/${quizId}/questions?show_answers=true`, {
-        headers: isDemo ? { "x-demo-mode": "true" } : {},
+        headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       if (res.ok) {
         const data = await res.json();
         qs = data.questions || [];
       }
     } catch { /* ignore */ }
-    if (qs.length === 0) qs = getDemoQuestions(quizId);
+    if (qs.length === 0) qs = getLocalQuestions(quizId);
     setQuestionsMap((prev) => ({ ...prev, [quizId]: qs }));
   };
 
@@ -96,7 +96,7 @@ export default function AdminQuizzesPage() {
     try {
       const res = await fetch(`/api/quizzes/${quiz.id}`, {
         method: "DELETE",
-        headers: isDemo ? { "x-demo-mode": "true" } : {},
+        headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       if (!res.ok) {
         const d = await res.json();
@@ -104,14 +104,14 @@ export default function AdminQuizzesPage() {
         return;
       }
       // Remove from local cache too
-      const remaining = getDemoQuizzes().filter((q) => q.id !== quiz.id);
-      localStorage.setItem("ollin_demo_quizzes", JSON.stringify(remaining));
+      const remaining = getLocalQuizzes().filter((q) => q.id !== quiz.id);
+      localStorage.setItem("ollin_local_quizzes", JSON.stringify(remaining));
       setQuizzes((prev) => prev.filter((q) => q.id !== quiz.id));
       if (expandedId === quiz.id) setExpandedId(null);
       // Remove from saved-to-course associations
-      const { getSavedQuizzes } = await import("@/lib/demo");
+      const { getSavedQuizzes } = await import("@/lib/local");
       const saved = getSavedQuizzes().filter((s) => s.quiz_id !== quiz.id);
-      localStorage.setItem("ollin_demo_saved_quizzes", JSON.stringify(saved));
+      localStorage.setItem("ollin_local_saved_quizzes", JSON.stringify(saved));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete quiz");
     }

@@ -9,7 +9,7 @@ export async function GET() {
       try {
         const { getSessionUserFromCookieStore } = await import("@/lib/session");
         const user = await getSessionUserFromCookieStore();
-        if (user) return NextResponse.json({ user: { ...user, full_name: user.email }, demo: true });
+        if (user) return NextResponse.json({ user: { ...user, full_name: user.email }, local: true });
       } catch { /* ignore */ }
       return NextResponse.json({ user: null }, { status: 401 });
     }

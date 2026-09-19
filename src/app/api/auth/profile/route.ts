@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
-import { readDemoUsers, writeDemoUsers } from "@/lib/demo-users-store";
+import { readLocalUsers, writeLocalUsers } from "@/lib/local-users-store";
 
 /**
  * PATCH /api/auth/profile — a logged-in user updates their own profile.
@@ -55,14 +55,14 @@ export async function PATCH(request: NextRequest) {
     }
 
     // File mode — the session cookie is the authority here.
-    const users = readDemoUsers();
+    const users = readLocalUsers();
     const user = users.find((u) => u.id === session.id);
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     if (updates.current_year !== undefined) user.current_year = updates.current_year;
     if (updates.full_name !== undefined) user.full_name = updates.full_name;
-    writeDemoUsers(users);
+    writeLocalUsers(users);
     return NextResponse.json({ message: "Profile updated" });
   } catch (error) {
     return NextResponse.json(

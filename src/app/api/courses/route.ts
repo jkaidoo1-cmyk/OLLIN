@@ -9,7 +9,7 @@ function getCoursesPath() {
   return join(process.cwd(), ".ollin-courses.json");
 }
 
-function readDemoCourses() {
+function readLocalCourses() {
   const path = getCoursesPath();
   if (existsSync(path)) {
     try { return JSON.parse(readFileSync(path, "utf-8")); } catch { /* ignore */ }
@@ -18,18 +18,18 @@ function readDemoCourses() {
   return DEFAULT_COURSES;
 }
 
-function writeDemoCourses(courses: unknown[]) {
+function writeLocalCourses(courses: unknown[]) {
   writeFileSync(getCoursesPath(), JSON.stringify(courses, null, 2));
 }
 
 // GET — list all courses
 export async function GET(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const programId = request.nextUrl.searchParams.get("program_id") || undefined;
 
-    if (demo) {
-      const all = readDemoCourses();
+    if (local) {
+      const all = readLocalCourses();
       const courses = !programId ? all : all.filter((c: any) => c.program_id === programId || !c.program_id);
       return NextResponse.json({ courses });
     }
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     } catch (err) {
       // NO_BACKEND (Supabase unconfigured or unavailable) → file-backed storage
       if (err instanceof Error && err.message === "NO_BACKEND") {
-        const all = readDemoCourses();
+        const all = readLocalCourses();
         const courses = !programId ? all : all.filter((c: any) => c.program_id === programId || !c.program_id);
         return NextResponse.json({ courses });
       }
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
 // POST — create a new course
 export async function POST(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const body = await request.json();
     const { code, name, description, department, program_id, year } = body;
 
@@ -69,10 +69,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Course name is required" }, { status: 400 });
     }
 
-    if (demo) {
-      const courses = readDemoCourses();
+    if (local) {
+      const courses = readLocalCourses();
       const newCourse = {
-        id: `demo-course-${Date.now()}`,
+        id: `local-course-${Date.now()}`,
         code: code.trim(),
         name: name.trim(),
         description: description || null,
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       };
       courses.push(newCourse);
-      writeDemoCourses(courses);
+      writeLocalCourses(courses);
       return NextResponse.json({ course: newCourse });
     }
 
@@ -102,13 +102,13 @@ export async function POST(request: NextRequest) {
 // PATCH — update a course (code, name, program, year, etc.)
 export async function PATCH(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const body = await request.json();
     const id = body.id;
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    if (demo) {
-      const courses = readDemoCourses();
+    if (local) {
+      const courses = readLocalCourses();
       const idx = courses.findIndex((c: any) => c.id === id);
       if (idx < 0) return NextResponse.json({ error: "Course not found" }, { status: 404 });
       const course = courses[idx];
@@ -119,7 +119,7 @@ export async function PATCH(request: NextRequest) {
       if (body.program_id !== undefined) course.program_id = body.program_id || null;
       if (body.year !== undefined) course.year = body.year || null;
       course.updated_at = new Date().toISOString();
-      writeDemoCourses(courses);
+      writeLocalCourses(courses);
       return NextResponse.json({ course });
     }
 
@@ -148,14 +148,14 @@ export async function PATCH(request: NextRequest) {
 // DELETE — remove a course
 export async function DELETE(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    if (demo) {
-      const courses = readDemoCourses().filter((c: any) => c.id !== id);
-      writeDemoCourses(courses);
+    if (local) {
+      const courses = readLocalCourses().filter((c: any) => c.id !== id);
+      writeLocalCourses(courses);
       return NextResponse.json({ success: true });
     }
 

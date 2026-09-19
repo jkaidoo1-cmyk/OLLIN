@@ -4,7 +4,7 @@ import { getQuizByCode, getQuizQuestions } from "@/lib/data";
 // POST — join a quiz by share code
 export async function POST(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const body = await request.json();
     const { code, participant_name } = body;
 
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const quiz = await getQuizByCode(code.trim().toUpperCase(), demo);
+    const quiz = await getQuizByCode(code.trim().toUpperCase(), local);
 
     if (!quiz) {
       return NextResponse.json(
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get questions without correct answers
-    const allQuestions = await getQuizQuestions(quiz.id, demo);
+    const allQuestions = await getQuizQuestions(quiz.id, local);
     const questions = allQuestions.map((q) => ({
       id: q.id,
       question_text: q.question_text,

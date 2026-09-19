@@ -7,7 +7,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const { id } = await params;
     const body = await request.json();
     const { question_id, selected_answer, is_correct, marks_awarded } = body;
@@ -25,7 +25,7 @@ export async function POST(
       selected_answer,
       is_correct || false,
       marks_awarded || 0,
-      demo
+      local
     );
 
     return NextResponse.json({ success: true });

@@ -7,7 +7,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const { id } = await params;
     const body = await request.json();
     const { answers } = body;
@@ -22,9 +22,9 @@ export async function POST(
     // ── Server-side time-window enforcement ──────────────────
     // The UI hides the quiz outside its window; the server must also refuse
     // submissions outside it (clients can be manipulated).
-    const quizId = body.quiz_id || (await getAttemptQuizId(id, demo));
+    const quizId = body.quiz_id || (await getAttemptQuizId(id, local));
     if (quizId) {
-      const quiz = await getQuizById(quizId, demo);
+      const quiz = await getQuizById(quizId, local);
       if (quiz) {
         const now = Date.now();
         if (quiz.starts_at && now < new Date(quiz.starts_at).getTime()) {
@@ -44,8 +44,8 @@ export async function POST(
 
     // Pass the quiz id so grading can find the questions even when the
     // attempt record doesn't exist yet (e.g. client-only attempt IDs).
-    const attempt = await submitAttempt(id, answers, demo, quizId || body.quiz_id);
-    const savedAnswers = await getAttemptAnswers(id, demo);
+    const attempt = await submitAttempt(id, answers, local, quizId || body.quiz_id);
+    const savedAnswers = await getAttemptAnswers(id, local);
 
     return NextResponse.json({ attempt, answers: savedAnswers });
   } catch (error) {

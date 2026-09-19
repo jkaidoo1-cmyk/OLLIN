@@ -9,7 +9,7 @@ function getProgramsPath() {
   return join(process.cwd(), ".ollin-programs.json");
 }
 
-function readDemoPrograms() {
+function readLocalPrograms() {
   const path = getProgramsPath();
   if (existsSync(path)) {
     try { return JSON.parse(readFileSync(path, "utf-8")); } catch { /* ignore */ }
@@ -18,16 +18,16 @@ function readDemoPrograms() {
   return DEFAULT_PROGRAMS;
 }
 
-function writeDemoPrograms(programs: unknown[]) {
+function writeLocalPrograms(programs: unknown[]) {
   writeFileSync(getProgramsPath(), JSON.stringify(programs, null, 2));
 }
 
 // GET — list all programs
 export async function GET(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
-    if (demo) {
-      return NextResponse.json({ programs: readDemoPrograms() });
+    const local = request.headers.get("x-local-mode") === "true";
+    if (local) {
+      return NextResponse.json({ programs: readLocalPrograms() });
     }
     const { getPrograms } = await import("@/lib/data");
     try {
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     } catch (err) {
       // NO_BACKEND (Supabase unconfigured or unavailable) → file-backed storage
       if (err instanceof Error && err.message === "NO_BACKEND") {
-        return NextResponse.json({ programs: readDemoPrograms() });
+        return NextResponse.json({ programs: readLocalPrograms() });
       }
       throw err;
     }
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
 // POST — create a new program
 export async function POST(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const body = await request.json();
     const { code, name, department, description } = body;
 
@@ -62,10 +62,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Program name is required" }, { status: 400 });
     }
 
-    if (demo) {
-      const programs = readDemoPrograms();
+    if (local) {
+      const programs = readLocalPrograms();
       const newProgram = {
-        id: `demo-program-${Date.now()}`,
+        id: `local-program-${Date.now()}`,
         code: code.trim(),
         name: name.trim(),
         department: department || null,
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       };
       programs.push(newProgram);
-      writeDemoPrograms(programs);
+      writeLocalPrograms(programs);
       return NextResponse.json({ program: newProgram });
     }
 
@@ -90,17 +90,17 @@ export async function POST(request: NextRequest) {
 }
 
 // PATCH — update a program
-// Demo: update the matching record in the demo file.
+// Local: update the matching record in the local file.
 // Real: update the record in Supabase (keep course code fields in sync).
 export async function PATCH(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const body = await request.json();
     const id = body.id;
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    if (demo) {
-      const programs = readDemoPrograms();
+    if (local) {
+      const programs = readLocalPrograms();
       const idx = programs.findIndex((p: any) => p.id === id);
       if (idx < 0) return NextResponse.json({ error: "Program not found" }, { status: 404 });
       const program = programs[idx];
@@ -109,7 +109,7 @@ export async function PATCH(request: NextRequest) {
       if (body.department !== undefined) program.department = body.department || null;
       if (body.description !== undefined) program.description = body.description || null;
       program.updated_at = new Date().toISOString();
-      writeDemoPrograms(programs);
+      writeLocalPrograms(programs);
       return NextResponse.json({ program });
     }
 
@@ -136,14 +136,14 @@ export async function PATCH(request: NextRequest) {
 // DELETE — remove a program
 export async function DELETE(request: NextRequest) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    if (demo) {
-      const programs = readDemoPrograms().filter((p: any) => p.id !== id);
-      writeDemoPrograms(programs);
+    if (local) {
+      const programs = readLocalPrograms().filter((p: any) => p.id !== id);
+      writeLocalPrograms(programs);
       return NextResponse.json({ success: true });
     }
 

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
  * Public backend-health endpoint.
  *
  * Tells the client which storage backend is actually serving data so the UI
- * can show an accurate notice instead of a stale "demo mode" label:
+ * can show an accurate notice instead of a stale "local mode" label:
  *   - "supabase": Supabase is configured AND reachable (persistent, shared)
  *   - "file":     falling back to server-side .ollin-*.json files
  *                 (persistent on a real server; ephemeral on serverless hosts)

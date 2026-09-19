@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readDemoUsers, publicUser, verifyPassword, hashPassword } from "@/lib/demo-users-store";
+import { readLocalUsers, publicUser, verifyPassword, hashPassword } from "@/lib/local-users-store";
 import { createSessionCookie } from "@/lib/session";
-import { ADMIN_PASSWORD } from "@/lib/demo-constants";
+import { ADMIN_PASSWORD } from "@/lib/local-constants";
 import { checkRateLimit, recordFailure, recordSuccess } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, password, demo } = body;
+    const { email, password, local } = body;
 
     if (!email || !password) {
       return NextResponse.json(
@@ -25,11 +25,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Demo login — verify against the server-side users file so accounts
+    // Local login — verify against the server-side users file so accounts
     // created by an admin can log in from any browser. Try this first: it is
     // the de-facto account store for this platform. Supabase is used only as
-    // an optional fallback when the demo check fails and it is configured.
-    const users = readDemoUsers();
+    // an optional fallback when the local check fails and it is configured.
+    const users = readLocalUsers();
     let usersChanged = false;
     const user = users.find((u) => u.email.toLowerCase() === String(email).toLowerCase());
     const authed = !!user && verifyPassword(password, user);
@@ -43,12 +43,12 @@ export async function POST(request: NextRequest) {
       usersChanged = !!user.password; // plaintext was upgraded during verify
     }
     if (usersChanged) {
-      const { writeDemoUsers } = await import("@/lib/demo-users-store");
-      writeDemoUsers(users);
+      const { writeLocalUsers } = await import("@/lib/local-users-store");
+      writeLocalUsers(users);
     }
     if (user && authed) {
       recordSuccess(request, "login");
-      const res = NextResponse.json({ user: publicUser(user), demo: true });
+      const res = NextResponse.json({ user: publicUser(user), local: true });
       res.headers.append(
         "Set-Cookie",
         createSessionCookie({ id: user.id, email: user.email, role: user.role || "student" })
@@ -56,8 +56,8 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
-    // Demo-flag logins never fall through to Supabase.
-    if (demo) {
+    // Local-flag logins never fall through to Supabase.
+    if (local) {
       recordFailure(request, "login");
       return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
     }

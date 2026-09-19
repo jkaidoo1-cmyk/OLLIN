@@ -3,7 +3,7 @@ import {
   readSavedQuizzes,
   writeSavedQuizzes,
   type SavedQuizLink,
-} from "@/lib/demo-saved-quizzes";
+} from "@/lib/local-saved-quizzes";
 import { getSessionAdmin } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/server";
 

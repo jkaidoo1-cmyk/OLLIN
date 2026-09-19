@@ -1,8 +1,8 @@
 /**
  * Unified Data Access Layer
  *
- * Works in demo mode or Supabase mode.
- * Accepts a `demo` flag so server-side API routes can pass it explicitly.
+ * Works in local mode or Supabase mode.
+ * Accepts a `local` flag so server-side API routes can pass it explicitly.
  * Client-side code can call without the flag (defaults to checking localStorage).
  */
 
@@ -16,31 +16,31 @@ import {
   Program,
 } from "./types";
 import {
-  isDemoMode,
-  getDemoQuizByCode,
-  getDemoQuizById,
-  getDemoQuizzes,
-  getDemoQuestions,
-  getDemoAttempts,
-  addDemoQuiz,
-  getDemoUser,
-} from "./demo";
+  isLocalMode,
+  getLocalQuizByCode,
+  getLocalQuizById,
+  getLocalQuizzes,
+  getLocalQuestions,
+  getLocalAttempts,
+  addLocalQuiz,
+  getLocalUser,
+} from "./local";
 import {
-  serverGetDemoQuizByCode,
-  serverGetDemoQuizById,
-  serverGetDemoQuizzes,
-  serverGetDemoQuestions,
-  serverGetDemoAttempts,
-  serverGetDemoCourses,
-  serverGetDemoCourseById,
-  serverGetDemoPrograms,
-  serverGetDemoProgramById,
-} from "./server-demo";
+  serverGetLocalQuizByCode,
+  serverGetLocalQuizById,
+  serverGetLocalQuizzes,
+  serverGetLocalQuestions,
+  serverGetLocalAttempts,
+  serverGetLocalCourses,
+  serverGetLocalCourseById,
+  serverGetLocalPrograms,
+  serverGetLocalProgramById,
+} from "./server-local";
 import { generateQuizCode } from "./utils";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 
-// Server-side file persistence for demo data
+// Server-side file persistence for local data
 function getServerQuizzesPath() {
   return join(process.cwd(), ".ollin-quizzes.json");
 }
@@ -99,10 +99,10 @@ export function writeServerAttempts(attempts: QuizAttempt[]) {
 
 const isServer = typeof window === "undefined";
 
-function checkDemo(demo?: boolean): boolean {
-  if (demo !== undefined) return demo;
-  if (isServer) return false; // server routes must pass demo flag explicitly
-  return isDemoMode();
+function checkLocal(local?: boolean): boolean {
+  if (local !== undefined) return local;
+  if (isServer) return false; // server routes must pass local flag explicitly
+  return isLocalMode();
 }
 
 async function getSupabase() {
@@ -115,7 +115,7 @@ async function getServerSupabase() {
   const client = await createClient();
   if (!client) {
     // No Supabase configured — every server path should be treated as
-    // file-backed demo storage rather than crashing with null.auth.
+    // file-backed local storage rather than crashing with null.auth.
     throw new Error("NO_BACKEND");
   }
   return client;
@@ -142,15 +142,15 @@ export async function createQuiz(
       difficulty?: string;
     }>;
   },
-  demo?: boolean
+  local?: boolean
 ): Promise<{ quiz: Quiz; code: string }> {
   const shareCode = generateQuizCode();
-  const isDemo = checkDemo(demo);
+  const isLocal = checkLocal(local);
 
-  if (isDemo) {
-    const user = getDemoUser();
+  if (isLocal) {
+    const user = getLocalUser();
     const quiz: Quiz = {
-      id: `demo-quiz-${Date.now()}`,
+      id: `local-quiz-${Date.now()}`,
       host_id: user?.id || "anonymous",
       title: input.title,
       description: input.description || null,
@@ -195,7 +195,7 @@ export async function createQuiz(
         writeServerQuestions(allQuestions);
       }
     } else {
-      addDemoQuiz(quiz);
+      addLocalQuiz(quiz);
     }
     return { quiz, code: shareCode };
   }
@@ -250,17 +250,17 @@ export async function createQuiz(
 
 export async function getQuizByCode(
   code: string,
-  demo?: boolean
+  local?: boolean
 ): Promise<Quiz | null> {
-  if (checkDemo(demo)) {
+  if (checkLocal(local)) {
     if (isServer) {
       // Check file first (student-created quizzes), then hardcoded defaults
       const fileQuizzes = readServerQuizzes();
       const fromFile = fileQuizzes.find((q) => q.share_code === code);
       if (fromFile) return fromFile;
-      return serverGetDemoQuizByCode(code) || null;
+      return serverGetLocalQuizByCode(code) || null;
     }
-    return getDemoQuizByCode(code) || null;
+    return getLocalQuizByCode(code) || null;
   }
 
   const supabase = await getServerSupabase();
@@ -276,16 +276,16 @@ export async function getQuizByCode(
 
 export async function getQuizById(
   id: string,
-  demo?: boolean
+  local?: boolean
 ): Promise<Quiz | null> {
-  if (checkDemo(demo)) {
+  if (checkLocal(local)) {
     if (isServer) {
       const fileQuizzes = readServerQuizzes();
       const fromFile = fileQuizzes.find((q) => q.id === id);
       if (fromFile) return fromFile;
-      return serverGetDemoQuizById(id) || null;
+      return serverGetLocalQuizById(id) || null;
     }
-    return getDemoQuizById(id) || null;
+    return getLocalQuizById(id) || null;
   }
 
   const supabase = await getServerSupabase();
@@ -300,17 +300,17 @@ export async function getQuizById(
 }
 
 export async function getUserQuizzes(
-  demo?: boolean
+  local?: boolean
 ): Promise<Quiz[]> {
-  if (checkDemo(demo)) {
+  if (checkLocal(local)) {
     if (isServer) {
       // Return hardcoded defaults + file-stored quizzes
       const fileQuizzes = readServerQuizzes();
       const ids = new Set(fileQuizzes.map((q) => q.id));
-      const defaults = serverGetDemoQuizzes().filter((q) => !ids.has(q.id));
+      const defaults = serverGetLocalQuizzes().filter((q) => !ids.has(q.id));
       return [...fileQuizzes, ...defaults];
     }
-    return getDemoQuizzes();
+    return getLocalQuizzes();
   }
 
   const supabase = await getServerSupabase();
@@ -329,9 +329,9 @@ export async function getUserQuizzes(
 
 export async function deleteQuiz(
   id: string,
-  demo?: boolean
+  local?: boolean
 ): Promise<void> {
-  if (checkDemo(demo)) {
+  if (checkLocal(local)) {
     if (isServer) {
       const quizzes = readServerQuizzes().filter((q) => q.id !== id);
       writeServerQuizzes(quizzes);
@@ -340,8 +340,8 @@ export async function deleteQuiz(
       writeServerQuestions(questions);
       return;
     }
-    const quizzes = getDemoQuizzes().filter((q) => q.id !== id);
-    localStorage.setItem("ollin_demo_quizzes", JSON.stringify(quizzes));
+    const quizzes = getLocalQuizzes().filter((q) => q.id !== id);
+    localStorage.setItem("ollin_local_quizzes", JSON.stringify(quizzes));
     return;
   }
 
@@ -353,16 +353,16 @@ export async function deleteQuiz(
 
 export async function getQuizQuestions(
   quizId: string,
-  demo?: boolean
+  local?: boolean
 ): Promise<Question[]> {
-  if (checkDemo(demo)) {
+  if (checkLocal(local)) {
     if (isServer) {
       // Check server file first, then hardcoded defaults
       const fileQuestions = readServerQuestions().filter((q) => q.quiz_id === quizId);
       if (fileQuestions.length > 0) return fileQuestions;
-      return serverGetDemoQuestions(quizId);
+      return serverGetLocalQuestions(quizId);
     }
-    return getDemoQuestions(quizId);
+    return getLocalQuestions(quizId);
   }
 
   const supabase = await getServerSupabase();
@@ -381,16 +381,16 @@ export async function getQuizQuestions(
 export async function startAttempt(
   quizId: string,
   participantName?: string,
-  demo?: boolean
+  local?: boolean
 ): Promise<QuizAttempt> {
-  if (checkDemo(demo)) {
-    const quiz = isServer ? serverGetDemoQuizById(quizId) : getDemoQuizById(quizId);
-    const questions = isServer ? serverGetDemoQuestions(quizId) : getDemoQuestions(quizId);
+  if (checkLocal(local)) {
+    const quiz = isServer ? serverGetLocalQuizById(quizId) : getLocalQuizById(quizId);
+    const questions = isServer ? serverGetLocalQuestions(quizId) : getLocalQuestions(quizId);
     const attempt: QuizAttempt = {
-      id: `demo-att-${Date.now()}`,
+      id: `local-att-${Date.now()}`,
       quiz_id: quizId,
       participant_id: null,
-      participant_name: participantName || "Demo Student",
+      participant_name: participantName || "Local Student",
       started_at: new Date().toISOString(),
       completed_at: null,
       time_taken_seconds: null,
@@ -431,9 +431,9 @@ function normalizeAnswer(v: string): string {
 }
 
 /** Resolve which quiz an attempt belongs to (for grading + window checks). */
-export async function getAttemptQuizId(attemptId: string, demo?: boolean): Promise<string | null> {
-  if (checkDemo(demo)) {
-    // Demo attempts encode nothing — return null; grading falls back to empty set.
+export async function getAttemptQuizId(attemptId: string, local?: boolean): Promise<string | null> {
+  if (checkLocal(local)) {
+    // Local attempts encode nothing — return null; grading falls back to empty set.
     const attempts = isServer ? readServerAttempts() : [];
     const found = attempts.find((a) => a.id === attemptId);
     return found?.quiz_id ?? null;
@@ -453,9 +453,9 @@ export async function saveAnswer(
   selectedAnswer: string,
   isCorrect: boolean,
   marksAwarded: number,
-  demo?: boolean
+  local?: boolean
 ): Promise<void> {
-  if (checkDemo(demo)) return;
+  if (checkLocal(local)) return;
 
   const supabase = await getServerSupabase();
   await supabase.from("attempt_answers").upsert(
@@ -478,7 +478,7 @@ export async function submitAttempt(
     is_correct?: boolean;
     marks_awarded?: number;
   }>,
-  demo?: boolean,
+  local?: boolean,
   quizIdHint?: string | null
 ): Promise<QuizAttempt> {
   // ── Server-side grading ─────────────────────────────────
@@ -489,8 +489,8 @@ export async function submitAttempt(
     Array<{ question_id: string; selected_answer: string; is_correct: boolean; marks_awarded: number }>
   > => {
     const answeredIds = new Set(answers.map((a) => a.question_id));
-    const quizId = quizIdHint || (await getAttemptQuizId(attemptId, demo)) || "";
-    const allQuestions = await getQuizQuestions(quizId, demo);
+    const quizId = quizIdHint || (await getAttemptQuizId(attemptId, local)) || "";
+    const allQuestions = await getQuizQuestions(quizId, local);
     const questions = allQuestions.filter((q) => answeredIds.has(q.id));
     return answers.map((a) => {
       const q = questions.find((qq) => qq.id === a.question_id);
@@ -504,7 +504,7 @@ export async function submitAttempt(
     });
   };
 
-  if (checkDemo(demo)) {
+  if (checkLocal(local)) {
     const graded = await gradeAnswers();
     const correct = graded.filter((a) => a.is_correct).length;
     const total = graded.length;
@@ -512,7 +512,7 @@ export async function submitAttempt(
       id: attemptId,
       quiz_id: "",
       participant_id: null,
-      participant_name: "Demo Student",
+      participant_name: "Local Student",
       started_at: new Date(Date.now() - 600000).toISOString(),
       completed_at: new Date().toISOString(),
       time_taken_seconds: 600,
@@ -572,9 +572,9 @@ export async function submitAttempt(
 
 export async function getAttemptAnswers(
   attemptId: string,
-  demo?: boolean
+  local?: boolean
 ): Promise<AttemptAnswer[]> {
-  if (checkDemo(demo)) return [];
+  if (checkLocal(local)) return [];
 
   const supabase = await getServerSupabase();
   const { data, error } = await supabase
@@ -588,10 +588,10 @@ export async function getAttemptAnswers(
 
 export async function getQuizAttempts(
   quizId: string,
-  demo?: boolean
+  local?: boolean
 ): Promise<QuizAttempt[]> {
-  if (checkDemo(demo)) {
-    return isServer ? serverGetDemoAttempts(quizId) : getDemoAttempts(quizId);
+  if (checkLocal(local)) {
+    return isServer ? serverGetLocalAttempts(quizId) : getLocalAttempts(quizId);
   }
 
   const supabase = await getServerSupabase();
@@ -605,12 +605,12 @@ export async function getQuizAttempts(
   return data || [];
 }// ─── Program Operations ───────────────────────────────
 
-export async function getPrograms(demo?: boolean): Promise<Program[]> {
-  if (checkDemo(demo)) {
-    if (isServer) return serverGetDemoPrograms();
-    // Client-side: read from localStorage (demo.ts has getDemoPrograms)
-    const { getDemoPrograms } = await import("./demo");
-    return getDemoPrograms();
+export async function getPrograms(local?: boolean): Promise<Program[]> {
+  if (checkLocal(local)) {
+    if (isServer) return serverGetLocalPrograms();
+    // Client-side: read from localStorage (local.ts has getLocalPrograms)
+    const { getLocalPrograms } = await import("./local");
+    return getLocalPrograms();
   }
 
   const supabase = await getServerSupabase();
@@ -625,10 +625,10 @@ export async function getPrograms(demo?: boolean): Promise<Program[]> {
 
 export async function getProgramById(
   id: string,
-  demo?: boolean
+  local?: boolean
 ): Promise<Program | null> {
-  if (checkDemo(demo)) {
-    return isServer ? serverGetDemoProgramById(id) || null : null;
+  if (checkLocal(local)) {
+    return isServer ? serverGetLocalProgramById(id) || null : null;
   }
 
   const supabase = await getServerSupabase();
@@ -644,11 +644,11 @@ export async function getProgramById(
 
 export async function createProgram(
   input: { code: string; name: string; department?: string; description?: string },
-  demo?: boolean
+  local?: boolean
 ): Promise<Program> {
-  if (checkDemo(demo)) {
+  if (checkLocal(local)) {
     const program: Program = {
-      id: `demo-program-${Date.now()}`,
+      id: `local-program-${Date.now()}`,
       code: input.code,
       name: input.name,
       department: input.department || null,
@@ -657,8 +657,8 @@ export async function createProgram(
       updated_at: new Date().toISOString(),
     };
     if (!isServer) {
-      const { addDemoProgram } = await import("./demo");
-      addDemoProgram(program);
+      const { addLocalProgram } = await import("./local");
+      addLocalProgram(program);
     }
     return program;
   }
@@ -681,9 +681,9 @@ export async function createProgram(
 
 export async function updateProgram(
   input: { id: string; code?: string; name?: string; department?: string | null; description?: string | null },
-  demo?: boolean
+  local?: boolean
 ): Promise<Program> {
-  if (checkDemo(demo)) {
+  if (checkLocal(local)) {
     if (isServer) {
       // Server-side file update
       const path = join(process.cwd(), ".ollin-programs.json");
@@ -702,9 +702,9 @@ export async function updateProgram(
       }
       throw new Error("Program not found");
     }
-    // Client-side: update localStorage demo data
-    const { getDemoPrograms } = await import("./demo");
-    const programs = getDemoPrograms();
+    // Client-side: update localStorage local data
+    const { getLocalPrograms } = await import("./local");
+    const programs = getLocalPrograms();
     const idx = programs.findIndex((p) => p.id === input.id);
     if (idx < 0) throw new Error("Program not found");
     if (input.code) programs[idx].code = input.code;
@@ -712,7 +712,7 @@ export async function updateProgram(
     if (input.department !== undefined) programs[idx].department = input.department;
     if (input.description !== undefined) programs[idx].description = input.description;
     programs[idx].updated_at = new Date().toISOString();
-    localStorage.setItem("ollin_demo_programs", JSON.stringify(programs));
+    localStorage.setItem("ollin_local_programs", JSON.stringify(programs));
     return programs[idx];
   }
 
@@ -733,12 +733,12 @@ export async function updateProgram(
   return data;
 }
 
-export async function deleteProgram(id: string, demo?: boolean): Promise<void> {
-  if (checkDemo(demo)) {
+export async function deleteProgram(id: string, local?: boolean): Promise<void> {
+  if (checkLocal(local)) {
     if (isServer) return;
-    const { getDemoPrograms } = await import("./demo");
-    const programs = getDemoPrograms().filter((p) => p.id !== id);
-    localStorage.setItem("ollin_demo_programs", JSON.stringify(programs));
+    const { getLocalPrograms } = await import("./local");
+    const programs = getLocalPrograms().filter((p) => p.id !== id);
+    localStorage.setItem("ollin_local_programs", JSON.stringify(programs));
     return;
   }
   const supabase = await getServerSupabase();
@@ -748,18 +748,18 @@ export async function deleteProgram(id: string, demo?: boolean): Promise<void> {
 // ─── Course Operations ─────────────────────────────────
 
 export async function getCourses(
-  demo?: boolean,
+  local?: boolean,
   programId?: string
 ): Promise<Course[]> {
-  if (checkDemo(demo)) {
+  if (checkLocal(local)) {
     if (isServer) {
-      const all = serverGetDemoCourses();
+      const all = serverGetLocalCourses();
       if (!programId) return all;
       return all.filter((c) => c.program_id === programId || !c.program_id);
     }
     // Client-side: read from localStorage
-    const { getDemoCourses } = await import("./demo");
-    const all = getDemoCourses();
+    const { getLocalCourses } = await import("./local");
+    const all = getLocalCourses();
     if (!programId) return all;
     return all.filter((c) => c.program_id === programId || !c.program_id);
   }
@@ -778,10 +778,10 @@ export async function getCourses(
 
 export async function getCourseById(
   id: string,
-  demo?: boolean
+  local?: boolean
 ): Promise<Course | null> {
-  if (checkDemo(demo)) {
-    return isServer ? serverGetDemoCourseById(id) || null : null;
+  if (checkLocal(local)) {
+    return isServer ? serverGetLocalCourseById(id) || null : null;
   }
 
   const supabase = await getServerSupabase();
@@ -797,11 +797,11 @@ export async function getCourseById(
 
 export async function createCourse(
   input: { code: string; name: string; description?: string; department?: string; program_id?: string; year?: number | null },
-  demo?: boolean
+  local?: boolean
 ): Promise<Course> {
-  if (checkDemo(demo)) {
+  if (checkLocal(local)) {
     const course: Course = {
-      id: `demo-course-${Date.now()}`,
+      id: `local-course-${Date.now()}`,
       code: input.code,
       name: input.name,
       description: input.description || null,
@@ -813,8 +813,8 @@ export async function createCourse(
       updated_at: new Date().toISOString(),
     };
     if (!isServer) {
-      const { addDemoCourse } = await import("./demo");
-      addDemoCourse(course);
+      const { addLocalCourse } = await import("./local");
+      addLocalCourse(course);
     }
     return course;
   }
@@ -839,9 +839,9 @@ export async function createCourse(
 
 export async function updateCourse(
   input: { id: string; code?: string; name?: string; description?: string | null; department?: string | null; program_id?: string | null; year?: number | null },
-  demo?: boolean
+  local?: boolean
 ): Promise<Course> {
-  if (checkDemo(demo)) {
+  if (checkLocal(local)) {
     if (isServer) {
       const path = join(process.cwd(), ".ollin-courses.json");
       if (existsSync(path)) {
@@ -861,8 +861,8 @@ export async function updateCourse(
       }
       throw new Error("Course not found");
     }
-    const { getDemoCourses } = await import("./demo");
-    const courses = getDemoCourses();
+    const { getLocalCourses } = await import("./local");
+    const courses = getLocalCourses();
     const idx = courses.findIndex((c) => c.id === input.id);
     if (idx < 0) throw new Error("Course not found");
     if (input.code) courses[idx].code = input.code;
@@ -872,7 +872,7 @@ export async function updateCourse(
     if (input.program_id !== undefined) courses[idx].program_id = input.program_id;
     if (input.year !== undefined) courses[idx].year = input.year;
     courses[idx].updated_at = new Date().toISOString();
-    localStorage.setItem("ollin_demo_courses", JSON.stringify(courses));
+    localStorage.setItem("ollin_local_courses", JSON.stringify(courses));
     return courses[idx];
   }
 
@@ -897,13 +897,13 @@ export async function updateCourse(
 
 export async function deleteCourse(
   id: string,
-  demo?: boolean
+  local?: boolean
 ): Promise<void> {
-  if (checkDemo(demo)) {
+  if (checkLocal(local)) {
     if (isServer) return;
-    const { getDemoCourses } = await import("./demo");
-    const courses = getDemoCourses().filter((c) => c.id !== id);
-    localStorage.setItem("ollin_demo_courses", JSON.stringify(courses));
+    const { getLocalCourses } = await import("./local");
+    const courses = getLocalCourses().filter((c) => c.id !== id);
+    localStorage.setItem("ollin_local_courses", JSON.stringify(courses));
     return;
   }
 
@@ -912,9 +912,9 @@ export async function deleteCourse(
 }
 
 export async function getUserAttempts(
-  demo?: boolean
+  local?: boolean
 ): Promise<QuizAttempt[]> {
-  if (checkDemo(demo)) return [];
+  if (checkLocal(local)) return [];
 
   const supabase = await getServerSupabase();
   const { data: userData } = await supabase.auth.getUser();
@@ -934,13 +934,13 @@ export async function getUserAttempts(
 
 export async function getQuizStats(
   quizId: string,
-  demo?: boolean
+  local?: boolean
 ): Promise<QuizStats | null> {
-  const quiz = await getQuizById(quizId, demo);
+  const quiz = await getQuizById(quizId, local);
   if (!quiz) return null;
 
-  const attempts = await getQuizAttempts(quizId, demo);
-  const questions = await getQuizQuestions(quizId, demo);
+  const attempts = await getQuizAttempts(quizId, local);
+  const questions = await getQuizQuestions(quizId, local);
 
   const completedAttempts = attempts.filter((a) => a.status === "completed");
   const scores = completedAttempts.map((a) => a.score_percentage);
@@ -955,7 +955,7 @@ export async function getQuizStats(
     total_answers: 0,
   }));
 
-  if (checkDemo(demo)) {
+  if (checkLocal(local)) {
     return {
       quiz,
       total_attempts: attempts.length,

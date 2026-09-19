@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { isDemoMode, getDemoQuizzes, getDemoAttempts, getDemoUser } from "@/lib/demo";
+import { isLocalMode, getLocalQuizzes, getLocalAttempts, getLocalUser } from "@/lib/local";
 import { Quiz, QuizAttempt } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
 import {
@@ -36,14 +36,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (isDemoMode()) {
-        const demoUser = getDemoUser();
-        if (demoUser) setUserName(demoUser.full_name.split(" ")[0]);
-        const quizList = getDemoQuizzes();
+      if (isLocalMode()) {
+        const localUser = getLocalUser();
+        if (localUser) setUserName(localUser.full_name.split(" ")[0]);
+        const quizList = getLocalQuizzes();
         setQuizzes(quizList);
         const attempts: QuizAttempt[] = [];
         for (const q of quizList) {
-          attempts.push(...getDemoAttempts(q.id));
+          attempts.push(...getLocalAttempts(q.id));
         }
         try {
           const res = await fetch(`/api/attempts`);

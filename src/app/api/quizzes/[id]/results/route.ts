@@ -6,15 +6,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const demo = request.headers.get("x-demo-mode") === "true";
+    const local = request.headers.get("x-local-mode") === "true";
     const { id } = await params;
-    const stats = await getQuizStats(id, demo);
+    const stats = await getQuizStats(id, local);
 
     if (!stats) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
     }
 
-    const attempts = await getQuizAttempts(id, demo);
+    const attempts = await getQuizAttempts(id, local);
 
     return NextResponse.json({
       stats,

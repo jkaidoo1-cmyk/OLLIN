@@ -1,10 +1,10 @@
 /**
- * Shared demo accounts + admin identity.
- * Client-safe (no fs/localStorage) so both the browser (demo.ts / admin.ts)
+ * Shared local accounts + admin identity.
+ * Client-safe (no fs/localStorage) so both the browser (local.ts / admin.ts)
  * and server API routes (auth, admin users) read from the same source.
  */
 
-export interface DemoAccountSeed {
+export interface LocalAccountSeed {
   id: string;
   email: string;
   full_name: string;
@@ -16,7 +16,7 @@ export interface DemoAccountSeed {
 export const ADMIN_EMAIL = "jkaidoo1@mail.com";
 export const ADMIN_PASSWORD = "OllinAdmin1598";
 
-export const DEFAULT_DEMO_USERS: DemoAccountSeed[] = [
+export const DEFAULT_LOCAL_USERS: LocalAccountSeed[] = [
   {
     id: "admin-001",
     email: ADMIN_EMAIL,

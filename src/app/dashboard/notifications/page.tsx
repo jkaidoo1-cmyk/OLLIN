@@ -7,7 +7,7 @@ import {
   deleteNotification,
   clearAllNotifications,
   Notification,
-} from "@/lib/demo";
+} from "@/lib/local";
 import { Bell, BookOpen, BarChart3, Info, Trash2, X } from "lucide-react";
 
 const typeIcons: Record<string, typeof Bell> = {

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
 import { isAdmin } from "@/lib/admin";
 import { Logo } from "@/components/Logo";
-import { isDemoMode, disableDemoMode } from "@/lib/demo";
+import { isLocalMode, disableLocalMode } from "@/lib/local";
 
 const adminNav = [
   { href: "/admin", label: "Overview" },
@@ -26,8 +26,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     const checkAuth = async () => {
-      // Demo admin session
-      if (isDemoMode() && isAdmin()) {
+      // Local admin session
+      if (isLocalMode() && isAdmin()) {
         setAuthorized(true);
         setLoading(false);
         return;
@@ -51,8 +51,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [router]);
 
   const handleLogout = async () => {
-    if (isDemoMode()) {
-      disableDemoMode();
+    if (isLocalMode()) {
+      disableLocalMode();
       router.push("/");
       return;
     }
