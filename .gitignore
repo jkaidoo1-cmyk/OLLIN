@@ -44,3 +44,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .ollin-session-secret
+
+# Supabase CLI temp files
+supabase/.temp/
