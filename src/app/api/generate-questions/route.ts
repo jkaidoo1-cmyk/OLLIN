@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { analyzeAndGenerate, extractExistingQuestions } from "@/lib/ai/content-analyzer";
+import { analyzeAndGenerate, extractFromExam, extractExistingQuestions } from "@/lib/ai/content-analyzer";
 import { extractTextFromBase64, getRelevantText } from "@/lib/file-extract";
 
 export async function POST(request: NextRequest) {
@@ -27,7 +27,52 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Extract existing questions mode
+    // ── Exam extraction mode: the upload IS the quiz ──────────
+    // The user uploaded an existing exam/test. Copy its questions verbatim,
+    // determine the answers — do NOT generate new questions.
+    if (mode === "exam") {
+      const hasExamFile = file_data && file_type;
+      if (!hasText && !hasExamFile) {
+        return NextResponse.json(
+          { error: "Please upload or paste the exam paper to extract." },
+          { status: 400 }
+        );
+      }
+
+      let examText = hasText ? material_text : "";
+      let isImage = false;
+      if (hasExamFile && file_type.startsWith("image/")) {
+        isImage = true; // vision-capable provider reads the image directly
+      } else if (hasExamFile) {
+        const extracted = await extractTextFromBase64(file_data, file_type, file_name);
+        if (extracted.error && !extracted.text) {
+          return NextResponse.json({ error: extracted.error }, { status: 400 });
+        }
+        if (!extracted.text || extracted.text.trim().length < 20) {
+          return NextResponse.json(
+            { error: "Could not read enough content from this file. It may be empty, image-based, or password-protected. Try pasting the text instead." },
+            { status: 400 }
+          );
+        }
+        examText = extracted.text;
+      }
+
+      const { analysis, questions } = await extractFromExam(examText, {
+        fileData: isImage ? file_data : undefined,
+        fileType: isImage ? file_type : undefined,
+        fileName: isImage ? file_name : undefined,
+        customInstructions: custom_instructions,
+        onUsage: ({ keyId, inputTokens, outputTokens }) => {
+          import("@/lib/ai/key-rotation").then(({ recordKeyUsage }) =>
+            recordKeyUsage(keyId, inputTokens, outputTokens)
+          ).catch(() => { /* non-critical */ });
+        },
+      });
+
+      return NextResponse.json({ analysis, questions });
+    }
+
+    // Extract existing questions mode (regex-based, no AI)
     if (mode === "extract") {
       if (!hasText) {
         return NextResponse.json(

@@ -42,6 +42,7 @@ export default function CreateQuizPage() {
   const [materialTitle, setMaterialTitle] = useState("");
   const [materialFile, setMaterialFile] = useState<File | null>(null);
   const [materialType, setMaterialType] = useState<"paste" | "file">("paste");
+  const [sourceMode, setSourceMode] = useState<"material" | "exam">("material");
   const [materialFileBase64, setMaterialFileBase64] = useState("");
   const [materialFileType, setMaterialFileType] = useState("");
   const [extracting, setExtracting] = useState(false);
@@ -164,7 +165,7 @@ export default function CreateQuizPage() {
       const body: Record<string, unknown> = {
         question_count: questionCount,
         question_types: questionTypes.length > 0 ? questionTypes : ["multiple_choice"],
-        mode: "generate",
+        mode: sourceMode === "exam" ? "exam" : "generate",
       };
 
       if (customInstructions.trim()) {
@@ -471,6 +472,33 @@ export default function CreateQuizPage() {
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-5">
           <label className="block text-sm font-semibold mb-3 text-[#333]">Study material</label>
 
+          {/* Source mode: build questions from material, or extract from an existing exam */}
+          <div className="flex gap-2 p-1 bg-slate-100 rounded-lg mb-4 max-w-md">
+            <button
+              type="button"
+              onClick={() => setSourceMode("material")}
+              className={`flex-1 py-1.5 px-3 rounded text-xs font-medium transition-colors ${
+                sourceMode === "material" ? "bg-white text-green-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Build questions from material
+            </button>
+            <button
+              type="button"
+              onClick={() => setSourceMode("exam")}
+              className={`flex-1 py-1.5 px-3 rounded text-xs font-medium transition-colors ${
+                sourceMode === "exam" ? "bg-white text-green-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              I have an exam paper
+            </button>
+          </div>
+          {sourceMode === "exam" && (
+            <p className="text-xs text-[#666] -mt-2 mb-3">
+              Upload or paste an existing exam or test. The questions are taken exactly as written, with the correct answers filled in — nothing is generated.
+            </p>
+          )}
+
           <div className="flex gap-2 p-1 bg-slate-100 rounded-lg mb-4 max-w-xs">
             <button
               onClick={() => setMaterialType("paste")}
@@ -495,7 +523,7 @@ export default function CreateQuizPage() {
               <textarea
                 value={materialText}
                 onChange={(e) => setMaterialText(e.target.value)}
-                placeholder="Paste lecture notes, textbook chapters, or study guides here..."
+                placeholder={sourceMode === "exam" ? "Paste the exam paper here (questions with or without answers)..." : "Paste lecture notes, textbook chapters, or study guides here..."}
                 rows={8}
                 className="input-field text-sm resize-y"
               />
@@ -535,7 +563,7 @@ export default function CreateQuizPage() {
                   <div>
                     <Upload className="w-6 h-6 text-[#999] mx-auto mb-2" />
                     <p className="text-sm text-[#333]">Click to upload or drag and drop</p>
-                    <p className="text-xs text-[#999] mt-0.5">PDF, DOCX, or TXT</p>
+                    <p className="text-xs text-[#999] mt-0.5">PDF, DOCX, TXT{sourceMode === "exam" ? ", or exam photo" : ""}</p>
                   </div>
                 )}
               </div>
@@ -718,13 +746,13 @@ export default function CreateQuizPage() {
         {/* Generate button */}
         <button
           onClick={handleGenerate}
-          disabled={!materialText.trim() || generating}
+          disabled={(!materialText.trim() && !(materialFileBase64 && materialFileType)) || generating}
           className="btn-primary w-full py-2.5 text-sm flex items-center justify-center gap-2"
         >
           {generating ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> Generating questions...</>
+            <><Loader2 className="w-4 h-4 animate-spin" /> {sourceMode === "exam" ? "Extracting exam..." : "Generating questions..."}</>
           ) : (
-            "Generate questions"
+            sourceMode === "exam" ? "Extract questions from exam" : "Generate questions"
           )}
         </button>
 

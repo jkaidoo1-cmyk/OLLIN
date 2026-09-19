@@ -70,6 +70,8 @@ const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "openai/gpt-oss-20b";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 const GEMINI_MODEL = "gemini-3.7-flash";
+// Alternate Gemini model tried when the primary is overloaded (503).
+const GEMINI_FALLBACK_MODEL = "gemini-flash-latest";
 
 // ─── Token Estimation ───────────────────────────────────
 
@@ -98,6 +100,38 @@ function compressMaterial(text: string): string {
     })
     .join("\n")
     .trim();
+}
+
+/**
+ * Prompt for exam-extraction mode: read an existing exam/test and return its
+ * questions VERBATIM with the correct answers. No new question invention.
+ */
+export function buildExamExtractionPrompt(
+  examText: string,
+  fileName?: string,
+  customInstructions?: string
+): string {
+  const compressed = compressMaterial(examText);
+  const textBlock = compressed.slice(0, 6000);
+  const instructionsBlock = customInstructions
+    ? `\n\nExtra instructions: ${customInstructions}`
+    : "";
+
+  return `Extract every question from this exam paper. Copy each question word-for-word. For each question, determine the correct answer from the answer key, marked answers, or your own knowledge of the subject.${instructionsBlock}
+
+Exam paper${fileName ? ` (${fileName})` : ""}:
+${textBlock}
+
+Rules:
+- Copy questions exactly as written. Do not rewrite or invent questions.
+- For multiple choice: options must list ALL choices exactly as they appear (no letters like A, B, C inside the text).
+- correctAnswer is the exact text of the correct option (multiple choice), "True"/"False", or the model answer.
+- If an answer cannot be determined, use your subject knowledge — these are real exam questions.
+- explanation: one short sentence justifying the answer.
+- Keep the exam's original title if present.
+
+JSON only:
+{"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"","explanation":"","topic":"","difficulty":"medium"}]}`;
 }
 
 export function buildDeepAnalysisAndQuestionPrompt(
@@ -198,12 +232,62 @@ async function callAIProvider(
   fileData?: string,
   fileType?: string,
   fileName?: string,
-  customInstructions?: string
+  customInstructions?: string,
+  mode: "generate" | "exam" = "generate"
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
   if (provider === "gemini") {
-    return callGeminiAPI(materialText, questionCount, questionTypes, apiKey, fileData, fileType, fileName, customInstructions);
+    return callGeminiAPI(materialText, questionCount, questionTypes, apiKey, fileData, fileType, fileName, customInstructions, mode);
   }
-  return callGroqAPI(materialText, questionCount, questionTypes, apiKey, fileData, fileType, fileName, customInstructions);
+  return callGroqAPI(materialText, questionCount, questionTypes, apiKey, fileData, fileType, fileName, customInstructions, mode);
+}
+
+// ─── Exam Extraction Entry Point ─────────────────────────
+
+/**
+ * Extract questions (with answers) from an existing exam paper.
+ * No question generation — the exam already contains the questions.
+ */
+export async function extractFromExam(
+  examText: string,
+  options: AIOptions = {}
+): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
+  const { getAllKeys } = await import("./key-rotation");
+  const allKeys = await getAllKeys();
+  const enabledKeys = allKeys.filter((k) => k.enabled && k.key);
+
+  if (enabledKeys.length === 0) {
+    throw new Error("No service configured. Please contact your administrator.");
+  }
+
+  const providers = [...new Set(enabledKeys.map((k) => k.provider))];
+  let lastError: Error | null = null;
+
+  for (const p of providers) {
+    try {
+      const { result, keyId } = await tryWithRotation(
+        (apiKey) => callAIProvider(p, examText, 0, [], apiKey, options.fileData, options.fileType, options.fileName, options.customInstructions, "exam"),
+        p
+      );
+      const usage = (result as { __usage?: { inputTokens: number; outputTokens: number } }).__usage;
+      options.onUsage?.({ keyId, inputTokens: usage?.inputTokens || 0, outputTokens: usage?.outputTokens || 0 });
+      delete (result as { __usage?: unknown }).__usage;
+      return result;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      lastError = error;
+      console.error(`${p} exam extraction failed:`, error.message);
+      continue;
+    }
+  }
+
+  if (lastError) {
+    const msg = lastError.message.toLowerCase();
+    if (msg.includes("rate") || msg.includes("429") || msg.includes("limit")) {
+      throw new Error("Too many requests. Please wait a moment and try again.");
+    }
+    throw new Error("Extraction failed. Please try again or contact your administrator.");
+  }
+  throw new Error("No service configured. Please contact your administrator.");
 }
 
 // ─── Groq API ─────────────────────────────────────────
@@ -216,9 +300,12 @@ async function callGroqAPI(
   fileData?: string,
   fileType?: string,
   fileName?: string,
-  customInstructions?: string
+  customInstructions?: string,
+  mode: "generate" | "exam" = "generate"
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
-  const prompt = buildDeepAnalysisAndQuestionPrompt(materialText, questionCount, questionTypes, fileName, customInstructions);
+  const prompt = mode === "exam"
+    ? buildExamExtractionPrompt(materialText, fileName, customInstructions)
+    : buildDeepAnalysisAndQuestionPrompt(materialText, questionCount, questionTypes, fileName, customInstructions);
 
   const maxTok = Math.min(4096, 256 + questionCount * 300);
   const response = await fetch(GROQ_API_URL, {
@@ -265,12 +352,16 @@ async function callGeminiAPI(
   fileData?: string,
   fileType?: string,
   fileName?: string,
-  customInstructions?: string
+  customInstructions?: string,
+  mode: "generate" | "exam" = "generate"
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
-  const prompt = buildDeepAnalysisAndQuestionPrompt(materialText, questionCount, questionTypes, fileName, customInstructions);
+  const prompt = mode === "exam"
+    ? buildExamExtractionPrompt(materialText, fileName, customInstructions)
+    : buildDeepAnalysisAndQuestionPrompt(materialText, questionCount, questionTypes, fileName, customInstructions);
 
-  // Gemini uses OpenAI-compatible endpoint
-  const maxTok2 = Math.min(4096, 256 + questionCount * 300);
+  // Gemini uses OpenAI-compatible endpoint — exam papers need more room for
+  // the full question list, so allow a larger budget in extraction mode.
+  const maxTok2 = mode === "exam" ? 8192 : Math.min(4096, 256 + questionCount * 300);
   const response = await fetch(GEMINI_API_URL, {
     method: "POST",
     headers: {
@@ -289,6 +380,40 @@ async function callGeminiAPI(
   });
 
   if (!response.ok) {
+    // 503 (model overloaded) and 429 (primary model quota) are model-specific —
+    // retry once on the fallback model, which has its own quota bucket, so
+    // exam extraction isn't blocked by one busy/exhausted model.
+    if (response.status === 503 || response.status === 429) {
+      const retry = await fetch(GEMINI_API_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: GEMINI_FALLBACK_MODEL,
+          messages: [
+            { role: "system", content: "Output valid JSON only. No markdown." },
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.3,
+          max_tokens: maxTok2,
+        }),
+      });
+      if (!retry.ok) {
+        const errText = await retry.text();
+        throw new Error(`API Error (${retry.status}): ${errText}`);
+      }
+      const rdata = await retry.json();
+      const rtext = rdata.choices?.[0]?.message?.content;
+      if (!rtext) throw new Error("Empty response from service.");
+      const rparsed = parseAIJSONResponse(rtext);
+      (rparsed as { __usage?: { inputTokens: number; outputTokens: number } }).__usage = {
+        inputTokens: rdata.usage?.prompt_tokens || 0,
+        outputTokens: rdata.usage?.completion_tokens || 0,
+      };
+      return rparsed;
+    }
     const errText = await response.text();
     throw new Error(`API Error (${response.status}): ${errText}`);
   }
