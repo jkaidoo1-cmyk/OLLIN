@@ -127,11 +127,11 @@ Rules:
 - For multiple choice: options must list ALL choices exactly as they appear (no letters like A, B, C inside the text).
 - correctAnswer is the exact text of the correct option (multiple choice), "True"/"False", or the model answer.
 - If an answer cannot be determined, use your subject knowledge — these are real exam questions.
-- explanation: one short sentence justifying the answer.
+- explanation: max 12 words justifying the answer.
 - Keep the exam's original title if present.
 
 JSON only:
-{"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"","explanation":"","topic":"","difficulty":"medium"}]}`;
+{"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"","explanation":""}]}`;
 }
 
 export function buildDeepAnalysisAndQuestionPrompt(
@@ -145,9 +145,11 @@ export function buildDeepAnalysisAndQuestionPrompt(
     .map((t) => t.replace(/_/g, " "))
     .join(" and ");
 
-  // Compress and truncate material
+  // Compress and scale material to the question count — generating 5 questions
+  // from 100 chars each doesn't need a 2000-char input (~4x token savings for
+  // small quizzes).
   const compressed = compressMaterial(materialText);
-  const charLimit = 2000; // ~500 tokens
+  const charLimit = Math.min(2400, Math.max(800, questionCount * 240));
   const textBlock = compressed.length > 0
     ? compressed.slice(0, charLimit)
     : "Generate general academic questions.";
@@ -161,10 +163,10 @@ export function buildDeepAnalysisAndQuestionPrompt(
 Material:
 ${textBlock}
 
-Rules: Plain text only, no markdown/symbols. Full sentences. Use the question types requested above.
+Rules: Plain text only, no markdown/symbols. Full sentences. Explanations max 15 words.
 
 JSON only:
-{"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"0","explanation":"","topic":"","difficulty":"medium"}]}`;
+{"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"0","explanation":""}]}`;
 }
 
 // ─── Main Generation Entry Point ─────────────────────────
@@ -307,7 +309,9 @@ async function callGroqAPI(
     ? buildExamExtractionPrompt(materialText, fileName, customInstructions)
     : buildDeepAnalysisAndQuestionPrompt(materialText, questionCount, questionTypes, fileName, customInstructions);
 
-  const maxTok = Math.min(4096, 256 + questionCount * 300);
+  // Tighter output budget: ~55 tokens per question covers question + options
+  // + short explanation at the slimmed-down schema.
+  const maxTok = Math.min(4096, 320 + questionCount * 130);
   const response = await fetch(GROQ_API_URL, {
     method: "POST",
     headers: {
