@@ -192,14 +192,14 @@ export async function POST(request: NextRequest) {
       };
       config.api_keys.push(newKey);
       config.updated_at = new Date().toISOString();
-      writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+      try { writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch { /* read-only fs */ }
       return NextResponse.json({ success: true, id: newKey.id });
     }
 
     if (action === "remove") {
       config.api_keys = config.api_keys.filter((k: any) => k.id !== body.id);
       config.updated_at = new Date().toISOString();
-      writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+      try { writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch { /* read-only fs */ }
       return NextResponse.json({ success: true });
     }
 
@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
       const key = config.api_keys.find((k: any) => k.id === body.id);
       if (key) key.enabled = body.enabled;
       config.updated_at = new Date().toISOString();
-      writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+      try { writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch { /* read-only fs */ }
       return NextResponse.json({ success: true });
     }
 
@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
         key.last_error_at = undefined;
       }
       config.updated_at = new Date().toISOString();
-      writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+      try { writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch { /* read-only fs */ }
       return NextResponse.json({ success: true });
     }
 
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
         key.total_output_tokens += body.output_tokens || 0;
         key.last_used_at = new Date().toISOString();
         config.updated_at = new Date().toISOString();
-        writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+        try { writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch { /* read-only fs */ }
       }
       return NextResponse.json({ success: true });
     }

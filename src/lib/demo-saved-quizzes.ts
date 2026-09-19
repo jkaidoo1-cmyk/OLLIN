@@ -28,5 +28,7 @@ export function readSavedQuizzes(): SavedQuizLink[] {
 }
 
 export function writeSavedQuizzes(links: SavedQuizLink[]) {
-  writeFileSync(getSavedPath(), JSON.stringify(links, null, 2));
+  try {
+    writeFileSync(getSavedPath(), JSON.stringify(links, null, 2));
+  } catch { /* read-only fs (Vercel) */ }
 }

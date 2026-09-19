@@ -80,7 +80,14 @@ export function readDemoUsers(): StoredDemoUser[] {
 }
 
 export function writeDemoUsers(users: StoredDemoUser[]) {
-  writeFileSync(getUsersPath(), JSON.stringify(users, null, 2));
+  // Serverless hosts (Vercel) have a read-only filesystem. Writes are
+  // best-effort there: the seeded users still work for this warm instance,
+  // and persistent storage comes from Supabase when configured.
+  try {
+    writeFileSync(getUsersPath(), JSON.stringify(users, null, 2));
+  } catch {
+    /* read-only fs — keep going */
+  }
 }
 
 /** Strip passwords before sending user records to the browser. */

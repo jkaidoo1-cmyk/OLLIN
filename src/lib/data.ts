@@ -62,7 +62,9 @@ export function readServerQuizzes(): Quiz[] {
 }
 
 export function writeServerQuizzes(quizzes: Quiz[]) {
-  writeFileSync(getServerQuizzesPath(), JSON.stringify(quizzes, null, 2));
+  try {
+    writeFileSync(getServerQuizzesPath(), JSON.stringify(quizzes, null, 2));
+  } catch { /* read-only fs (Vercel) — Supabase is the persistent store */ }
 }
 
 export function readServerQuestions(): Question[] {
@@ -74,7 +76,9 @@ export function readServerQuestions(): Question[] {
 }
 
 export function writeServerQuestions(questions: Question[]) {
-  writeFileSync(getServerQuestionsPath(), JSON.stringify(questions, null, 2));
+  try {
+    writeFileSync(getServerQuestionsPath(), JSON.stringify(questions, null, 2));
+  } catch { /* read-only fs (Vercel) */ }
 }
 
 export function readServerAttempts(): QuizAttempt[] {
@@ -86,7 +90,9 @@ export function readServerAttempts(): QuizAttempt[] {
 }
 
 export function writeServerAttempts(attempts: QuizAttempt[]) {
-  writeFileSync(getServerAttemptsPath(), JSON.stringify(attempts, null, 2));
+  try {
+    writeFileSync(getServerAttemptsPath(), JSON.stringify(attempts, null, 2));
+  } catch { /* read-only fs (Vercel) */ }
 }
 
 // ─── Helpers ───────────────────────────────────────────
@@ -641,7 +647,7 @@ export async function updateProgram(
           if (input.department !== undefined) programs[idx].department = input.department;
           if (input.description !== undefined) programs[idx].description = input.description;
           programs[idx].updated_at = new Date().toISOString();
-          writeFileSync(path, JSON.stringify(programs, null, 2));
+          try { writeFileSync(path, JSON.stringify(programs, null, 2)); } catch { /* read-only fs */ }
           return programs[idx];
         }
       }
@@ -800,7 +806,7 @@ export async function updateCourse(
           if (input.program_id !== undefined) courses[idx].program_id = input.program_id;
           if (input.year !== undefined) courses[idx].year = input.year;
           courses[idx].updated_at = new Date().toISOString();
-          writeFileSync(path, JSON.stringify(courses, null, 2));
+          try { writeFileSync(path, JSON.stringify(courses, null, 2)); } catch { /* read-only fs */ }
           return courses[idx];
         }
       }
