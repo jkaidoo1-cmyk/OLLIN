@@ -28,6 +28,14 @@ let cachedSecret: string | null = null;
 
 function getSessionSecret(): string {
   if (cachedSecret) return cachedSecret;
+  // Production: the secret must come from the environment so that every
+  // serverless instance signs cookies identically. A per-instance random
+  // secret would invalidate sessions on every cold start / different lambda.
+  const envSecret = process.env.SESSION_SECRET;
+  if (envSecret && envSecret.length >= 32) {
+    cachedSecret = envSecret;
+    return cachedSecret;
+  }
   const secretPath = join(process.cwd(), ".ollin-session-secret");
   try {
     if (existsSync(secretPath)) {
@@ -38,7 +46,7 @@ function getSessionSecret(): string {
   cachedSecret = randomBytes(32).toString("hex");
   try {
     writeFileSync(secretPath, cachedSecret, { encoding: "utf8" });
-  } catch { /* read-only fs (Vercel) — secret lives for this instance only */ }
+  } catch { /* read-only fs (Vercel) — dev fallback only */ }
   return cachedSecret;
 }
 
