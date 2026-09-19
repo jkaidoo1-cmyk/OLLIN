@@ -425,6 +425,28 @@ export async function startAttempt(
   return data;
 }
 
+/** Case-insensitive, whitespace-trimmed answer comparison. */
+function normalizeAnswer(v: string): string {
+  return String(v ?? "").trim().toLowerCase();
+}
+
+/** Resolve which quiz an attempt belongs to (for grading + window checks). */
+export async function getAttemptQuizId(attemptId: string, demo?: boolean): Promise<string | null> {
+  if (checkDemo(demo)) {
+    // Demo attempts encode nothing — return null; grading falls back to empty set.
+    const attempts = isServer ? readServerAttempts() : [];
+    const found = attempts.find((a) => a.id === attemptId);
+    return found?.quiz_id ?? null;
+  }
+  const supabase = await getServerSupabase();
+  const { data } = await supabase
+    .from("quiz_attempts")
+    .select("quiz_id")
+    .eq("id", attemptId)
+    .single();
+  return data?.quiz_id ?? null;
+}
+
 export async function saveAnswer(
   attemptId: string,
   questionId: string,
@@ -453,14 +475,39 @@ export async function submitAttempt(
   answers: Array<{
     question_id: string;
     selected_answer: string;
-    is_correct: boolean;
-    marks_awarded: number;
+    is_correct?: boolean;
+    marks_awarded?: number;
   }>,
-  demo?: boolean
+  demo?: boolean,
+  quizIdHint?: string | null
 ): Promise<QuizAttempt> {
+  // ── Server-side grading ─────────────────────────────────
+  // Correctness and marks are computed HERE from the stored questions.
+  // Client-sent is_correct/marks_awarded are ignored so participants can't
+  // grade their own submissions.
+  const gradeAnswers = async (): Promise<
+    Array<{ question_id: string; selected_answer: string; is_correct: boolean; marks_awarded: number }>
+  > => {
+    const answeredIds = new Set(answers.map((a) => a.question_id));
+    const quizId = quizIdHint || (await getAttemptQuizId(attemptId, demo)) || "";
+    const allQuestions = await getQuizQuestions(quizId, demo);
+    const questions = allQuestions.filter((q) => answeredIds.has(q.id));
+    return answers.map((a) => {
+      const q = questions.find((qq) => qq.id === a.question_id);
+      const isCorrect = !!q && normalizeAnswer(a.selected_answer) === normalizeAnswer(q.correct_answer);
+      return {
+        question_id: a.question_id,
+        selected_answer: a.selected_answer,
+        is_correct: isCorrect,
+        marks_awarded: isCorrect ? (q?.marks ?? 1) : 0,
+      };
+    });
+  };
+
   if (checkDemo(demo)) {
-    const correct = answers.filter((a) => a.is_correct).length;
-    const total = answers.length;
+    const graded = await gradeAnswers();
+    const correct = graded.filter((a) => a.is_correct).length;
+    const total = graded.length;
     const attempt: QuizAttempt = {
       id: attemptId,
       quiz_id: "",
@@ -472,7 +519,7 @@ export async function submitAttempt(
       total_questions: total,
       correct_answers: correct,
       score_percentage: total > 0 ? Math.round((correct / total) * 100) : 0,
-      marks_earned: answers.reduce((s, a) => s + a.marks_awarded, 0),
+      marks_earned: graded.reduce((s, a) => s + a.marks_awarded, 0),
       marks_total: total,
       status: "completed",
       created_at: new Date().toISOString(),
@@ -482,9 +529,11 @@ export async function submitAttempt(
 
   const supabase = await getServerSupabase();
 
-  // Save all answers
-  if (answers.length > 0) {
-    const answerInserts = answers.map((a) => ({
+  const graded = await gradeAnswers();
+
+  // Save all answers (graded server-side)
+  if (graded.length > 0) {
+    const answerInserts = graded.map((a) => ({
       attempt_id: attemptId,
       question_id: a.question_id,
       selected_answer: a.selected_answer,
@@ -496,9 +545,9 @@ export async function submitAttempt(
     });
   }
 
-  const correct = answers.filter((a) => a.is_correct).length;
-  const total = answers.length;
-  const marksEarned = answers.reduce((s, a) => s + a.marks_awarded, 0);
+  const correct = graded.filter((a) => a.is_correct).length;
+  const total = graded.length;
+  const marksEarned = graded.reduce((s, a) => s + a.marks_awarded, 0);
 
   const { data, error } = await supabase
     .from("quiz_attempts")

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readDemoUsers, publicUser } from "@/lib/demo-users-store";
+import { readDemoUsers, publicUser, verifyPassword, hashPassword } from "@/lib/demo-users-store";
 import { createSessionCookie } from "@/lib/session";
+import { ADMIN_PASSWORD } from "@/lib/demo-constants";
+import { checkRateLimit, recordFailure, recordSuccess } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,15 +16,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Brute-force protection: escalating backoff per IP after repeated failures.
+    const limit = checkRateLimit(request, "login");
+    if (limit.blocked) {
+      return NextResponse.json(
+        { error: limit.message },
+        { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+      );
+    }
+
     // Demo login — verify against the server-side users file so accounts
     // created by an admin can log in from any browser. Try this first: it is
     // the de-facto account store for this platform. Supabase is used only as
     // an optional fallback when the demo check fails and it is configured.
     const users = readDemoUsers();
-    const user = users.find(
-      (u) => u.email.toLowerCase() === String(email).toLowerCase() && u.password === password
-    );
-    if (user) {
+    let usersChanged = false;
+    const user = users.find((u) => u.email.toLowerCase() === String(email).toLowerCase());
+    const authed = !!user && verifyPassword(password, user);
+    // The built-in admin account always accepts ADMIN_PASSWORD: if the stored
+    // hash is out of sync (e.g. pre-hash legacy file), re-sync it.
+    if (!authed && user && user.id === "admin-001" && password === ADMIN_PASSWORD) {
+      user.password_hash = hashPassword(password);
+      delete user.password;
+      usersChanged = true;
+    } else if (authed && user?.password_hash) {
+      usersChanged = !!user.password; // plaintext was upgraded during verify
+    }
+    if (usersChanged) {
+      const { writeDemoUsers } = await import("@/lib/demo-users-store");
+      writeDemoUsers(users);
+    }
+    if (user && authed) {
+      recordSuccess(request, "login");
       const res = NextResponse.json({ user: publicUser(user), demo: true });
       res.headers.append(
         "Set-Cookie",
@@ -33,12 +58,14 @@ export async function POST(request: NextRequest) {
 
     // Demo-flag logins never fall through to Supabase.
     if (demo) {
+      recordFailure(request, "login");
       return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
     }
 
     // Real Supabase login
     const supabase = await import("@/lib/supabase/server").then((m) => m.createClient());
     if (!supabase) {
+      recordFailure(request, "login");
       return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
     }
 
@@ -50,6 +77,7 @@ export async function POST(request: NextRequest) {
     if (error) {
       // Backend availability issues were already filtered out by createClient()
       // returning null — anything here is a genuine credential problem.
+      recordFailure(request, "login");
       return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
     }
 

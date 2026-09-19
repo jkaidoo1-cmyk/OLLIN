@@ -87,7 +87,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen">
       <header className="bg-[#006633] text-white sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 min-h-14 flex flex-wrap items-center py-1 sm:py-0 sm:h-14">
           {/* Logo — fixed left */}
           <Link href="/admin" className="flex items-center gap-1 no-underline shrink-0">
             <Logo onDark />
@@ -95,15 +95,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded text-white font-medium ml-1">Admin</span>
           </Link>
 
-          {/* Nav links — centered, takes remaining space */}
-          <nav className="flex-1 flex items-center justify-center">
+          {/* Right side — pushed right on row 1 (mobile) / far right (desktop) */}
+          <div className="flex items-center gap-3 shrink-0 ml-auto sm:ml-0">
+            <Link href="/dashboard" className="text-sm text-white/50 hover:text-white no-underline hidden sm:block">
+              Back to app
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="text-white/50 hover:text-white transition-colors"
+              aria-label="Log out"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Nav links — full-width scrollable row on mobile, centered on desktop */}
+          <nav className="order-last sm:order-none w-full sm:w-auto sm:flex-1 sm:justify-center flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {adminNav.map((item) => {
               const isActive = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`px-2 sm:px-4 py-1 text-xs sm:text-sm font-medium no-underline transition-colors ${
+                  className={`px-2 sm:px-4 py-1 text-xs sm:text-sm font-medium whitespace-nowrap no-underline transition-colors ${
                     isActive ? "text-white" : "text-white/50 hover:text-white/80"
                   }`}
                 >
@@ -112,23 +126,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               );
             })}
           </nav>
-
-          {/* Right side — fixed right */}
-          <div className="flex items-center gap-3 shrink-0">
-            <Link href="/dashboard" className="text-sm text-white/50 hover:text-white no-underline hidden sm:block">
-              Back to app
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="text-white/50 hover:text-white transition-colors"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
-          </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-6">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         {children}
       </main>
     </div>

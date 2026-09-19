@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getQuizQuestions } from "@/lib/data";
+import { getQuizQuestions, getQuizById } from "@/lib/data";
+import { getSessionUser } from "@/lib/session";
 
 // GET — get questions for a quiz (without correct answers for participants)
 export async function GET(
@@ -10,6 +11,21 @@ export async function GET(
     const demo = request.headers.get("x-demo-mode") === "true";
     const showAnswers = request.nextUrl.searchParams.get("show_answers") === "true";
     const { id } = await params;
+
+    // Correct answers may only be fetched by the quiz creator or an admin.
+    // Everyone else (participants, guests, anonymous) always gets stripped questions.
+    if (showAnswers) {
+      const quiz = await getQuizById(id, demo);
+      const session = await getSessionUser(request);
+      const isCreator = !!session && !!quiz && session.id === quiz.host_id;
+      const isAdmin = !!session && session.role === "admin";
+      if (!isCreator && !isAdmin) {
+        return NextResponse.json(
+          { error: "Not authorized to view answers for this quiz" },
+          { status: 403 }
+        );
+      }
+    }
 
     const questions = await getQuizQuestions(id, demo);
 
@@ -30,7 +46,7 @@ export async function GET(
     return NextResponse.json({ questions });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to fetch questions" },
+      { error: error instanceof Error ? error.message : "Failed to load questions" },
       { status: 500 }
     );
   }

@@ -669,7 +669,7 @@ export default function CreateQuizPage() {
           {/* Quiz mode selector */}
           <div className="mt-4 pt-4 border-t border-[#e0e0e0]">
             <label className="block text-xs font-medium text-[#666] mb-2">Who is this quiz for?</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {[
                 { value: "self" as const, label: "Just me", desc: "Self-study" },
                 { value: "host" as const, label: "Others", desc: "Share with class" },

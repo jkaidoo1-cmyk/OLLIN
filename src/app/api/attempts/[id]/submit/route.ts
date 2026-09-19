@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { submitAttempt, getAttemptAnswers } from "@/lib/data";
+import { submitAttempt, getAttemptAnswers, getQuizById, getAttemptQuizId } from "@/lib/data";
 
 // POST — submit an attempt with all answers
 export async function POST(
@@ -19,7 +19,32 @@ export async function POST(
       );
     }
 
-    const attempt = await submitAttempt(id, answers, demo);
+    // ── Server-side time-window enforcement ──────────────────
+    // The UI hides the quiz outside its window; the server must also refuse
+    // submissions outside it (clients can be manipulated).
+    const quizId = body.quiz_id || (await getAttemptQuizId(id, demo));
+    if (quizId) {
+      const quiz = await getQuizById(quizId, demo);
+      if (quiz) {
+        const now = Date.now();
+        if (quiz.starts_at && now < new Date(quiz.starts_at).getTime()) {
+          return NextResponse.json(
+            { error: "This quiz is not open yet." },
+            { status: 403 }
+          );
+        }
+        if (quiz.ends_at && now > new Date(quiz.ends_at).getTime()) {
+          return NextResponse.json(
+            { error: "This quiz has closed." },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
+    // Pass the quiz id so grading can find the questions even when the
+    // attempt record doesn't exist yet (e.g. client-only attempt IDs).
+    const attempt = await submitAttempt(id, answers, demo, quizId || body.quiz_id);
     const savedAnswers = await getAttemptAnswers(id, demo);
 
     return NextResponse.json({ attempt, answers: savedAnswers });

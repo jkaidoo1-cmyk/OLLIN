@@ -5,6 +5,7 @@ import {
   publicUser,
 } from "@/lib/demo-users-store";
 import { getSessionAdmin } from "@/lib/session";
+import { hashPassword } from "@/lib/demo-users-store";
 
 function isEmailTaken(users: any[], email: string, excludeId?: string) {
   const normalized = String(email).toLowerCase().trim();
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest) {
         email: String(email).toLowerCase().trim(),
         full_name: full_name || String(email).split("@")[0],
         role: role || "student",
-        password: String(password),
+        password_hash: hashPassword(String(password)),
         program_id: program_id || null,
         current_year: role === "admin" ? undefined : 1,
         created_at: new Date().toISOString(),
@@ -232,7 +233,10 @@ export async function PATCH(request: NextRequest) {
       if (body.role) user.role = body.role;
       if (body.program_id !== undefined) user.program_id = body.program_id || null;
       if (body.current_year !== undefined) user.current_year = body.current_year;
-      if (body.password) user.password = String(body.password);
+      if (body.password) {
+        user.password_hash = hashPassword(String(body.password));
+        delete user.password;
+      }
 
       writeDemoUsers(users);
       return NextResponse.json({ user: publicUser(user), message: "Account updated" });

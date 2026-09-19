@@ -46,6 +46,25 @@ body {
   font-size: 14px;
   line-height: 1.5;
   margin: 0;
+  /* Prevent iOS zoom-on-focus (needs 16px inputs) and overscroll bounce */
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Inputs need 16px on mobile or iOS zooms the page when focusing them. */
+@media (max-width: 639px) {
+  .input-field {
+    font-size: 16px;
+    padding: 0.625rem 0.75rem;
+  }
+  .btn-primary {
+    padding: 0.625rem 1rem; /* comfortable 44px-ish touch target */
+  }
+}
+
+/* Tap targets: make small interactive elements at least ~40px tall on phones */
+@media (max-width: 639px) {
+  a, button { touch-action: manipulation; }
 }
 
 a { text-decoration: none; }

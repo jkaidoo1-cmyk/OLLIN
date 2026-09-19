@@ -265,7 +265,7 @@ export default function AdminCoursesPage() {
 
   return (
     <div className="pb-24">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-6">
         <div>
           <h1 className="text-xl font-bold text-[#333]">Courses</h1>
           <p className="text-xs text-[#999] mt-0.5">{displayCourses.length} courses {pending.length > 0 && `(${pending.length} pending)`}</p>
@@ -517,7 +517,7 @@ export default function AdminCoursesPage() {
       {/* Save bar */}
       {pending.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#e0e0e0] shadow-lg z-50">
-          <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0">
             <p className="text-sm text-[#333]">
               <span className="font-semibold">{pending.length} change{pending.length > 1 ? "s" : ""}</span> pending
             </p>
