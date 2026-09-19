@@ -38,35 +38,14 @@ export default function AdminSettingsPage() {
   const [source, setSource] = useState<"env" | "file" | "browser">("file");
   const [hint, setHint] = useState("");
 
-  // localStorage helpers for browser-persisted keys
-  const STORAGE_KEY = "ollin_api_keys";
-
-  function loadBrowserKeys(): ApiKeyEntry[] {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  }
-
-  function saveBrowserKeys(k: ApiKeyEntry[]) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(k));
-  }
+  // Keys are stored server-side (Supabase or config file) — never in the browser.
 
   const fetchKeys = async () => {
     try {
       const res = await fetch("/api/config");
       const data = await res.json();
-      const serverKeys = data.api_keys || [];
-      const serverSource = data.source || "file";
-
-      // Merge server keys + browser-persisted keys
-      const browserKeys = loadBrowserKeys();
-      const allIds = new Set(serverKeys.map((k: ApiKeyEntry) => k.id));
-      const uniqueBrowserKeys = browserKeys.filter((k) => !allIds.has(k.id));
-      const merged = [...serverKeys, ...uniqueBrowserKeys];
-
-      setKeys(merged);
-      setSource(merged.length > 0 ? (serverSource === "env" ? "env" : "browser") : serverSource);
+      setKeys(data.api_keys || []);
+      setSource(data.source || "file");
       setHint(data.hint || "");
     } catch { /* ignore */ }
     setLoading(false);
@@ -107,33 +86,11 @@ export default function AdminSettingsPage() {
     setSuccess("");
 
     try {
-      const res = await callConfig({
+      await callConfig({
         action: "add",
         key: newKey.trim(),
         provider: newProvider,
       });
-      // Mirror into localStorage so this browser can still generate even if the file is wiped
-      const stored = loadBrowserKeys().filter((k) => k.id !== res.id);
-      stored.push({
-        id: res.id,
-        key: newKey.trim(),
-        key_preview: newKey.trim().length > 8
-          ? newKey.trim().slice(0, 3) + "..." + newKey.trim().slice(-4)
-          : "****",
-        label: `Key ${keys.length + 1}`,
-        provider: newProvider as "groq" | "gemini",
-        enabled: true,
-        source: "file",
-        added_at: new Date().toISOString(),
-        last_used_at: null,
-        total_requests: 0,
-        total_input_tokens: 0,
-        total_output_tokens: 0,
-        estimated_cost_usd: 0,
-        last_error: null,
-        last_error_at: null,
-      });
-      saveBrowserKeys(stored);
       setNewKey("");
       setSuccess("Key added. It now works for every user on this platform.");
       await refreshFromServer();
@@ -148,7 +105,6 @@ export default function AdminSettingsPage() {
     if (!confirm("Remove this API key?")) return;
     try {
       await callConfig({ action: "remove", id });
-      saveBrowserKeys(loadBrowserKeys().filter((k) => k.id !== id));
       setSuccess("Key removed");
       await refreshFromServer();
     } catch (err) {

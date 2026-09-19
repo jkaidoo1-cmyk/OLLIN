@@ -81,16 +81,7 @@ export async function POST(request: NextRequest) {
 
     finalText = getRelevantText(finalText, 4000);
 
-    // Accept API keys from client header (browser localStorage)
-    let clientKeys: Array<{ id: string; key: string; provider: string }> | undefined;
-    const keysHeader = request.headers.get("x-api-keys");
-    if (keysHeader) {
-      try {
-        clientKeys = JSON.parse(keysHeader);
-      } catch { /* ignore */ }
-    }
-
-    // Call AI — client keys from browser, or server-side keys from env vars/config
+    // Call AI — keys come from the server only (Supabase / config file / env).
     const { analysis, questions } = await analyzeAndGenerate(
       finalText,
       Math.min(question_count, 200),
@@ -100,7 +91,12 @@ export async function POST(request: NextRequest) {
         fileType: isImage ? file_type : undefined,
         fileName: isImage ? file_name : undefined,
         customInstructions: custom_instructions,
-        clientKeys,
+        onUsage: ({ keyId, inputTokens, outputTokens }) => {
+          // Record per-key usage so the admin's token charts stay accurate.
+          import("@/lib/ai/key-rotation").then(({ recordKeyUsage }) =>
+            recordKeyUsage(keyId, inputTokens, outputTokens)
+          ).catch(() => { /* non-critical */ });
+        },
       }
     );
 

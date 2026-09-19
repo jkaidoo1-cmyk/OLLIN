@@ -60,7 +60,8 @@ export interface AIOptions {
   fileType?: string;
   fileName?: string;
   customInstructions?: string;
-  clientKeys?: Array<{ id: string; key: string; provider: string }>;
+  /** Receives the winning key's id + token usage after a successful call. */
+  onUsage?: (usage: { keyId: string; inputTokens: number; outputTokens: number }) => void;
 }
 
 // ─── API Configuration ────────────────────────────────
@@ -140,16 +141,10 @@ export async function analyzeAndGenerate(
   questionTypes: string[],
   options: AIOptions = {}
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
-  // Use client keys from browser localStorage if provided, otherwise server-side keys
-  let enabledKeys: Array<{ id: string; key: string; provider: string }> = [];
-
-  if (options.clientKeys && options.clientKeys.length > 0) {
-    enabledKeys = options.clientKeys.filter((k) => k.key && k.provider);
-  } else {
-    const { getAllKeys } = await import("./key-rotation");
-    const allKeys = getAllKeys();
-    enabledKeys = allKeys.filter((k) => k.enabled && k.key);
-  }
+  // Keys live server-side only (Supabase / config file / env) — never from the client.
+  const { getAllKeys } = await import("./key-rotation");
+  const allKeys = await getAllKeys();
+  const enabledKeys = allKeys.filter((k) => k.enabled && k.key);
 
   if (enabledKeys.length === 0) {
     throw new Error("No service configured. Please contact your administrator.");
@@ -160,14 +155,15 @@ export async function analyzeAndGenerate(
   let lastError: Error | null = null;
 
   for (const p of providers) {
-    const providerKeys = enabledKeys.filter((k) => k.provider === p);
     try {
-      const { result } = await tryWithRotation(
+      const { result, keyId } = await tryWithRotation(
         (apiKey) => callAIProvider(p, materialText, questionCount, questionTypes, apiKey, options.fileData, options.fileType, options.fileName, options.customInstructions),
-        p,
-        undefined,
-        providerKeys.map((k) => ({ id: k.id, key: k.key }))
+        p
       );
+      // Surface usage so the caller (generate route) can record it per key.
+      const usage = (result as { __usage?: { inputTokens: number; outputTokens: number } }).__usage;
+      options.onUsage?.({ keyId, inputTokens: usage?.inputTokens || 0, outputTokens: usage?.outputTokens || 0 });
+      delete (result as { __usage?: unknown }).__usage;
       return result;
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -250,7 +246,13 @@ async function callGroqAPI(
   const data = await response.json();
   const textContent = data.choices?.[0]?.message?.content;    if (!textContent) throw new Error("Empty response from service.");
 
-  return parseAIJSONResponse(textContent);
+  const parsed = parseAIJSONResponse(textContent);
+  // Attach usage metadata for per-key recording.
+  (parsed as { __usage?: { inputTokens: number; outputTokens: number } }).__usage = {
+    inputTokens: data.usage?.prompt_tokens || 0,
+    outputTokens: data.usage?.completion_tokens || 0,
+  };
+  return parsed;
 }
 
 // ─── Gemini API (OpenAI-compatible) ───────────────────
@@ -294,7 +296,12 @@ async function callGeminiAPI(
   const data = await response.json();
   const textContent = data.choices?.[0]?.message?.content;    if (!textContent) throw new Error("Empty response from service.");
 
-  return parseAIJSONResponse(textContent);
+  const parsed = parseAIJSONResponse(textContent);
+  (parsed as { __usage?: { inputTokens: number; outputTokens: number } }).__usage = {
+    inputTokens: data.usage?.prompt_tokens || 0,
+    outputTokens: data.usage?.completion_tokens || 0,
+  };
+  return parsed;
 }
 
 // ─── JSON Response Parser ─────────────────────────────

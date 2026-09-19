@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const allKeys = getAllKeys();
+    const allKeys = await getAllKeys();
     const hasEnvKeys = !!(process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS || process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS);
     const source = hasEnvKeys ? "env" : "file";
 
