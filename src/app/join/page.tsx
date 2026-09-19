@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Brain, Loader2, User } from "lucide-react";
+import { Loader2, User } from "lucide-react";
+import { Logo } from "@/components/Logo";
 import { isDemoMode, getDemoUser } from "@/lib/demo";
 import { createClient } from "@/lib/supabase/client";
 
@@ -73,7 +74,7 @@ export default function JoinQuizPage() {
       <header className="bg-[#006633] text-white sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center">
           <Link href="/" className="flex items-center gap-2 no-underline shrink-0">
-            <Brain className="w-5 h-5 text-white" />
+            <Logo onDark />
             <span className="text-base font-bold text-white">OLLIN</span>
           </Link>
           <div className="flex-1" />

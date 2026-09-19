@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { enableDemoMode } from "@/lib/demo";
-import { Brain, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Logo } from "@/components/Logo";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -71,7 +72,7 @@ export default function LoginPage() {
       <header className="bg-[#006633] text-white">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center">
           <Link href="/" className="flex items-center gap-2.5 no-underline">
-            <Brain className="w-5 h-5 text-white" />
+            <Logo onDark />
             <span className="text-base font-bold text-white">OLLIN</span>
           </Link>
         </div>

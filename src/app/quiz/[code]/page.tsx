@@ -6,7 +6,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { isDemoMode, getDemoQuizByCode, getDemoQuestions, getDemoUser } from "@/lib/demo";
 import { Quiz, Question, QuizAttempt } from "@/lib/types";
-import { Brain, Clock, Send, CheckCircle, AlertCircle, User } from "lucide-react";
+import { Clock, Send, CheckCircle, AlertCircle, User } from "lucide-react";
+import { Logo } from "@/components/Logo";
 import { formatTime } from "@/lib/utils";
 
 export default function QuizPage() {
@@ -294,7 +295,7 @@ export default function QuizPage() {
     return (
       <div className="min-h-screen flex flex-col">
         <header className="bg-[#006633] text-white h-14 flex items-center px-6">
-          <Brain className="w-5 h-5 text-white" />
+          <Logo onDark />
         </header>
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-[#006633] border-t-transparent rounded-full animate-spin" />
@@ -307,7 +308,7 @@ export default function QuizPage() {
     return (
       <div className="min-h-screen flex flex-col">
         <header className="bg-[#006633] text-white h-14 flex items-center px-6">
-          <Brain className="w-5 h-5 text-white" />
+          <Logo onDark />
         </header>
         <div className="flex-1 flex items-center justify-center px-4">
           <div className="bg-white border border-[#e0e0e0] rounded-lg p-8 max-w-md text-center">
@@ -326,7 +327,7 @@ export default function QuizPage() {
     return (
       <div className="min-h-screen flex flex-col">
         <header className="bg-[#006633] text-white h-14 flex items-center px-6">
-          <Brain className="w-5 h-5 text-white" />
+          <Logo onDark />
         </header>
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-[#006633] border-t-transparent rounded-full animate-spin" />
@@ -341,7 +342,7 @@ export default function QuizPage() {
       <div className="min-h-screen flex flex-col">
         <header className="bg-[#006633] text-white h-14 flex items-center px-6">
           <Link href="/" className="flex items-center gap-2 no-underline">
-            <Brain className="w-5 h-5 text-white" />
+            <Logo onDark />
             <span className="text-base font-bold text-white">OLLIN</span>
           </Link>
         </header>
@@ -402,7 +403,7 @@ export default function QuizPage() {
     return (
       <div className="min-h-screen flex flex-col">
         <header className="bg-[#006633] text-white h-14 flex items-center px-6">
-          <Brain className="w-5 h-5 text-white" />
+          <Logo onDark />
           <span className="text-base font-bold text-white ml-2">Quiz Complete</span>
         </header>
         <main className="flex-1 px-4 py-6">
