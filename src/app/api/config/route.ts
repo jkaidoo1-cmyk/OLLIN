@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllKeys } from "@/lib/ai/key-rotation";
 import { getSessionAdmin } from "@/lib/session";
+import { recordAdminAction } from "@/lib/audit";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -100,8 +101,9 @@ export async function GET(request: NextRequest) {
 
 // POST — add, remove, toggle keys, record usage — admin only
 export async function POST(request: NextRequest) {
+  const admin = await getSessionAdmin(request);
   try {
-    if (!(await getSessionAdmin(request))) {
+    if (!admin) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
     const body = await request.json();
@@ -120,11 +122,20 @@ export async function POST(request: NextRequest) {
           enabled: true,
         });
         if (error) throw new Error(error.message);
+        await recordAdminAction(request, admin, "key.add", "api_key", id, `Added ${body.provider || "groq"} key ${maskKey(String(body.key || ""))}`);
         return NextResponse.json({ success: true, id });
       }
       if (action === "remove") {
-        const { error } = await supabase.from("api_keys").delete().eq("id", body.id);
-        if (error) throw new Error(error.message);
+        const { data: removed } = await supabase
+          .from("api_keys")
+          .delete()
+          .eq("id", body.id)
+          .select("provider, label");
+        if (removed && removed.length === 0) {
+          return NextResponse.json({ error: "Key not found" }, { status: 404 });
+        }
+        const info = removed?.[0];
+        await recordAdminAction(request, admin, "key.remove", "api_key", body.id, `Removed ${info?.provider || "key"}${info?.label ? ` "${info.label}"` : ""}`);
         return NextResponse.json({ success: true });
       }
       if (action === "toggle") {
@@ -133,6 +144,7 @@ export async function POST(request: NextRequest) {
           .update({ enabled: !!body.enabled })
           .eq("id", body.id);
         if (error) throw new Error(error.message);
+        await recordAdminAction(request, admin, "key.toggle", "api_key", body.id, `${body.enabled ? "Enabled" : "Disabled"} key`);
         return NextResponse.json({ success: true });
       }
       if (action === "clear_error") {
@@ -141,6 +153,7 @@ export async function POST(request: NextRequest) {
           .update({ last_error: null, last_error_at: null })
           .eq("id", body.id);
         if (error) throw new Error(error.message);
+        await recordAdminAction(request, admin, "key.clear_error", "api_key", body.id, "Cleared key error state");
         return NextResponse.json({ success: true });
       }
       if (action === "record_usage") {
@@ -193,13 +206,16 @@ export async function POST(request: NextRequest) {
       config.api_keys.push(newKey);
       config.updated_at = new Date().toISOString();
       try { writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch { /* read-only fs */ }
+      await recordAdminAction(request, admin, "key.add", "api_key", newKey.id, `Added ${newKey.provider} key ${maskKey(String(body.key || ""))}`);
       return NextResponse.json({ success: true, id: newKey.id });
     }
 
     if (action === "remove") {
+      const removedKey = config.api_keys.find((k: any) => k.id === body.id);
       config.api_keys = config.api_keys.filter((k: any) => k.id !== body.id);
       config.updated_at = new Date().toISOString();
       try { writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch { /* read-only fs */ }
+      await recordAdminAction(request, admin, "key.remove", "api_key", body.id, `Removed ${removedKey?.provider || "key"}${removedKey?.label ? ` "${removedKey.label}"` : ""}`);
       return NextResponse.json({ success: true });
     }
 
@@ -208,6 +224,7 @@ export async function POST(request: NextRequest) {
       if (key) key.enabled = body.enabled;
       config.updated_at = new Date().toISOString();
       try { writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch { /* read-only fs */ }
+      await recordAdminAction(request, admin, "key.toggle", "api_key", body.id, `${body.enabled ? "Enabled" : "Disabled"} key`);
       return NextResponse.json({ success: true });
     }
 
@@ -219,6 +236,7 @@ export async function POST(request: NextRequest) {
       }
       config.updated_at = new Date().toISOString();
       try { writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch { /* read-only fs */ }
+      await recordAdminAction(request, admin, "key.clear_error", "api_key", body.id, "Cleared key error state");
       return NextResponse.json({ success: true });
     }
 

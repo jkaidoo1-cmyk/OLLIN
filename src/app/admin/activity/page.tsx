@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ShieldCheck, UserPlus, UserMinus, BookOpen, GraduationCap, KeyRound, RefreshCcw } from "lucide-react";
+import { ShieldCheck, UserPlus, UserMinus, BookOpen, GraduationCap, KeyRound, RefreshCcw, Upload } from "lucide-react";
 
 interface AuditEvent {
   id: string;
@@ -17,19 +17,26 @@ const actionIcons: Record<string, typeof ShieldCheck> = {
   "user.create": UserPlus,
   "user.delete": UserMinus,
   "user.update": RefreshCcw,
+  "user.bulk_import": Upload,
   "course.create": BookOpen,
   "course.update": BookOpen,
   "course.delete": BookOpen,
   "program.create": GraduationCap,
   "program.update": GraduationCap,
   "program.delete": GraduationCap,
-  "quiz.publish": KeyRound,
+  "key.add": KeyRound,
+  "key.remove": KeyRound,
+  "key.toggle": KeyRound,
+  "key.clear_error": KeyRound,
 };
 
 const actionColors: Record<string, string> = {
   create: "text-green-600 bg-green-50",
+  add: "text-green-600 bg-green-50",
   delete: "text-red-600 bg-red-50",
+  remove: "text-red-600 bg-red-50",
   update: "text-blue-600 bg-blue-50",
+  toggle: "text-blue-600 bg-blue-50",
 };
 
 export default function AdminActivityPage() {
