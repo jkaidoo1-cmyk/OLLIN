@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Brain, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { isAdmin } from "@/lib/admin";
+import { Logo } from "@/components/Logo";
 import { isDemoMode, disableDemoMode } from "@/lib/demo";
 
 const adminNav = [
@@ -89,7 +90,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center">
           {/* Logo — fixed left */}
           <Link href="/admin" className="flex items-center gap-2 no-underline shrink-0">
-            <Brain className="w-5 h-5 text-white" />
+            <Logo onDark />
             <span className="text-base font-bold text-white">OLLIN</span>
             <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded text-white font-medium ml-1">Admin</span>
           </Link>

@@ -199,7 +199,7 @@ export default function DashboardPage() {
           { label: "Quizzes", value: quizzes.length, sub: `${publishedCount} published`, color: "text-[#006633]", bg: "bg-[#e6f0e8]" },
           { label: "Attempts", value: totalParticipants, sub: "total submissions", color: "text-blue-600", bg: "bg-blue-50" },
           { label: "Avg Score", value: totalParticipants > 0 ? `${avgScore}%` : "—", sub: "across all quizzes", color: "text-amber-600", bg: "bg-amber-50" },
-          { label: "Pass Rate", value: totalParticipants > 0 ? `${passRate}%` : "—", sub: `${passCount} passed`, color: "text-purple-600", bg: "bg-purple-50" },
+          { label: "Pass Rate", value: totalParticipants > 0 ? `${passRate}%` : "—", sub: `${passCount} passed`, color: "text-green-600", bg: "bg-green-50" },
         ].map((stat) => (
           <div key={stat.label} className="bg-white border border-[#e0e0e0] rounded-lg p-4">
             <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>

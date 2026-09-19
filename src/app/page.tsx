@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Brain } from "lucide-react";
+import { Logo } from "@/components/Logo";
 import { enableDemoMode } from "@/lib/demo";
 
 
@@ -29,7 +29,7 @@ export default function Home() {
       <header className="bg-[#006633] text-white">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center">
           <Link href="/" className="flex items-center gap-2 no-underline shrink-0">
-            <Brain className="w-5 h-5 text-white" />
+            <Logo onDark />
             <span className="text-base font-bold text-white">OLLIN</span>
           </Link>
 
@@ -104,7 +104,7 @@ export default function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <Brain className="w-5 h-5 text-white" />
+                <Logo onDark />
                 <span className="text-base font-bold text-white">OLLIN</span>
               </div>
               <p className="text-sm text-white/70">Quiz platform for students</p>

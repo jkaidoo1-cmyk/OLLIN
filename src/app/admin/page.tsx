@@ -80,7 +80,7 @@ export default function AdminOverviewPage() {
           { label: "Users", value: stats.totalUsers, icon: Users, color: "text-blue-600 bg-blue-50" },
           { label: "Quizzes", value: stats.totalQuizzes, icon: BookOpen, color: "text-green-600 bg-green-50" },
           { label: "Published", value: stats.publishedQuizzes, icon: CheckCircle, color: "text-green-600 bg-green-50" },
-          { label: "Attempts", value: stats.totalAttempts, icon: BarChart3, color: "text-purple-600 bg-purple-50" },
+          { label: "Attempts", value: stats.totalAttempts, icon: BarChart3, color: "text-green-600 bg-green-50" },
         ].map((item) => (
           <div key={item.label} className="bg-white border border-[#e0e0e0] rounded-lg p-4">
             <div className={`w-8 h-8 rounded flex items-center justify-center mb-2 ${item.color}`}>

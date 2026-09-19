@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { Logo } from "@/components/Logo";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isDemoMode, getDemoUser, disableDemoMode, getUnreadCount } from "@/lib/demo";
 import type { DemoUser } from "@/lib/demo";
 import { useEffect, useState, useRef } from "react";
-import { Brain, LogOut, Bell } from "lucide-react";
+import { LogOut, Bell } from "lucide-react";
 
 const pageLabels: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -107,7 +108,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center">
           {/* Logo + current page — left side */}
           <Link href="/" className="flex items-center gap-2 no-underline shrink-0">
-            <Brain className="w-5 h-5 text-white" />
+            <Logo onDark />
             <span className="text-base font-bold text-white">OLLIN</span>
           </Link>
           <span className="text-white/70 text-sm font-medium ml-3">/ {currentPage}</span>
