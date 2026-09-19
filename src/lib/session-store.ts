@@ -52,7 +52,16 @@ export async function registerSession(
 ): Promise<void> {
   // Only use Supabase when it's genuinely reachable — createAdminClient()
   // returns a client whenever env vars exist, but a restricted/unreachable
-  // backend would silently drop inserts and break revocation.
+  // backend would silently drop inserts and break revocation. File-mode
+  // user ids (e.g. "admin-001") aren't uuids and would fail the
+  // sessions.user_id FK cast, so the file store handles them directly.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(userId)) {
+    const store = readFileStore();
+    store[userId] = prune([...(store[userId] || []), { sid, issued, exp }]).slice(-20);
+    writeFileStore(store);
+    return;
+  }
   let usedSupabase = false;
   try {
     const { createAdminClient } = await import("@/lib/supabase/server");

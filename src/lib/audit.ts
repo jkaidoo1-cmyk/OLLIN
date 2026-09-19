@@ -58,10 +58,17 @@ export async function recordAdminAction(
   targetId: string | null,
   detail: string
 ): Promise<void> {
+  // audit_log.actor_id is a uuid (FK to profiles). File-mode actor ids like
+  // "admin-001" would fail the cast — null it out (actor_email still
+  // identifies the admin) so the event still reaches Supabase.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const supabaseSafeActorId =
+    actor?.id && UUID_RE.test(actor.id) ? actor.id : null;
+
   const event: AuditEvent = {
     id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     at: new Date().toISOString(),
-    actor_id: actor?.id ?? null,
+    actor_id: supabaseSafeActorId,
     actor_email: actor?.email ?? null,
     action,
     target_type: targetType,
