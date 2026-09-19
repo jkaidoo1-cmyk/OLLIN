@@ -264,12 +264,7 @@ export default function QuizPage() {
         status: "completed",
         completed_at: new Date().toISOString(),
       });
-      const { addNotification } = await import("@/lib/demo");
-      addNotification(
-        "New attempt",
-        `${participantName || "Someone"} completed your "${quiz.title}" quiz with a score of ${score}%.`,
-        "result"
-      );
+      // Results surface on the creator's dashboard charts — no notification here.
     }
 
     localStorage.removeItem(`quiz_${quiz.id}_answers`);

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { enableDemoMode } from "@/lib/demo";
+import { enableDemoMode, type DemoUser } from "@/lib/demo";
 import { Logo } from "@/components/Logo";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
@@ -38,12 +38,6 @@ export default function LoginPage() {
 
       if (data.demo) {
         enableDemoMode(data.user);
-        const { addNotification } = await import("@/lib/demo");
-        addNotification(
-          "Welcome to OLLIN",
-          "Start by creating your first quiz. Upload any study material and let the platform generate questions.",
-          "system"
-        );
         if (data.user.role === "admin") {
           router.push("/admin");
         } else {
@@ -59,11 +53,6 @@ export default function LoginPage() {
       setError("Unable to reach the server. Please try again.");
       setLoading(false);
     }
-  };
-
-  const handleDemo = () => {
-    enableDemoMode();
-    router.push("/dashboard");
   };
 
   return (
@@ -132,16 +121,6 @@ export default function LoginPage() {
                 ) : "Log in"}
               </button>
             </form>
-
-            <div className="mt-4 pt-4 border-t border-[#e0e0e0]">
-              <button
-                onClick={handleDemo}
-                id="demo-login-btn"
-                className="w-full text-sm font-medium text-[#006633] bg-[#e6f0e8] hover:bg-[#d4e8d8] border border-[#b3d9bf] py-2.5 rounded transition-colors"
-              >
-                Try as student (demo)
-              </button>
-            </div>
           </div>
 
 

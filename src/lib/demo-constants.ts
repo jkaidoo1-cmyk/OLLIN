@@ -24,12 +24,4 @@ export const DEFAULT_DEMO_USERS: DemoAccountSeed[] = [
     role: "admin",
     password: ADMIN_PASSWORD,
   },
-  {
-    id: "demo-user-001",
-    email: "demo@ollin.app",
-    full_name: "Alex Student",
-    role: "student",
-    password: "password",
-    current_year: 1,
-  },
 ];

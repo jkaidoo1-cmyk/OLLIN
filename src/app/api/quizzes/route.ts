@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       const quizzesNow = readServerQuizzes();
       const quiz: Quiz = {
         id: raw.id || `demo-quiz-${Date.now()}`,
-        host_id: raw.host_id || "demo-user-001",
+        host_id: raw.host_id || "anonymous",
         title: String(raw.title || title).trim() || "Untitled Quiz",
         description: raw.description ?? null,
         share_code: raw.share_code || `OLLIN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,

@@ -161,15 +161,6 @@ export default function AdminProgramsPage() {
         } catch { /* ignore */ }
       }
 
-      const { addNotification } = await import("@/lib/demo");
-      const adds = pending.filter((a) => a.type === "add").length;
-      const updates = pending.filter((a) => a.type === "update").length;
-      const deletes = pending.filter((a) => a.type === "delete").length;
-      const parts: string[] = [];
-      if (adds) parts.push(`${adds} program${adds > 1 ? "s" : ""} added`);
-      if (updates) parts.push(`${updates} program${updates > 1 ? "s" : ""} updated`);
-      if (deletes) parts.push(`${deletes} program${deletes > 1 ? "s" : ""} removed`);
-      addNotification("Programs updated", parts.join(", ") + ".", "system");
 
       setPending([]);
     } finally {

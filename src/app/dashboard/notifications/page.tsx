@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
-  getDemoNotifications,
+  getNotifications,
   markAllNotificationsRead,
   deleteNotification,
   clearAllNotifications,
@@ -24,25 +24,38 @@ const typeColors: Record<string, string> = {
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = () => {
+    getNotifications().then((n) => {
+      setNotifications(n);
+      setLoading(false);
+    });
+  };
 
   useEffect(() => {
-    setNotifications(getDemoNotifications());
+    load();
+    window.addEventListener("notifications-updated", load);
+    return () => window.removeEventListener("notifications-updated", load);
   }, []);
 
-  const markAllRead = () => {
-    markAllNotificationsRead();
+  const markAllRead = async () => {
+    await markAllNotificationsRead();
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
-  const handleDelete = (id: string) => {
-    deleteNotification(id);
+  const handleDelete = async (id: string) => {
+    await deleteNotification(id);
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
-  const handleClearAll = () => {
-    clearAllNotifications();
+  const handleClearAll = async () => {
+    await clearAllNotifications();
     setNotifications([]);
   };
+
+
+
 
   return (
     <div>
@@ -62,7 +75,12 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {notifications.length === 0 ? (
+      {loading ? (
+        <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
+          <Bell className="w-8 h-8 text-[#ccc] mx-auto mb-3 animate-pulse" />
+          <p className="text-sm text-[#666]">Loading…</p>
+        </div>
+      ) : notifications.length === 0 ? (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
           <Bell className="w-8 h-8 text-[#ccc] mx-auto mb-3" />
           <p className="text-sm text-[#666]">No notifications yet.</p>

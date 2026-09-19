@@ -209,11 +209,11 @@ export default function CreateQuizPage() {
     try {
       const shareCode = quizMode === "self" ? `SELF-${Date.now()}` : generateQuizCode();
       // Attribute the quiz to the actually logged-in user (not a hard-coded id)
-      let currentUserId = "demo-user-001";
+      let currentUserId = "";
       try {
         const raw = localStorage.getItem("ollin_demo_user");
         if (raw) currentUserId = JSON.parse(raw).id || currentUserId;
-      } catch { /* keep default */ }
+      } catch { /* keep empty */ }
 
       if (isDemoMode()) {
         const demoQuiz: Quiz = {

@@ -2,12 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 
-const DEFAULT_PROGRAMS = [
-  { id: "demo-program-001", code: "BSc CS", name: "BSc Computer Science", department: "Computer Science", description: "Four-year undergraduate program in computer science.", created_at: new Date(Date.now() - 86400000 * 90).toISOString(), updated_at: new Date(Date.now() - 86400000 * 90).toISOString() },
-  { id: "demo-program-002", code: "BSc BIO", name: "BSc Biology", department: "Biology", description: "Four-year undergraduate program in biology.", created_at: new Date(Date.now() - 86400000 * 85).toISOString(), updated_at: new Date(Date.now() - 86400000 * 85).toISOString() },
-  { id: "demo-program-003", code: "BA HIS", name: "BA History", department: "History", description: "Three-year undergraduate program in history.", created_at: new Date(Date.now() - 86400000 * 80).toISOString(), updated_at: new Date(Date.now() - 86400000 * 80).toISOString() },
-  { id: "demo-program-004", code: "BSc MATH", name: "BSc Mathematics", department: "Mathematics", description: "Four-year undergraduate program in mathematics.", created_at: new Date(Date.now() - 86400000 * 75).toISOString(), updated_at: new Date(Date.now() - 86400000 * 75).toISOString() },
-];
+// Programs start empty — everything here is created by the admin.
+const DEFAULT_PROGRAMS: unknown[] = [];
 
 function getProgramsPath() {
   return join(process.cwd(), ".ollin-programs.json");

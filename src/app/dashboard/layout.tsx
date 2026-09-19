@@ -34,9 +34,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       if (isDemoMode()) {
         const demoUser = getDemoUser();
         if (demoUser) {
-          setDemo(true);
           setUser({ email: demoUser.email, name: demoUser.full_name });
           setCurrentYear(demoUser.current_year || 1);
+          // Show a storage notice only when the server is NOT persisting to
+          // Supabase — a healthy server session is not a demo.
+          try {
+            const res = await fetch("/api/backend-status");
+            const data = await res.json();
+            if (data.backend !== "supabase") setDemo(true);
+          } catch { /* assume server fine */ }
           return;
         }
       }
@@ -57,15 +63,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     const refresh = () => {
-      if (isDemoMode()) setUnreadCount(getUnreadCount());
+      if (!isDemoMode()) return;
+      getUnreadCount().then(setUnreadCount).catch(() => {});
     };
     refresh();
     window.addEventListener("notifications-updated", refresh);
-    window.addEventListener("storage", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => {
       window.removeEventListener("notifications-updated", refresh);
-      window.removeEventListener("storage", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
   }, [pathname]);
@@ -100,7 +105,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen">
       {demo && (
         <div className="bg-[#005528] text-white text-center py-1 text-xs font-medium">
-          Demo mode — data stays in your browser
+          Limited storage — data is saved on this server only and may not persist
         </div>
       )}
 
@@ -188,22 +193,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         <label className="block text-[10px] font-medium text-[#999] uppercase tracking-wider mb-1">My year</label>
                         <select
                           value={currentYear}
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             const y = Number(e.target.value);
                             setCurrentYear(y);
-                            // Persist to localStorage
-                            const stored = localStorage.getItem("ollin_demo_users");
-                            if (stored) {
-                              const users: DemoUser[] = JSON.parse(stored);
-                              const u = getDemoUser();
-                              if (u) {
-                                const found = users.find((x) => x.id === u.id);
-                                if (found) {
-                                  found.current_year = y;
-                                  localStorage.setItem("ollin_demo_users", JSON.stringify(users));
-                                  localStorage.setItem("ollin_demo_user", JSON.stringify(found));
-                                }
-                              }
+                            // Persist server-side so the year applies on any device
+                            try {
+                              await fetch("/api/auth/profile", {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ current_year: y }),
+                              });
+                            } catch { /* non-critical */ }
+                            // Mirror locally so course filtering updates instantly
+                            const u = getDemoUser();
+                            if (u) {
+                              u.current_year = y;
+                              localStorage.setItem("ollin_demo_user", JSON.stringify(u));
                             }
                           }}
                           className="w-full text-sm border border-[#e0e0e0] rounded px-2 py-1.5 text-[#333] bg-white"

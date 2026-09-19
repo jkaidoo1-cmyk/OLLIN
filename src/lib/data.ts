@@ -151,7 +151,7 @@ export async function createQuiz(
     const user = getDemoUser();
     const quiz: Quiz = {
       id: `demo-quiz-${Date.now()}`,
-      host_id: user?.id || "demo-user-001",
+      host_id: user?.id || "anonymous",
       title: input.title,
       description: input.description || null,
       share_code: shareCode,

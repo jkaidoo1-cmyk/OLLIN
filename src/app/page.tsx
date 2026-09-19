@@ -1,28 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
-import { enableDemoMode } from "@/lib/demo";
 
 
 export default function Home() {
-  const router = useRouter();
-
-  const handleDemo = async () => {
-    // Log in as the demo student through the API so the httpOnly session
-    // cookie is issued (needed for server-side auth on later calls).
-    try {
-      await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "demo@ollin.app", password: "password", demo: true }),
-      });
-    } catch { /* cookie is best-effort; localStorage demo still works */ }
-    enableDemoMode();
-    router.push("/dashboard");
-  };
-
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
@@ -67,9 +49,9 @@ export default function Home() {
               Upload your study material, generate quizzes, and share them with your classmates.
             </p>
             <div className="flex items-center justify-center gap-3">
-              <button onClick={handleDemo} className="btn-primary px-6 py-2.5">
-                Try demo
-              </button>
+              <Link href="/login" className="btn-primary px-6 py-2.5 no-underline">
+                Log in
+              </Link>
               <Link href="/join" className="text-sm font-medium text-[#006633] border border-[#006633] hover:bg-[#006633]/5 px-5 py-2.5 rounded transition-colors no-underline">
                 Join a quiz
               </Link>
