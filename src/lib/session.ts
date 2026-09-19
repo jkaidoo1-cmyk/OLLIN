@@ -16,6 +16,7 @@ interface SessionPayload {
   userId: string;
   email: string;
   role: string;
+  sid: string; // session id — revocable via the session store
   exp: number;
 }
 
@@ -83,12 +84,20 @@ function deserialize(token: string): SessionPayload | null {
 // Cookie handling
 // ---------------------------------------------------------------------------
 export function createSessionCookie(user: { id: string; email: string; role: string }): string {
+  const sid = randomBytes(12).toString("hex");
   const payload: SessionPayload = {
     userId: user.id,
     email: user.email,
     role: user.role || "student",
+    sid,
     exp: Date.now() + SESSION_TTL_MS,
   };
+  // Register the session server-side so it can be revoked later. Registration
+  // is best-effort: if the store is unreachable the cookie still works (fail
+  // open) — the signature remains the primary protection.
+  import("./session-store")
+    .then(({ registerSession }) => registerSession(user.id, sid, Date.now(), payload.exp))
+    .catch(() => { /* best-effort */ });
   return `${COOKIE_NAME}=${serialize(payload)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`;
 }
 
@@ -147,6 +156,9 @@ export async function getSessionUser(request: Request): Promise<SessionUser | nu
   const payload = getSessionFromRequest(request);
   if (!payload) return null;
   try {
+    // Revocation check — a session id removed from the store is dead.
+    const { isSessionValid } = await import("./session-store");
+    if (!(await isSessionValid(payload.userId, payload.sid))) return null;
     return await resolveSessionUser(payload);
   } catch {
     return null;
@@ -158,6 +170,26 @@ export async function getSessionAdmin(request: Request): Promise<SessionUser | n
   const user = await getSessionUser(request);
   if (!user) return null;
   return user.role === "admin" ? user : null;
+}
+
+/** Revoke the session presented on this request (used by logout). */
+export async function revokeCurrentSession(request: Request): Promise<void> {
+  const payload = getSessionFromRequest(request);
+  if (!payload) return;
+  try {
+    const { revokeSession } = await import("./session-store");
+    await revokeSession(payload.userId, payload.sid);
+  } catch { /* best-effort */ }
+}
+
+/** Revoke every session issued to a user ("log out everywhere"). */
+export async function revokeAllUserSessions(userId: string): Promise<number> {
+  try {
+    const { revokeAllSessions } = await import("./session-store");
+    return await revokeAllSessions(userId);
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -172,6 +204,9 @@ export async function getSessionUserFromCookieStore(): Promise<SessionUser | nul
   const payload = deserialize(token);
   if (!payload) return null;
   try {
+    // Same revocation check as the request-based path.
+    const { isSessionValid } = await import("./session-store");
+    if (!(await isSessionValid(payload.userId, payload.sid))) return null;
     return await resolveSessionUser(payload);
   } catch {
     return null;

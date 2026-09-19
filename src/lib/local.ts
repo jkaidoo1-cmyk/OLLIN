@@ -236,6 +236,7 @@ const LOCAL_ATTEMPTS_KEY = "ollin_local_attempts";
 export interface LocalAttempt {
   id: string;
   quiz_id: string;
+  participant_email: string | null;
   participant_name: string;
   score_percentage: number;
   correct_answers: number;

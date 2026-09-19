@@ -21,7 +21,22 @@ export default function MyQuizzesPage() {
   useEffect(() => {
     const fetchQuizzes = async () => {
       if (isLocalMode()) {
-        setQuizzes(getLocalQuizzes());
+        // Server file is the source of truth (covers quizzes created in other
+        // browsers); the local cache is merged in only as a fallback.
+        try {
+          const res = await fetch("/api/quizzes", { headers: { "x-local-mode": "true" } });
+          if (res.ok) {
+            const data = await res.json();
+            const server: Quiz[] = data.quizzes || [];
+            const ids = new Set(server.map((q) => q.id));
+            const extras = getLocalQuizzes().filter((q) => !ids.has(q.id));
+            setQuizzes([...server, ...extras]);
+          } else {
+            setQuizzes(getLocalQuizzes());
+          }
+        } catch {
+          setQuizzes(getLocalQuizzes());
+        }
         try {
           const res = await fetch("/api/courses", { headers: { "x-local-mode": "true" } });
           const data = await res.json();

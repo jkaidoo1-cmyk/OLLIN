@@ -35,6 +35,7 @@ export default function QuizPage() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [rank, setRank] = useState<{ rank: number; total: number } | null>(null);
   const [results, setResults] = useState<{
     score: number;
     total: number;
@@ -245,6 +246,7 @@ export default function QuizPage() {
           time_taken_seconds: timeTaken,
           status: "completed",
           completed_at: new Date().toISOString(),
+          answers, // stored server-side so the participant can review later
         }),
       });
     } catch { /* non-critical, continue */ }
@@ -252,9 +254,11 @@ export default function QuizPage() {
     // Also save to localStorage for local mode
     if (isLocalMode()) {
       const { saveLocalAttempt } = await import("@/lib/local");
+      const localUser = getLocalUser();
       saveLocalAttempt({
         id: `att-${Date.now()}`,
         quiz_id: quiz.id,
+        participant_email: localUser?.email || null,
         participant_name: participantName || "Anonymous",
         score_percentage: score,
         correct_answers: correct,
@@ -272,6 +276,17 @@ export default function QuizPage() {
     setResults({ score, total: questions.length, correct, detailed });
     setSubmitted(true);
     setSubmitting(false);
+
+    // Fetch the participant's standing on this quiz (best-effort)
+    try {
+      const lbRes = await fetch(`/api/quizzes/${quiz.id}/leaderboard`);
+      if (lbRes.ok) {
+        const lb = await lbRes.json();
+        if (lb.your_rank != null) {
+          setRank({ rank: lb.your_rank, total: lb.total_attempts });
+        }
+      }
+    } catch { /* leaderboard optional */ }
   }, [submitting, submitted, quiz, questions, answers, attempt, timeLeft, isGuest, participantName, supabase]);
 
   // Auto-join for logged-in users and guests with URL name (MUST be before conditional returns)
@@ -420,6 +435,12 @@ export default function QuizPage() {
               {isGuest && (
                 <p className="text-xs text-[#999] mt-2">
                   Your results were not saved. Log in to track your progress.
+                </p>
+              )}
+              {rank && (
+                <p className="text-xs text-[#666] mt-2">
+                  Ranked <span className="font-semibold text-[#006633]">#{rank.rank}</span>
+                  {rank.total > 1 ? ` of ${rank.total}` : ""} on this quiz
                 </p>
               )}
             </div>

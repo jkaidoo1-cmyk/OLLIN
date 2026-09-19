@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { UserPlus, Loader2, Trash2, Shield, GraduationCap, Mail, Eye, EyeOff, Save, X, AlertCircle, Pencil } from "lucide-react";
+import { UserPlus, Loader2, Trash2, Shield, GraduationCap, Mail, Eye, EyeOff, Save, X, AlertCircle, Pencil, Upload, FileText } from "lucide-react";
 import { Program } from "@/lib/types";
 
 interface User {
@@ -51,6 +51,12 @@ export default function AdminUsersPage() {
   const [pending, setPending] = useState<PendingAction[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+
+  // CSV import
+  const [showImport, setShowImport] = useState(false);
+  const [csvText, setCsvText] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ created: Array<{ email: string; temp_password?: string }>; skipped: Array<{ email: string; reason: string }> } | null>(null);
 
   const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
 
@@ -278,12 +284,20 @@ export default function AdminUsersPage() {
           <h1 className="text-xl font-bold text-[#333]">Users</h1>
           <p className="text-xs text-[#999] mt-0.5">{displayUsers.length} accounts {pending.length > 0 && `(${pending.length} pending)`}</p>
         </div>
-        <button
-          onClick={() => { setShowForm(!showForm); setEditing(null); }}
-          className="btn-primary text-xs flex items-center gap-1.5"
-        >
-          <UserPlus className="w-3.5 h-3.5" /> Create user
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            onClick={() => setShowImport(true)}
+            className="text-xs px-3 py-2 border border-[#e0e0e0] rounded hover:border-green-400 text-[#666] flex items-center gap-1.5 justify-center"
+          >
+            <Upload className="w-3.5 h-3.5" /> Import CSV
+          </button>
+          <button
+            onClick={() => { setShowForm(!showForm); setEditing(null); }}
+            className="btn-primary text-xs flex items-center gap-1.5"
+          >
+            <UserPlus className="w-3.5 h-3.5" /> Create user
+          </button>
+        </div>
       </div>
 
       {saveError && (
@@ -581,6 +595,89 @@ export default function AdminUsersPage() {
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {saving ? "Saving..." : "Save changes"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CSV import modal */}
+      {showImport && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => !importing && setShowImport(false)}>
+          <div className="bg-white rounded-lg max-w-lg w-full max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-[#e0e0e0] sticky top-0 bg-white">
+              <h2 className="text-sm font-bold text-[#333] flex items-center gap-2">
+                <FileText className="w-4 h-4" /> Import users from CSV
+              </h2>
+              <button onClick={() => setShowImport(false)} className="p-1 hover:bg-[#f0f0f0] rounded">
+                <X className="w-4 h-4 text-[#666]" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-[#666]">
+                One account per line. Columns: <span className="font-mono">email, name, role, program, year, password</span> — only email is required. Program accepts a code (e.g. <span className="font-mono">BSc CS</span>). Passwords are generated when omitted. Existing accounts are skipped.
+              </p>
+              <textarea
+                value={csvText}
+                onChange={(e) => setCsvText(e.target.value)}
+                placeholder={"j.kusi@univ.edu,Kwame Kusi,student,BSc CS,2\na.mensah@univ.edu,Abena Mensah,student,BSc CS,2"}
+                rows={7}
+                className="input-field text-xs font-mono"
+              />
+              <div className="flex items-center gap-2 justify-end">
+                <button onClick={() => setShowImport(false)} className="px-3 py-2 text-xs text-[#666] hover:text-[#333]" disabled={importing}>
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    setImporting(true);
+                    setImportResult(null);
+                    try {
+                      const res = await fetch("/api/admin/users/bulk", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ csv: csvText }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.error || "Import failed");
+                      setImportResult(data);
+                      fetchUsers();
+                    } catch (err) {
+                      setSaveError(err instanceof Error ? err.message : "Import failed");
+                    } finally {
+                      setImporting(false);
+                    }
+                  }}
+                  disabled={importing || !csvText.trim()}
+                  className="btn-primary text-xs flex items-center gap-1.5"
+                >
+                  {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                  {importing ? "Importing…" : "Import"}
+                </button>
+              </div>
+              {importResult && (
+                <div className="text-xs border border-[#e0e0e0] rounded p-3 space-y-2">
+                  <p className="text-green-700 font-medium">{importResult.created.length} account(s) created</p>
+                  {importResult.created.length > 0 && (
+                    <div className="max-h-40 overflow-y-auto font-mono text-[10px] bg-[#f8fdf8] rounded p-2 space-y-1">
+                      {importResult.created.map((c) => (
+                        <div key={c.email}>
+                          {c.email}{c.temp_password ? ` — password: ${c.temp_password}` : ""}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {importResult.skipped.length > 0 && (
+                    <div>
+                      <p className="text-amber-700 font-medium">{importResult.skipped.length} skipped</p>
+                      <div className="max-h-24 overflow-y-auto text-[10px] text-[#666]">
+                        {importResult.skipped.map((s, i) => (
+                          <div key={i}>{s.email} — {s.reason}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

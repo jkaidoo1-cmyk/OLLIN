@@ -5,6 +5,7 @@ import {
   type SavedQuizLink,
 } from "@/lib/local-saved-quizzes";
 import { getSessionAdmin } from "@/lib/session";
+import { recordAdminAction } from "@/lib/audit";
 import { createAdminClient } from "@/lib/supabase/server";
 
 /**
@@ -43,8 +44,9 @@ export async function GET() {
 
 // POST — save a quiz to a course (idempotent) — admin only
 export async function POST(request: NextRequest) {
+  const admin = await getSessionAdmin(request);
   try {
-    if (!(await getSessionAdmin(request))) {
+    if (!admin) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
     const body = await request.json();
@@ -67,6 +69,7 @@ export async function POST(request: NextRequest) {
           { onConflict: "quiz_id,course_id", ignoreDuplicates: true }
         );
       if (error) throw new Error(error.message);
+      await recordAdminAction(request, admin, "quiz.save", "quiz", quiz_id, `Saved quiz to course ${course_id}`);
       return NextResponse.json({ success: true });
     }
 
@@ -75,6 +78,7 @@ export async function POST(request: NextRequest) {
       links.push({ quiz_id, course_id, saved_at: new Date().toISOString() });
       writeSavedQuizzes(links);
     }
+    await recordAdminAction(request, admin, "quiz.save", "quiz", quiz_id, `Saved quiz to course ${course_id}`);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(
@@ -86,8 +90,9 @@ export async function POST(request: NextRequest) {
 
 // DELETE — remove a quiz from a course — admin only
 export async function DELETE(request: NextRequest) {
+  const admin = await getSessionAdmin(request);
   try {
-    if (!(await getSessionAdmin(request))) {
+    if (!admin) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
     const { searchParams } = new URL(request.url);
@@ -116,6 +121,7 @@ export async function DELETE(request: NextRequest) {
       (l) => !(l.quiz_id === quiz_id && l.course_id === course_id)
     );
     writeSavedQuizzes(links);
+    await recordAdminAction(request, admin, "quiz.unsave", "quiz", quiz_id, `Removed quiz from course ${course_id}`);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(

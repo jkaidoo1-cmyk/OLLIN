@@ -228,11 +228,7 @@ export default function AdminCoursesPage() {
 
       // Sync localStorage with server file for student-side compatibility
       if (isLocal) {
-        try {
-          const res2 = await fetch("/api/courses", { headers: { "x-local-mode": "true" } });
-          const data2 = await res2.json();
-          localStorage.setItem("ollin_local_courses", JSON.stringify(data2.courses || []));
-        } catch { /* ignore */ }
+        // Server file is the single source of truth; students read via the API.
       }
 
 

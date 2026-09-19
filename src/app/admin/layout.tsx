@@ -14,6 +14,7 @@ const adminNav = [
   { href: "/admin/programs", label: "Programs" },
   { href: "/admin/courses", label: "Courses" },
   { href: "/admin/quizzes", label: "Quizzes" },
+  { href: "/admin/activity", label: "Activity" },
   { href: "/admin/settings", label: "Settings" },
 ];
 

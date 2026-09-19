@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
+import { recordAdminAction } from "@/lib/audit";
+import { getSessionAdmin } from "@/lib/session";
 
 // Courses start empty — everything here is created by the admin.
 const DEFAULT_COURSES: unknown[] = [];
@@ -85,6 +87,8 @@ export async function POST(request: NextRequest) {
       };
       courses.push(newCourse);
       writeLocalCourses(courses);
+      const admin = await getSessionAdmin(request);
+      await recordAdminAction(request, admin, "course.create", "course", newCourse.id, `Created course ${newCourse.code}`);
       return NextResponse.json({ course: newCourse });
     }
 
@@ -120,6 +124,8 @@ export async function PATCH(request: NextRequest) {
       if (body.year !== undefined) course.year = body.year || null;
       course.updated_at = new Date().toISOString();
       writeLocalCourses(courses);
+      const admin = await getSessionAdmin(request);
+      await recordAdminAction(request, admin, "course.update", "course", id, `Updated course ${course.code}`);
       return NextResponse.json({ course });
     }
 
@@ -154,8 +160,12 @@ export async function DELETE(request: NextRequest) {
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
     if (local) {
-      const courses = readLocalCourses().filter((c: any) => c.id !== id);
-      writeLocalCourses(courses);
+      const courses = readLocalCourses();
+      const target = courses.find((c: any) => c.id === id);
+      const remaining = courses.filter((c: any) => c.id !== id);
+      writeLocalCourses(remaining);
+      const admin = await getSessionAdmin(request);
+      await recordAdminAction(request, admin, "course.delete", "course", id, `Deleted course ${target?.code || id}`);
       return NextResponse.json({ success: true });
     }
 

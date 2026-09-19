@@ -6,6 +6,8 @@ import {
 } from "@/lib/local-users-store";
 import { getSessionAdmin } from "@/lib/session";
 import { hashPassword } from "@/lib/local-users-store";
+import { recordAdminAction } from "@/lib/audit";
+import { revokeAllForEmail } from "@/lib/session-store";
 
 function isEmailTaken(users: any[], email: string, excludeId?: string) {
   const normalized = String(email).toLowerCase().trim();
@@ -109,6 +111,8 @@ export async function POST(request: NextRequest) {
       };
       users.push(newUser);
       writeLocalUsers(users);
+      const admin = await getSessionAdmin(request);
+      await recordAdminAction(request, admin, "user.create", "user", newUser.id, `Created ${newUser.role} account ${newUser.email}`);
       return NextResponse.json({ user: publicUser(newUser), message: "Account created" });
     }
 
@@ -156,6 +160,11 @@ export async function POST(request: NextRequest) {
     if (createError) {
       return NextResponse.json({ error: createError.message }, { status: 400 });
     }
+
+    // Audit (Supabase path)
+    const { getSessionAdmin: gsa } = await import("@/lib/session");
+    const actingAdmin = await gsa(request);
+    await recordAdminAction(request, actingAdmin, "user.create", "user", newUser.user?.id ?? null, `Created ${role || "student"} account ${email}`);
 
     // Update role, program, and year if not defaults
     const updates: Record<string, unknown> = {};
@@ -239,6 +248,8 @@ export async function PATCH(request: NextRequest) {
       }
 
       writeLocalUsers(users);
+      const admin = await getSessionAdmin(request);
+      await recordAdminAction(request, admin, "user.update", "user", userId, `Updated account ${user.email}`);
       return NextResponse.json({ user: publicUser(user), message: "Account updated" });
     }
 
@@ -282,6 +293,10 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    const actingAdmin = await getSessionAdmin(request);
+    await recordAdminAction(request, actingAdmin, "user.update", "user", userId, `Updated account ${body.email || userId}${body.password ? " (password reset)" : ""}`);
+    // A password reset invalidates every existing session for that account.
+    if (body.password) await revokeAllForEmail(String(body.email || userId));
     return NextResponse.json({ message: "Account updated" });
   } catch (error) {
     return NextResponse.json(
@@ -324,12 +339,16 @@ export async function DELETE(request: NextRequest) {
       }
       const filtered = users.filter((u: any) => u.id !== userId);
       writeLocalUsers(filtered);
+      const admin = await getSessionAdmin(request);
+      await recordAdminAction(request, admin, "user.delete", "user", userId, `Deleted account ${target.email}`);
       return NextResponse.json({ success: true, message: "User deleted" });
     }
 
     const { error } = await adminSupabase.auth.admin.deleteUser(userId);
     if (error) throw error;
 
+    const actingAdmin = await getSessionAdmin(request);
+    await recordAdminAction(request, actingAdmin, "user.delete", "user", userId, `Deleted account ${userId}`);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(

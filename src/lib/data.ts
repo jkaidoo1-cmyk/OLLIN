@@ -510,7 +510,7 @@ export async function submitAttempt(
     const total = graded.length;
     const attempt: QuizAttempt = {
       id: attemptId,
-      quiz_id: "",
+      quiz_id: quizIdHint || "",
       participant_id: null,
       participant_name: "Local Student",
       started_at: new Date(Date.now() - 600000).toISOString(),
@@ -524,6 +524,11 @@ export async function submitAttempt(
       status: "completed",
       created_at: new Date().toISOString(),
     };
+    // Persist so the attempt counts toward leaderboards and analytics —
+    // previously graded attempts were returned but never stored.
+    const all = readServerAttempts();
+    all.push(attempt);
+    writeServerAttempts(all);
     return attempt;
   }
 

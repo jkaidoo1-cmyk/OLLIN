@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
+import { recordAdminAction } from "@/lib/audit";
+import { getSessionAdmin } from "@/lib/session";
 
 // Programs start empty — everything here is created by the admin.
 const DEFAULT_PROGRAMS: unknown[] = [];
@@ -75,6 +77,8 @@ export async function POST(request: NextRequest) {
       };
       programs.push(newProgram);
       writeLocalPrograms(programs);
+      const admin = await getSessionAdmin(request);
+      await recordAdminAction(request, admin, "program.create", "program", newProgram.id, `Created program ${newProgram.code}`);
       return NextResponse.json({ program: newProgram });
     }
 
@@ -110,6 +114,8 @@ export async function PATCH(request: NextRequest) {
       if (body.description !== undefined) program.description = body.description || null;
       program.updated_at = new Date().toISOString();
       writeLocalPrograms(programs);
+      const admin = await getSessionAdmin(request);
+      await recordAdminAction(request, admin, "program.update", "program", id, `Updated program ${program.code}`);
       return NextResponse.json({ program });
     }
 
@@ -142,8 +148,12 @@ export async function DELETE(request: NextRequest) {
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
     if (local) {
-      const programs = readLocalPrograms().filter((p: any) => p.id !== id);
-      writeLocalPrograms(programs);
+      const programs = readLocalPrograms();
+      const target = programs.find((p: any) => p.id === id);
+      const remaining = programs.filter((p: any) => p.id !== id);
+      writeLocalPrograms(remaining);
+      const admin = await getSessionAdmin(request);
+      await recordAdminAction(request, admin, "program.delete", "program", id, `Deleted program ${target?.code || id}`);
       return NextResponse.json({ success: true });
     }
 

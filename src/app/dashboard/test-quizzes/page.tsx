@@ -2,65 +2,77 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import {
-  getLocalCourses,
-  getSavedQuizzesForStudent,
-  getLocalQuizzes,
-  getLocalUser,
-  syncLocalDataFromServer,
-} from "@/lib/local";
+import { getLocalUser } from "@/lib/local";
 import { Quiz, Course } from "@/lib/types";
-import { BookOpen, Clock, Play, ChevronRight, Search } from "lucide-react";
+import { BookOpen, Clock, Play, Search } from "lucide-react";
 
 interface CourseWithQuizzes {
   course: Course;
   quizzes: Quiz[];
 }
 
+/**
+ * Test quizzes — admin-saved quizzes for the student's courses.
+ * All data is read from the server APIs (single source of truth):
+ *   - /api/saved-quizzes  → quiz ↔ course links saved by the admin
+ *   - /api/courses        → courses, filtered by the student's year
+ *   - /api/quizzes        → quiz metadata (title, code, time limit)
+ */
 export default function TestQuizzesPage() {
   const [coursesWithQuizzes, setCoursesWithQuizzes] = useState<CourseWithQuizzes[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
-      // Pull server-side data so quizzes saved by the admin (and quizzes created
-      // on other browsers) show up here too.
-      await syncLocalDataFromServer();
+      try {
+        const [savedRes, coursesRes, quizzesRes] = await Promise.all([
+          fetch("/api/saved-quizzes"),
+          fetch("/api/courses"),
+          fetch("/api/quizzes"),
+        ]);
+        const savedData = await savedRes.json().catch(() => ({ saved: [] }));
+        const coursesData = await coursesRes.json().catch(() => ({ courses: [] }));
+        const quizzesData = await quizzesRes.json().catch(() => ({ quizzes: [] }));
 
-      const savedQuizzes = getSavedQuizzesForStudent();
-      let allCourses = getLocalCourses();
-      const user = getLocalUser();
+        const savedLinks: Array<{ quiz_id: string; course_id: string }> = savedData.saved || [];
+        const allCourses: Course[] = coursesData.courses || [];
+        const allQuizzes: Quiz[] = quizzesData.quizzes || [];
 
-      // Filter courses by student's current year
-      const studentYear = user?.current_year;
-      if (studentYear) {
-        allCourses = allCourses.filter((c) => !c.year || c.year === studentYear);
-      }
+        // Filter courses by the student's current year (when known)
+        const user = getLocalUser();
+        const studentYear = user?.current_year;
+        const yearCourses = studentYear
+          ? allCourses.filter((c) => !c.year || c.year === studentYear)
+          : allCourses;
 
-      // Group quizzes by course
-      const courseMap = new Map<string, Quiz[]>();
-      for (const quiz of savedQuizzes) {
-        const courseId = quiz.course_id;
-        if (!courseId) continue;
-        if (!courseMap.has(courseId)) courseMap.set(courseId, []);
-        courseMap.get(courseId)!.push(quiz);
-      }
-
-      // Build list with courses that have saved quizzes
-      const result: CourseWithQuizzes[] = [];
-      for (const course of allCourses) {
-        const quizzes = courseMap.get(course.id);
-        if (quizzes && quizzes.length > 0) {
-          result.push({ course, quizzes });
+        // Group admin-saved quizzes under their courses
+        const quizById = new Map(allQuizzes.map((q) => [q.id, q]));
+        const courseMap = new Map<string, Quiz[]>();
+        for (const link of savedLinks) {
+          const quiz = quizById.get(link.quiz_id);
+          if (!quiz || quiz.status === "draft") continue;
+          if (!courseMap.has(link.course_id)) courseMap.set(link.course_id, []);
+          courseMap.get(link.course_id)!.push(quiz);
         }
-      }
 
-      setCoursesWithQuizzes(result);
+        const result: CourseWithQuizzes[] = [];
+        for (const course of yearCourses) {
+          const quizzes = courseMap.get(course.id);
+          if (quizzes && quizzes.length > 0) {
+            result.push({ course, quizzes });
+          }
+        }
 
-      // Auto-select first course if only one
-      if (result.length === 1) {
-        setSelectedCourseId(result[0].course.id);
+        setCoursesWithQuizzes(result);
+        if (result.length === 1) {
+          setSelectedCourseId(result[0].course.id);
+        }
+      } catch {
+        setCoursesWithQuizzes([]);
+      } finally {
+        setLoading(false);
       }
     };
     load();
@@ -82,7 +94,12 @@ export default function TestQuizzesPage() {
         </p>
       </div>
 
-      {coursesWithQuizzes.length === 0 ? (
+      {loading ? (
+        <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
+          <BookOpen className="w-8 h-8 text-[#ccc] mx-auto mb-3 animate-pulse" />
+          <p className="text-sm text-[#666]">Loading…</p>
+        </div>
+      ) : coursesWithQuizzes.length === 0 ? (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
           <BookOpen className="w-8 h-8 text-[#ccc] mx-auto mb-3" />
           <p className="text-sm text-[#666]">No quizzes available yet</p>

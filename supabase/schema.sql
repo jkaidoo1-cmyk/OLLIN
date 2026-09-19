@@ -404,3 +404,36 @@ create index if not exists idx_attempts_participant on public.quiz_attempts(part
 create index if not exists idx_attempt_answers_attempt on public.attempt_answers(attempt_id);
 create index if not exists idx_saved_quizzes_course on public.saved_quizzes(course_id);
 create index if not exists idx_saved_quizzes_quiz on public.saved_quizzes(quiz_id);
+
+-- ============================================================
+-- 6. AUDIT LOG (admin actions)
+-- ============================================================
+
+create table if not exists public.audit_log (
+  id text primary key,
+  actor_id uuid references public.profiles(id) on delete set null,
+  actor_email text,
+  action text not null,
+  target_type text not null,
+  target_id text,
+  detail text,
+  ip text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_audit_created on public.audit_log(created_at desc);
+create index if not exists idx_audit_actor on public.audit_log(actor_id);
+
+-- ============================================================
+-- 7. SESSIONS (server-side revocation registry)
+-- ============================================================
+
+create table if not exists public.sessions (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  sid text not null,
+  issued_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  primary key (user_id, sid)
+);
+
+create index if not exists idx_sessions_user on public.sessions(user_id);
