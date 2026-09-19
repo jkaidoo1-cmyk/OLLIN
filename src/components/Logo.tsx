@@ -7,7 +7,7 @@ export function Logo({ className = "w-[35px] h-[35px]", onDark = false }: { clas
       <img
         src="/logo.png"
         alt="OLLIN logo"
-        className="w-[41px] h-[41px] object-contain"
+        className="w-[50px] h-[50px] object-contain"
         draggable={false}
       />
     );

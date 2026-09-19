@@ -107,7 +107,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <header className="bg-[#006633] text-white sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center">
           {/* Logo + current page — left side */}
-          <Link href="/" className="flex items-center gap-2 no-underline shrink-0">
+          <Link href="/" className="flex items-center gap-1 no-underline shrink-0">
             <Logo onDark />
             <span className="text-base font-bold text-white">OLLIN</span>
           </Link>
