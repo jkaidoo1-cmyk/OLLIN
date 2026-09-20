@@ -98,9 +98,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           {/* Right side — pushed right on row 1 (mobile) / far right (desktop) */}
           <div className="flex items-center gap-3 shrink-0 ml-auto sm:ml-0">
-            <Link href="/dashboard" className="text-sm text-white/50 hover:text-white no-underline hidden sm:block">
-              Back to app
-            </Link>
             <button
               onClick={handleLogout}
               className="text-white/50 hover:text-white transition-colors"
