@@ -96,17 +96,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded text-white font-medium ml-1">Admin</span>
           </Link>
 
-          {/* Right side — pushed right on row 1 (mobile) / far right (desktop) */}
-          <div className="flex items-center gap-3 shrink-0 ml-auto sm:ml-0">
-            <button
-              onClick={handleLogout}
-              className="text-white/50 hover:text-white transition-colors"
-              aria-label="Log out"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
-          </div>
-
           {/* Nav links — full-width scrollable row on mobile, centered on desktop */}
           <nav className="order-last sm:order-none w-full sm:w-auto sm:flex-1 sm:justify-center flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {adminNav.map((item) => {
@@ -124,6 +113,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               );
             })}
           </nav>
+
+          {/* Log out — right of logo on mobile row 1, far right on desktop */}
+          <div className="flex items-center shrink-0 ml-auto sm:ml-0">
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 text-white/50 hover:text-white transition-colors px-2 py-1"
+              aria-label="Log out"
+            >
+              <LogOut className="w-5 h-5" />
+              <span className="hidden sm:inline text-sm font-medium">Log out</span>
+            </button>
+          </div>
         </div>
       </header>
 
