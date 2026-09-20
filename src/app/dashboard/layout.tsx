@@ -5,6 +5,7 @@ import { Logo } from "@/components/Logo";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalUser, disableLocalMode, getUnreadCount } from "@/lib/local";
+import { isAdmin } from "@/lib/admin";
 import type { LocalUser } from "@/lib/local";
 import { useEffect, useState, useRef } from "react";
 import { LogOut, Bell, ShieldCheck } from "lucide-react";
@@ -34,6 +35,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       if (isLocalMode()) {
         const localUser = getLocalUser();
         if (localUser) {
+          // Admins administrate — they don't use the student dashboard.
+          if (isAdmin()) {
+            router.replace("/admin");
+            return;
+          }
           setUser({ email: localUser.email, name: localUser.full_name });
           setCurrentYear(localUser.current_year || 1);
           // Show a storage notice only when the server is NOT persisting to
@@ -53,6 +59,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         router.push("/login");
         return;
       }
+      // Supabase admins also belong in the admin console.
+      try {
+        const meRes = await fetch("/api/auth/me");
+        const meData = await meRes.json();
+        if (meRes.ok && meData.user?.role === "admin") {
+          router.replace("/admin");
+          return;
+        }
+      } catch { /* fall through to student view */ }
       setUser({
         email: data.user.email || "",
         name: data.user.user_metadata?.full_name || data.user.email?.split("@")[0] || "User",
