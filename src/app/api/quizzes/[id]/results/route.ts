@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getQuizStats, getQuizAttempts } from "@/lib/data";
+import { getQuizStats, getQuizAttempts, getQuizById } from "@/lib/data";
+import { getSessionUser } from "@/lib/session";
 
 export async function GET(
   request: NextRequest,
@@ -12,6 +13,17 @@ export async function GET(
 
     if (!stats) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
+    }
+
+    // Participant roster (names + scores) is creator/admin-only.
+    const quiz = await getQuizById(id, local) || await getQuizByCodeSafe(id, local);
+    const session = await getSessionUser(request);
+    const isCreator = !!session && ((quiz && session.id === quiz.host_id) || session.role === "admin");
+    if (!isCreator) {
+      return NextResponse.json(
+        { error: "Only the quiz creator or an admin can view results" },
+        { status: 403 }
+      );
     }
 
     const attempts = await getQuizAttempts(id, local);
@@ -35,5 +47,15 @@ export async function GET(
       { error: error instanceof Error ? error.message : "Failed to fetch results" },
       { status: 500 }
     );
+  }
+}
+
+/** Resolve id-or-code to a quiz without failing when not found. */
+async function getQuizByCodeSafe(idOrCode: string, local: boolean) {
+  try {
+    const { getQuizByCode } = await import("@/lib/data");
+    return await getQuizByCode(idOrCode, local);
+  } catch {
+    return null;
   }
 }

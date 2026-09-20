@@ -23,7 +23,15 @@ export async function GET(
 
     const questions = await getQuizQuestions(quiz.id, local);
 
-    return NextResponse.json({ quiz, questions });
+    // SECURITY: this endpoint is public (guests join by code). Correct
+    // answers and explanations must never reach the browser before the
+    // attempt is graded — they're the quiz's answer key.
+    const publicQuestions = questions.map((q: any) => {
+      const { correct_answer, explanation, ...safe } = q;
+      return safe;
+    });
+
+    return NextResponse.json({ quiz, questions: publicQuestions });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to fetch quiz" },

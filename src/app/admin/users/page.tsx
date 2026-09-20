@@ -3,6 +3,12 @@
 import { useEffect, useState } from "react";
 import { UserPlus, Loader2, Trash2, Shield, GraduationCap, Mail, Eye, EyeOff, Save, X, AlertCircle, Pencil, Upload, FileText } from "lucide-react";
 import { Program } from "@/lib/types";
+import { clearStaleAdminSession } from "@/lib/admin";
+
+/** True when the server rejected the admin session itself. */
+function isAuthError(msg: string): boolean {
+  return msg === "Admin access required" || msg === "Not authenticated";
+}
 
 interface User {
   id: string;
@@ -241,7 +247,14 @@ export default function AdminUsersPage() {
 
       setPending([]);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Save failed — see message above");
+      const msg = err instanceof Error ? err.message : "Save failed — see message above";
+      if (isAuthError(msg)) {
+        // Session cookie is missing/expired/invalid — re-login instead of a dead end.
+        setSaveError("Your session has expired — redirecting to login…");
+        setTimeout(() => clearStaleAdminSession(), 1200);
+        return;
+      }
+      setSaveError(msg);
     } finally {
       setSaving(false);
     }
@@ -642,7 +655,13 @@ export default function AdminUsersPage() {
                       setImportResult(data);
                       fetchUsers();
                     } catch (err) {
-                      setSaveError(err instanceof Error ? err.message : "Import failed");
+                      const msg = err instanceof Error ? err.message : "Import failed";
+                      if (isAuthError(msg)) {
+                        setSaveError("Your session has expired — redirecting to login…");
+                        setTimeout(() => clearStaleAdminSession(), 1200);
+                      } else {
+                        setSaveError(msg);
+                      }
                     } finally {
                       setImporting(false);
                     }

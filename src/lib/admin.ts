@@ -1,6 +1,6 @@
 "use client";
 
-import { isLocalMode, getLocalUser, getLocalUsers } from "./local";
+import { isLocalMode, getLocalUser, getLocalUsers, disableLocalMode } from "./local";
 import { ADMIN_EMAIL } from "./local-constants";
 
 export interface AdminUser {
@@ -28,6 +28,17 @@ export function isAdmin(): boolean {
   if (!user) return false;
   // Role-based, with a fallback for sessions created before roles existed.
   return user.role === "admin" || user.email === ADMIN_EMAIL;
+}
+
+/**
+ * The server rejected an admin request (401/403): the browser's local
+ * session is stale or its cookie is missing/expired/invalid. Clear it and
+ * send the admin to login instead of leaving them in a broken UI.
+ */
+export function clearStaleAdminSession(): void {
+  if (typeof window === "undefined") return;
+  if (isLocalMode()) disableLocalMode();
+  window.location.href = "/login?expired=1";
 }
 
 export function getAdminUser(): AdminUser | null {

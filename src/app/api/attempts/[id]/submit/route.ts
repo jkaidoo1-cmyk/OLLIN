@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { submitAttempt, getAttemptAnswers, getQuizById, getAttemptQuizId } from "@/lib/data";
+import { submitAttempt, getQuizById, getAttemptQuizId, getQuizQuestions } from "@/lib/data";
 
-// POST — submit an attempt with all answers
+// POST — submit an attempt; the SERVER grades it and returns the result
+// plus the answer key (safe now — grading already happened).
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -10,7 +11,7 @@ export async function POST(
     const local = request.headers.get("x-local-mode") === "true";
     const { id } = await params;
     const body = await request.json();
-    const { answers } = body;
+    const { answers, quiz_id, participant_name, participant_email, time_taken_seconds } = body;
 
     if (!answers || !Array.isArray(answers)) {
       return NextResponse.json(
@@ -44,10 +45,38 @@ export async function POST(
 
     // Pass the quiz id so grading can find the questions even when the
     // attempt record doesn't exist yet (e.g. client-only attempt IDs).
-    const attempt = await submitAttempt(id, answers, local, quizId || body.quiz_id);
-    const savedAnswers = await getAttemptAnswers(id, local);
+    const attempt = await submitAttempt(id, answers, local, quizId || body.quiz_id, {
+      participant_name: participant_name ?? null,
+      participant_email: participant_email ?? null,
+      time_taken_seconds: time_taken_seconds ?? null,
+    });
 
-    return NextResponse.json({ attempt, answers: savedAnswers });
+    // Answer key + explanations are released ONLY in the graded response,
+    // matching what was just submitted — never before via the public GET.
+    const questions = await getQuizQuestions(quizId || body.quiz_id || id, local);
+    const answer_key: Record<string, string> = {};
+    const explanations: Record<string, string | null> = {};
+    for (const q of questions as any[]) {
+      answer_key[q.id] = q.correct_answer;
+      explanations[q.id] = q.explanation ?? null;
+    }
+
+    // Per-question correctness is computed here (authoritative). In local
+    // mode getAttemptAnswers returns [], so we always build it from the
+    // same server-side grading that produced the score.
+    const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+    const gradedAnswers = (answers as Array<{ question_id: string; selected_answer: string }>).map((a) => {
+      const q = (questions as any[]).find((qq) => qq.id === a.question_id);
+      const isCorrect = !!q && norm(a.selected_answer) === norm(q.correct_answer);
+      return {
+        question_id: a.question_id,
+        selected_answer: a.selected_answer,
+        is_correct: isCorrect,
+        marks_awarded: isCorrect ? (q?.marks ?? 1) : 0,
+      };
+    });
+
+    return NextResponse.json({ attempt, answers: gradedAnswers, answer_key, explanations });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to submit attempt" },

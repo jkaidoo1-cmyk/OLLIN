@@ -46,14 +46,18 @@ export default function DashboardPage() {
           attempts.push(...getLocalAttempts(q.id));
         }
         try {
-          const res = await fetch(`/api/attempts`);
-          if (res.ok) {
-            const data = await res.json();
-            const seenIds = new Set(attempts.map((a) => a.id));
-            for (const a of data.attempts || []) {
-              if (!seenIds.has(a.id)) {
-                attempts.push(a);
-                seenIds.add(a.id);
+          // The all-attempts endpoint is admin-only now; creators fetch per
+          // quiz, which the attempts API permits for the quiz's host.
+          for (const q of quizList) {
+            const res = await fetch(`/api/attempts?quiz_id=${encodeURIComponent(q.id)}`);
+            if (res.ok) {
+              const data = await res.json();
+              const seenIds = new Set(attempts.map((a) => a.id));
+              for (const a of data.attempts || []) {
+                if (!seenIds.has(a.id)) {
+                  attempts.push(a);
+                  seenIds.add(a.id);
+                }
               }
             }
           }

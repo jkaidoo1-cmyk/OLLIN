@@ -8,6 +8,7 @@ import { createHmac, timingSafeEqual, randomBytes } from "crypto";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import { readLocalUsers } from "./local-users-store";
+import { ADMIN_EMAIL } from "./local-constants";
 
 const COOKIE_NAME = "ollin_session";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -136,16 +137,27 @@ async function resolveSessionUser(
     return { id: user.id, email: user.email, role: user.role || "student" };
   }
 
+  // Built-in admin: resolve deterministically even on an ephemeral or
+  // read-only filesystem (Vercel) where the users file can't persist.
+  if (payload.userId === "admin-001") {
+    return { id: "admin-001", email: ADMIN_EMAIL, role: "admin" };
+  }
+
   // Not in the file store — if Supabase is configured, check profiles.
   const { createClient } = await import("@/lib/supabase/server");
   const supabase = await createClient();
   if (!supabase) return null; // deleted — session revoked
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("profiles")
     .select("id, email, role")
     .eq("id", payload.userId)
-    .single();
-  if (!data) return null;
+    .maybeSingle();
+  if (error) {
+    // Backend unreachable/restricted (e.g. spend cap) — trust the signed
+    // cookie rather than locking the user out: infra failure ≠ deletion.
+    return { id: payload.userId, email: payload.email, role: payload.role || "student" };
+  }
+  if (!data) return null; // genuinely deleted
   return { id: data.id, email: data.email, role: data.role || "student" };
 }
 

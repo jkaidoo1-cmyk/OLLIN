@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Loader2, Trash2, GraduationCap, Save, X, Pen } from "lucide-react";
+import { Plus, Loader2, Trash2, GraduationCap, Save, X, Pen, AlertCircle } from "lucide-react";
 import { Program } from "@/lib/types";
+import { clearStaleAdminSession } from "@/lib/admin";
+
+/** True when the server rejected the admin session itself. */
+function isAuthError(msg: string): boolean {
+  return msg === "Admin access required" || msg === "Not authenticated";
+}
 
 type PendingAction =
   | { type: "add"; program: Program }
@@ -30,6 +36,7 @@ export default function AdminProgramsPage() {
 
   const [pending, setPending] = useState<PendingAction[]>([]);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [editing, setEditing] = useState<EditState | null>(null);
 
   const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
@@ -96,70 +103,48 @@ export default function AdminProgramsPage() {
     };
     setPending((prev) => [...prev, { type: "update", program: updated }]);
     setEditing(null);
-  };
-
-  const handleSave = async () => {
+  };  const handleSave = async () => {
     setSaving(true);
+    setSaveError("");
     try {
-      if (isLocal) {
-        let updated = [...programs];
-        for (const action of pending) {
-          if (action.type === "add") {
-            updated = [...updated, action.program];
-          } else if (action.type === "update") {
-            updated = updated.map((p) => (p.id === action.program.id ? action.program : p));
-          } else if (action.type === "delete") {
-            updated = updated.filter((p) => p.id !== action.programId);
-          }
+      // Fire every pending mutation, checking each response. Any failure
+      // aborts the save: pending actions are KEPT so nothing silently
+      // disappears, and the list is re-fetched to reflect server reality.
+      const send = async (method: string, url: string, body?: unknown) => {
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json", ...(isLocal ? { "x-local-mode": "true" } : {}) },
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.error || `Failed (${res.status})`);
         }
-        setPrograms(updated);
-        // Persist via API
-        for (const action of pending) {
-          if (action.type === "add") {
-            await fetch("/api/programs", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "x-local-mode": "true" },
-              body: JSON.stringify({ code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description }),
-            });
-          } else if (action.type === "update") {
-            await fetch("/api/programs", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json", "x-local-mode": "true" },
-              body: JSON.stringify({ id: action.program.id, code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description }),
-            });
-          } else if (action.type === "delete") {
-            await fetch(`/api/programs?id=${action.programId}`, { method: "DELETE", headers: { "x-local-mode": "true" } });
-          }
-        }
-      } else {
-        for (const action of pending) {
-          if (action.type === "add") {
-            await fetch("/api/programs", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description }),
-            });
-          } else if (action.type === "update") {
-            await fetch("/api/programs", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id: action.program.id, code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description }),
-            });
-          } else if (action.type === "delete") {
-            await fetch(`/api/programs?id=${action.programId}`, { method: "DELETE" });
-          }
-        }
-        await fetchPrograms();
-      }
+      };
 
-      // Sync localStorage with server file for student-side compatibility
-      if (isLocal) {
-        // Server file is the single source of truth; students read via the API.
+      for (const action of pending) {
+        if (action.type === "add") {
+          await send("POST", "/api/programs", { code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description });
+        } else if (action.type === "update") {
+          await send("PATCH", "/api/programs", { id: action.program.id, code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description });
+        } else if (action.type === "delete") {
+          await send("DELETE", `/api/programs?id=${action.programId}`);
+        }
       }
-
 
       setPending([]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Save failed";
+      if (isAuthError(msg)) {
+        setSaveError("Your session has expired — redirecting to login…");
+        setTimeout(() => clearStaleAdminSession(), 1200);
+      } else {
+        setSaveError(`Save failed: ${msg}. Your changes are still listed — try saving again.`);
+      }
     } finally {
+      // Always re-fetch: on success it confirms persistence; on failure it
+      // shows the server's actual state instead of optimistic fiction.
+      await fetchPrograms();
       setSaving(false);
     }
   };
@@ -185,6 +170,13 @@ export default function AdminProgramsPage() {
           <Plus className="w-3.5 h-3.5" /> Add program
         </button>
       </div>
+
+      {saveError && (
+        <div className="flex items-start gap-2 text-xs px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded mb-4">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <span>{saveError}</span>
+        </div>
+      )}
 
       {editing && (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-5 mb-6">

@@ -47,7 +47,9 @@ export default function AdminOverviewPage() {
         }
       }
 
-      // Count attempts from server-side file (single source of truth)
+      // Count attempts from server-side file (single source of truth).
+      // The admin session cookie satisfies the attempts endpoint's admin
+      // requirement for both the all-list and per-quiz reads.
       let totalAttempts = 0;
       try {
         const attRes = await fetch(`/api/attempts`);

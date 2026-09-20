@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { enableLocalMode, type LocalUser } from "@/lib/local";
@@ -14,6 +14,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+
+  // Redirected here after a dead session (clearStaleAdminSession).
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.search.includes("expired=1")) {
+      setError("Your session has expired. Please log in again.");
+    }
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

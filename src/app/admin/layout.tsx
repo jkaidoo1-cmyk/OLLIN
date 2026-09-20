@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
-import { isAdmin } from "@/lib/admin";
+import { isAdmin, clearStaleAdminSession } from "@/lib/admin";
 import { Logo } from "@/components/Logo";
 import { isLocalMode, disableLocalMode } from "@/lib/local";
 
@@ -27,26 +27,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     const checkAuth = async () => {
-      // Local admin session
-      if (isLocalMode() && isAdmin()) {
-        setAuthorized(true);
-        setLoading(false);
-        return;
-      }
+      const claimedLocalAdmin = isLocalMode() && isAdmin();
 
-      // Real (Supabase) admin session
+      // The server session is the gate — localStorage alone is never enough.
+      // This catches stale browser sessions: localStorage still says admin
+      // but the session cookie is missing, expired, or was signed by a
+      // different server instance.
       try {
         const res = await fetch("/api/auth/me");
         const data = await res.json();
         if (res.ok && data.user && data.user.role === "admin") {
-          setIsRealAdmin(true);
+          if (!data.local) setIsRealAdmin(true);
           setAuthorized(true);
           setLoading(false);
           return;
         }
-      } catch { /* not authenticated */ }
+      } catch { /* network issue — fall through */ }
 
-      router.push("/login");
+      // Server rejected the session. If the browser still claims admin, its
+      // local session is stale: clear it so the next login is fresh.
+      if (claimedLocalAdmin) clearStaleAdminSession();
+      else router.push("/login");
     };
     checkAuth();
   }, [router]);

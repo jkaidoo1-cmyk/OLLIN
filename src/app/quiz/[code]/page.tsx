@@ -27,7 +27,7 @@ export default function QuizPage() {
 
   const [joined, setJoined] = useState(false);
   const [participantName, setParticipantName] = useState(guestName || "");
-  const [currentUser, setCurrentUser] = useState<{ name: string; isGuest: boolean } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ name: string; email?: string | null; isGuest: boolean } | null>(null);
   const [attempt, setAttempt] = useState<QuizAttempt | null>(null);
 
 
@@ -191,74 +191,87 @@ export default function QuizPage() {
     setSubmitting(true);
     if (timerRef.current) clearTimeout(timerRef.current);
 
-    let correct = 0;
-    const detailed = questions.map((q) => {
-      const selected = answers[q.id] || null;
-      const isCorrect = selected === q.correct_answer;
-      if (isCorrect) correct++;
-      return { question: q, selected, isCorrect };
-    });
-
-    const score = Math.round((correct / questions.length) * 100);
-
-    // Save to database for logged-in students (not guests, not local)
-    if (attempt && !isGuest && !isLocalMode() && supabase) {
-      const timeTaken = quiz.time_limit_minutes
-        ? quiz.time_limit_minutes * 60 - (timeLeft || 0)
-        : null;
-
-      await supabase.from("quiz_attempts").update({
-        completed_at: new Date().toISOString(),
-        time_taken_seconds: timeTaken,
-        correct_answers: correct,
-        score_percentage: score,
-        total_questions: questions.length,
-        marks_earned: correct,
-        marks_total: questions.length,
-        status: "completed",
-      }).eq("id", attempt.id);
-
-      const answerInserts = questions.map((q) => ({
-        attempt_id: attempt.id,
-        question_id: q.id,
-        selected_answer: answers[q.id] || null,
-        is_correct: selectedIsCorrect(q, answers[q.id]),
-        marks_awarded: selectedIsCorrect(q, answers[q.id]) ? q.marks : 0,
-      }));
-      await supabase.from("attempt_answers").insert(answerInserts);
-    }
-
-    // Save attempt server-side (so quiz creator can see it regardless of browser)
+    // ── Server-side grading ────────────────────────────────
+    // Correct answers never reach the browser, so the server computes the
+    // score. The client only renders what the server returns — participants
+    // can't grade their own submission or fake their score.
+    const attemptId = attempt?.id || `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const timeTaken = quiz.time_limit_minutes
       ? quiz.time_limit_minutes * 60 - (timeLeft || 0)
       : null;
 
+    let score = 0;
+    let correct = 0;
+    let detailed: Array<{ question: any; selected: string | null; isCorrect: boolean }> = [];
+
     try {
-      await fetch("/api/attempts", {
+      const res = await fetch(`/api/attempts/${attemptId}/submit`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(isLocalMode() ? { "x-local-mode": "true" } : {}) },
         body: JSON.stringify({
           quiz_id: quiz.id,
           participant_name: participantName || "Anonymous",
-          score_percentage: score,
-          correct_answers: correct,
-          total_questions: questions.length,
+          participant_email: currentUser?.email || null,
           time_taken_seconds: timeTaken,
-          status: "completed",
-          completed_at: new Date().toISOString(),
-          answers, // stored server-side so the participant can review later
+          answers: questions.map((q) => ({
+            question_id: q.id,
+            selected_answer: answers[q.id] || "",
+          })),
         }),
       });
-    } catch { /* non-critical, continue */ }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to submit quiz");
 
-    // Also save to localStorage for local mode
+      score = data.attempt?.score_percentage ?? 0;
+      correct = data.attempt?.correct_answers ?? 0;
+
+      // Build the review from server-graded answers + answer key fetched
+      // AFTER grading (the graded response includes the correct answers).
+      const gradedMap: Record<string, { is_correct: boolean; selected_answer: string }> = {};
+      for (const a of data.answers || []) {
+        gradedMap[a.question_id] = { is_correct: a.is_correct, selected_answer: a.selected_answer };
+      }
+      // The submit response may include the answer key for review; if not,
+      // fetch it from the graded endpoint.
+      let keyByQ: Record<string, string> = {};
+      if (data.answer_key) {
+        keyByQ = data.answer_key;
+      } else {
+        try {
+          const kRes = await fetch(`/api/attempts/${attemptId}/review`, {
+            headers: isLocalMode() ? { "x-local-mode": "true" } : {},
+          });
+          if (kRes.ok) {
+            const kData = await kRes.json();
+            for (const item of kData.review || []) {
+              keyByQ[item.question_id] = item.correct_answer;
+            }
+          }
+        } catch { /* review optional */ }
+      }
+
+      detailed = questions.map((q) => ({
+        question: { ...q, correct_answer: keyByQ[q.id] ?? "", explanation: (data.explanations || {})[q.id] ?? null },
+        selected: gradedMap[q.id]?.selected_answer || answers[q.id] || null,
+        isCorrect: !!gradedMap[q.id]?.is_correct,
+      }));
+    } catch {
+      // Grading failed (network/server). Block the submission rather than
+      // grade client-side — silently accepting a fakeable score is worse
+      // than a retry.
+      alert("Could not submit your quiz. Please check your connection and try again.");
+      setSubmitting(false);
+      return;
+    }
+
+    // Mirror the graded result into localStorage for local mode (My Attempts)
     if (isLocalMode()) {
       const { saveLocalAttempt } = await import("@/lib/local");
       const localUser = getLocalUser();
       saveLocalAttempt({
-        id: `att-${Date.now()}`,
+        id: attemptId,
         quiz_id: quiz.id,
-        participant_email: localUser?.email || null,
+        participant_email: localUser?.email || currentUser?.email || null,
         participant_name: participantName || "Anonymous",
         score_percentage: score,
         correct_answers: correct,
@@ -287,7 +300,7 @@ export default function QuizPage() {
         }
       }
     } catch { /* leaderboard optional */ }
-  }, [submitting, submitted, quiz, questions, answers, attempt, timeLeft, isGuest, participantName, supabase]);
+  }, [submitting, submitted, quiz, questions, answers, attempt, timeLeft, isGuest, participantName, supabase, currentUser]);
 
   // Auto-join for logged-in users and guests with URL name (MUST be before conditional returns)
   const shouldAutoJoin = (currentUser && !currentUser.isGuest) || (isGuest && !!guestName);
@@ -543,7 +556,7 @@ export default function QuizPage() {
                 <p className="text-sm font-medium text-[#333]">{q.question_text}</p>
               </div>
 
-              {q.options && (
+              {q.options ? (
                 <div className="space-y-2 ml-9">
                   {q.options.map((opt, optIdx) => {
                     const isSelected = answers[q.id] === String(optIdx);
@@ -559,6 +572,27 @@ export default function QuizPage() {
                       >
                         <span className="font-medium mr-2">{String.fromCharCode(65 + optIdx)}.</span>
                         {opt}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                // True/false questions have no options array — render the two
+                // canonical answers (stored as "true"/"false").
+                <div className="flex gap-2 ml-9">
+                  {["true", "false"].map((val) => {
+                    const isSelected = answers[q.id] === val;
+                    return (
+                      <button
+                        key={val}
+                        onClick={() => setAnswers((prev) => ({ ...prev, [q.id]: val }))}
+                        className={`px-6 py-2.5 rounded border text-sm transition-colors ${
+                          isSelected
+                            ? "border-[#006633] bg-green-50 text-[#006633] font-medium"
+                            : "border-[#e0e0e0] bg-white text-[#333] hover:border-[#ccc]"
+                        }`}
+                      >
+                        {val === "true" ? "True" : "False"}
                       </button>
                     );
                   })}

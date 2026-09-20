@@ -1,9 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeAndGenerate, extractFromExam, extractExistingQuestions } from "@/lib/ai/content-analyzer";
 import { extractTextFromBase64, getRelevantText } from "@/lib/file-extract";
+import { getSessionUser } from "@/lib/session";
+import { checkThrottle } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    // AI calls spend real money/tokens — only logged-in users may trigger
+    // them, and abusive request rates are throttled per IP.
+    const session = await getSessionUser(request);
+    if (!session) {
+      return NextResponse.json(
+        { error: "Please log in to generate questions." },
+        { status: 401 }
+      );
+    }
+    const limit = checkThrottle(request, "generate", 10, 60_000);
+    if (limit.blocked) {
+      return NextResponse.json(
+        { error: limit.message },
+        { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+      );
+    }
     const body = await request.json();
     const {
       material_text,

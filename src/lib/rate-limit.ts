@@ -60,6 +60,49 @@ export function checkRateLimit(
   return { blocked: false };
 }
 
+/**
+ * Count-based throttle: allows up to `max` requests per window per IP,
+ * blocking further requests until the window slides. Unlike checkRateLimit
+ * (failure-driven), every allowed request counts — for expensive endpoints
+ * like AI generation.
+ */
+export function checkThrottle(
+  request: Request,
+  scope = "global",
+  max = 10,
+  windowMs = WINDOW_MS
+): { blocked: true; retryAfterSeconds: number; message: string } | { blocked: false } {
+  const now = Date.now();
+  sweep(now);
+  const key = `throttle:${scope}:${getClientIp(request)}`;
+  const rec = buckets.get(key);
+
+  if (rec && rec.blockedUntil > now) {
+    const retryAfterSeconds = Math.ceil((rec.blockedUntil - now) / 1000);
+    return {
+      blocked: true,
+      retryAfterSeconds,
+      message: `Too many requests. Try again in ${Math.ceil(retryAfterSeconds / 60)} minute(s).`,
+    };
+  }
+
+  if (!rec || now - rec.firstAt > windowMs) {
+    buckets.set(key, { count: 1, firstAt: now, blockedUntil: 0 });
+    return { blocked: false };
+  }
+
+  rec.count += 1;
+  if (rec.count > max) {
+    rec.blockedUntil = now + BLOCK_MS;
+    return {
+      blocked: true,
+      retryAfterSeconds: Math.ceil(BLOCK_MS / 1000),
+      message: `Too many requests. Try again in ${Math.ceil(BLOCK_MS / 60000)} minute(s).`,
+    };
+  }
+  return { blocked: false };
+}
+
 export function recordFailure(request: Request, scope = "global"): void {
   const now = Date.now();
   const key = `${scope}:${getClientIp(request)}`;

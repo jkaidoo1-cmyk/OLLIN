@@ -25,12 +25,31 @@ export async function GET(request: NextRequest) {
     }
 
     if (quizId) {
-      // Single quiz
+      // Single quiz — only its creator or an admin may read the roster
+      // (names + scores); anyone can hit this URL by guessing quiz ids.
+      const { readServerQuizzes } = await import("@/lib/data");
+      const quiz = readServerQuizzes().find((q) => q.id === quizId);
+      const session2 = await getSessionUser(request);
+      const isCreator = !!session2 && ((quiz && session2.id === quiz.host_id) || session2.role === "admin");
+      if (!isCreator) {
+        return NextResponse.json(
+          { error: "Only the quiz creator or an admin can view attempts" },
+          { status: 403 }
+        );
+      }
       const quizAttempts = allAttempts.filter((a) => a.quiz_id === quizId);
       return NextResponse.json({ attempts: quizAttempts });
     }
 
-    // All attempts (no filter)
+    // All attempts — admin/creator overview (dashboard). Same rule as above:
+    // participants only get their own via ?mine=true.
+    const sessionAll = await getSessionUser(request);
+    if (!sessionAll || sessionAll.role !== "admin") {
+      return NextResponse.json(
+        { error: "Admin access required" },
+        { status: 403 }
+      );
+    }
     return NextResponse.json({ attempts: allAttempts });
   } catch (error) {
     return NextResponse.json(

@@ -479,7 +479,8 @@ export async function submitAttempt(
     marks_awarded?: number;
   }>,
   local?: boolean,
-  quizIdHint?: string | null
+  quizIdHint?: string | null,
+  meta?: { participant_name?: string | null; participant_email?: string | null; time_taken_seconds?: number | null }
 ): Promise<QuizAttempt> {
   // ── Server-side grading ─────────────────────────────────
   // Correctness and marks are computed HERE from the stored questions.
@@ -512,10 +513,11 @@ export async function submitAttempt(
       id: attemptId,
       quiz_id: quizIdHint || "",
       participant_id: null,
-      participant_name: "Local Student",
-      started_at: new Date(Date.now() - 600000).toISOString(),
+      participant_email: meta?.participant_email || null,
+      participant_name: meta?.participant_name || "Anonymous",
+      started_at: new Date(Date.now() - (meta?.time_taken_seconds || 600) * 1000).toISOString(),
       completed_at: new Date().toISOString(),
-      time_taken_seconds: 600,
+      time_taken_seconds: meta?.time_taken_seconds ?? 600,
       total_questions: total,
       correct_answers: correct,
       score_percentage: total > 0 ? Math.round((correct / total) * 100) : 0,

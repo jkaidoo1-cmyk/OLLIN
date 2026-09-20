@@ -87,6 +87,7 @@ export interface QuizAttempt {
   id: string;
   quiz_id: string;
   participant_id: string | null;
+  participant_email?: string | null;
   participant_name: string | null;
   started_at: string;
   completed_at: string | null;
