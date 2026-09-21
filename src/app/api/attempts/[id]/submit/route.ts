@@ -40,6 +40,30 @@ export async function POST(
             { status: 403 }
           );
         }
+
+        // ── Duplicate-submission guard ────────────────────────
+        // One completed attempt per logged-in participant per quiz. The
+        // submitter's claimed email is not trusted on its own — resolve the
+        // session server-side; a forged email still maps to the session.
+        const { getSessionUser } = await import("@/lib/session");
+        const session = await getSessionUser(request);
+        const claimedEmail = body.participant_email || null;
+        const guardEmail = session?.email || claimedEmail;
+        if (guardEmail) {
+          const { readServerAttempts } = await import("@/lib/data");
+          const already = readServerAttempts().find(
+            (a: any) =>
+              a.quiz_id === quizId &&
+              a.participant_email === guardEmail &&
+              a.status === "completed"
+          );
+          if (already) {
+            return NextResponse.json(
+              { error: "You have already taken this quiz.", attempt_id: already.id, duplicate: true },
+              { status: 409 }
+            );
+          }
+        }
       }
     }
 

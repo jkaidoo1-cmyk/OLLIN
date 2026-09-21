@@ -71,6 +71,57 @@ export default function CreateQuizPage() {
   const [generatedCode, setGeneratedCode] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
 
+  // Edit mode (?edit=<quizId>) — load an existing quiz and save in place
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editShareCode, setEditShareCode] = useState("");
+  const [editCreatedAt, setEditCreatedAt] = useState<string>("");
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState("");
+
+  // Edit mode: load the quiz (with answers — server checks host/admin) and
+  // prefill every field so saving writes back to the same quiz.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("edit");
+    if (!id) return;
+    setEditId(id);
+    setEditLoading(true);
+    (async () => {
+      try {
+        const headers: Record<string, string> = {};
+        if (isLocalMode()) headers["x-local-mode"] = "true";
+        const res = await fetch(`/api/quizzes/${encodeURIComponent(id)}?include=answers`, { headers });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Could not load this quiz for editing.");
+        const qz = data.quiz;
+        const qs: any[] = data.questions || [];
+        setEditShareCode(qz.share_code || "");
+        setEditCreatedAt(qz.created_at || "");
+        setQuizTitle(qz.title || "");
+        setTimeLimit(qz.time_limit_minutes || "");
+        setShuffleQuestions(qz.shuffle_questions ?? true);
+        setStartsAt(qz.starts_at ? new Date(qz.starts_at).toISOString().slice(0, 16) : "");
+        setEndsAt(qz.ends_at ? new Date(qz.ends_at).toISOString().slice(0, 16) : "");
+        setSelectedCourseId(qz.course_id || "");
+        setQuestions(
+          qs.map((q) => ({
+            type: q.question_type || q.type || "multiple_choice",
+            question: q.question_text || q.question || "",
+            options: q.options || undefined,
+            correctAnswer: String(q.correct_answer ?? ""),
+            explanation: q.explanation || "",
+            topic: q.topic || "",
+            difficulty: q.difficulty || "medium",
+          }))
+        );
+      } catch (e) {
+        setEditError(e instanceof Error ? e.message : "Could not load this quiz for editing.");
+      } finally {
+        setEditLoading(false);
+      }
+    })();
+  }, []);
+
   // Fetch courses (filtered by student's program)
   useEffect(() => {
     const fetchCourses = async () => {
@@ -207,7 +258,11 @@ export default function CreateQuizPage() {
   const handlePublish = async () => {
     setPublishing(true);
     try {
-      const shareCode = quizMode === "self" ? `SELF-${Date.now()}` : generateQuizCode();
+      const shareCode = editId
+        ? editShareCode
+        : quizMode === "self"
+        ? `SELF-${Date.now()}`
+        : generateQuizCode();
       // Attribute the quiz to the actually logged-in user (not a hard-coded id)
       let currentUserId = "";
       try {
@@ -217,7 +272,7 @@ export default function CreateQuizPage() {
 
       if (isLocalMode()) {
         const localQuiz: Quiz = {
-          id: `local-quiz-${Date.now()}`,
+          id: editId || `local-quiz-${Date.now()}`,
           host_id: currentUserId,
           title: quizTitle || materialTitle || "Untitled Quiz",
           description: null,
@@ -233,9 +288,9 @@ export default function CreateQuizPage() {
           status: "published",
           course_id: selectedCourseId || null,
           material_id: null,
-          created_at: new Date().toISOString(),
+          created_at: editCreatedAt || new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        };
+        } as Quiz;
         // Convert GeneratedQ[] to Question[] for storage
         const localQuestions = questions.map((q, idx) => ({
           id: `local-q-${Date.now()}-${idx}`,
@@ -253,8 +308,8 @@ export default function CreateQuizPage() {
         }));
         // Persist server-side (visible from any browser + admin panel) AND locally
         try {
-          const saveRes = await fetch("/api/quizzes", {
-            method: "POST",
+          const saveRes = await fetch(editId ? `/api/quizzes/${encodeURIComponent(editId)}` : "/api/quizzes", {
+            method: editId ? "PUT" : "POST",
             headers: { "Content-Type": "application/json", "x-local-mode": "true" },
             body: JSON.stringify({
               title: localQuiz.title,

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { existsSync, readFileSync, writeFileSync } from "fs";
+import { join } from "path";
 import {
   readLocalUsers,
   writeLocalUsers,
@@ -339,6 +341,37 @@ export async function DELETE(request: NextRequest) {
       }
       const filtered = users.filter((u: any) => u.id !== userId);
       writeLocalUsers(filtered);
+
+      // Clean up the deleted user's data so their attempts/notifications
+      // don't linger as orphans in leaderboards and the admin inbox.
+      try {
+        const { readServerAttempts, writeServerAttempts } = await import("@/lib/data");
+        const attempts = readServerAttempts().filter(
+          (a: any) => a.participant_id !== userId && a.participant_email !== target.email
+        );
+        writeServerAttempts(attempts);
+      } catch { /* non-fatal */ }
+      try {
+        const notifsPath = join(process.cwd(), ".ollin-notifications.json");
+        if (existsSync(notifsPath)) {
+          const notifs = JSON.parse(readFileSync(notifsPath, "utf-8"));
+          writeFileSync(
+            notifsPath,
+            JSON.stringify(notifs.filter((n: any) => n.user_id !== userId), null, 2)
+          );
+        }
+      } catch { /* non-fatal */ }
+      try {
+        const savedPath = join(process.cwd(), ".ollin-saved-quizzes.json");
+        if (existsSync(savedPath)) {
+          const saved = JSON.parse(readFileSync(savedPath, "utf-8"));
+          writeFileSync(
+            savedPath,
+            JSON.stringify(saved.filter((s: any) => s.user_id !== userId), null, 2)
+          );
+        }
+      } catch { /* non-fatal */ }
+
       const admin = await getSessionAdmin(request);
       await recordAdminAction(request, admin, "user.delete", "user", userId, `Deleted account ${target.email}`);
       return NextResponse.json({ success: true, message: "User deleted" });

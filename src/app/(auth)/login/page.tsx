@@ -13,6 +13,11 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [fpOpen, setFpOpen] = useState(false);
+  const [fpEmail, setFpEmail] = useState("");
+  const [fpSending, setFpSending] = useState(false);
+  const [fpDone, setFpDone] = useState(false);
+  const [fpError, setFpError] = useState("");
   const router = useRouter();
 
   // Redirected here after a dead session (clearStaleAdminSession).
@@ -128,6 +133,72 @@ export default function LoginPage() {
                 ) : "Log in"}
               </button>
             </form>
+
+            {/* Forgot password — requests land in the admin's inbox */}
+            <div className="mt-4">
+              {!fpOpen ? (
+                <button
+                  type="button"
+                  onClick={() => { setFpOpen(true); setFpEmail(email); }}
+                  className="text-sm text-[#666] hover:text-[#006633] underline"
+                >
+                  Forgot password?
+                </button>
+              ) : fpDone ? (
+                <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
+                  Request sent. Ask your admin for the new password.
+                </div>
+              ) : (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (fpSending) return;
+                    setFpSending(true);
+                    setFpError("");
+                    try {
+                      const res = await fetch("/api/auth/forgot-password", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ email: fpEmail }),
+                      });
+                      const data = await res.json().catch(() => ({}));
+                      if (!res.ok) setFpError(data.error || "Could not send. Try again.");
+                      else setFpDone(true);
+                    } catch {
+                      setFpError("Could not reach the server. Try again.");
+                    } finally {
+                      setFpSending(false);
+                    }
+                  }}
+                  className="bg-[#f8f8f8] border border-[#e0e0e0] rounded p-3"
+                >
+                  <p className="text-xs text-[#666] mb-2">
+                    Enter your account email — the admin will be notified to reset your password.
+                  </p>
+                  {fpError && <p className="text-xs text-red-600 mb-2">{fpError}</p>}
+                  <input
+                    type="email"
+                    value={fpEmail}
+                    onChange={(e) => setFpEmail(e.target.value)}
+                    required
+                    placeholder="you@university.edu"
+                    className="input-field mb-2"
+                  />
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={fpSending} className="btn-primary flex-1 py-2 text-sm">
+                      {fpSending ? "Sending…" : "Send request"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setFpOpen(false); setFpDone(false); setFpError(""); }}
+                      className="text-sm text-[#666] hover:text-[#333] px-3"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
 
 

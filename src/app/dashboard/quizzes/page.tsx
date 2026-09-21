@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizzes } from "@/lib/local";
 import { Quiz, Course } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
-import { Plus, Copy, CheckCircle, ExternalLink } from "lucide-react";
+import { Plus, Copy, CheckCircle, ExternalLink, Pencil } from "lucide-react";
 
 export default function MyQuizzesPage() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -170,6 +170,13 @@ export default function MyQuizzesPage() {
                       <ExternalLink className="w-3.5 h-3.5" />
                     </Link>
                   )}
+                  <Link
+                    href={`/dashboard/create?edit=${quiz.id}`}
+                    className="text-xs text-[#006633]"
+                    title="Edit quiz"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Link>
                 </div>
               </div>
             </div>

@@ -391,7 +391,30 @@ export default function QuizPage() {
                   <span className="text-[#666]">Passing score</span>
                   <span className="font-medium text-[#333]">{quiz!.passing_score}%</span>
                 </div>
+                {quiz!.starts_at && (
+                  <div className="flex justify-between">
+                    <span className="text-[#666]">Opens</span>
+                    <span className="font-medium text-[#333]">{new Date(quiz!.starts_at).toLocaleString()}</span>
+                  </div>
+                )}
+                {quiz!.ends_at && (
+                  <div className="flex justify-between">
+                    <span className="text-[#666]">Closes</span>
+                    <span className="font-medium text-[#333]">{new Date(quiz!.ends_at).toLocaleString()}</span>
+                  </div>
+                )}
               </div>
+
+              {quiz!.starts_at && Date.now() < new Date(quiz!.starts_at).getTime() && (
+                <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm text-amber-800 mb-4">
+                  This quiz is not open yet. It opens {new Date(quiz!.starts_at).toLocaleString()}.
+                </div>
+              )}
+              {quiz!.ends_at && Date.now() > new Date(quiz!.ends_at).getTime() && (
+                <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-700 mb-4">
+                  This quiz has closed. It closed {new Date(quiz!.ends_at).toLocaleString()}.
+                </div>
+              )}
 
               <div className="mb-4">
                 <label className="block text-sm font-medium text-[#333] mb-1.5">Your name</label>
@@ -411,7 +434,11 @@ export default function QuizPage() {
               <button
                 id="start-quiz-btn"
                 onClick={handleJoin}
-                disabled={!participantName.trim()}
+                disabled={
+                  !participantName.trim() ||
+                  !!(quiz!.starts_at && Date.now() < new Date(quiz!.starts_at).getTime()) ||
+                  !!(quiz!.ends_at && Date.now() > new Date(quiz!.ends_at).getTime())
+                }
                 className="btn-primary w-full min-h-[48px] text-[15px] transition-all duration-150 active:scale-[0.98] disabled:opacity-50"
               >
                 Start quiz

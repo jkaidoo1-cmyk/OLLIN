@@ -14,7 +14,15 @@ export const metadata: Metadata = {
     description: "Turn your study material into a quiz and share it in seconds.",
     type: "website",
   },
-  icons: { icon: "/favicon.ico" },
+  icons: { icon: "/favicon.ico", apple: "/icon-192.png" },
+  manifest: "/manifest.json",
+};
+
+export const viewport = {
+  themeColor: "#006633",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -31,6 +39,11 @@ export default function RootLayout({
             <div className="relative z-10 flex flex-col min-h-full">{children}</div>
           </ConfirmProvider>
         </ToastProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if ('serviceWorker' in navigator) window.addEventListener('load', function(){ navigator.serviceWorker.register('/sw.js').catch(function(){}); });`,
+          }}
+        />
       </body>
     </html>
   );

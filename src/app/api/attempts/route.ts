@@ -90,6 +90,24 @@ export async function POST(request: NextRequest) {
       if (session) participantEmail = session.email;
     } catch { /* guests stay anonymous */ }
 
+    // ── Duplicate-submission guard ──────────────────────────
+    // A logged-in student gets ONE completed attempt per quiz. Retakes would
+    // let them keep their best score (and spam the leaderboard).
+    if (participantEmail && status !== "in_progress") {
+      const already = readServerAttempts().find(
+        (a: any) =>
+          a.quiz_id === quiz_id &&
+          a.participant_email === participantEmail &&
+          a.status === "completed"
+      );
+      if (already) {
+        return NextResponse.json(
+          { error: "You have already taken this quiz.", attempt_id: already.id, duplicate: true },
+          { status: 409 }
+        );
+      }
+    }
+
     const attempt = {
       id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       quiz_id,

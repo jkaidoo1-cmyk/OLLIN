@@ -31,12 +31,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // The quiz edit page is the one dashboard route admins may use —
+    // it's how they edit quizzes from the admin Quizzes list.
+    const isEditPage = typeof window !== "undefined" && window.location.search.includes("edit=");
     const getUser = async () => {
       if (isLocalMode()) {
         const localUser = getLocalUser();
         if (localUser) {
           // Admins administrate — they don't use the student dashboard.
-          if (isAdmin()) {
+          // (Exception: the quiz edit page, reached from the admin panel.)
+          if (isAdmin() && !isEditPage) {
             router.replace("/admin");
             return;
           }
@@ -59,11 +63,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         router.push("/login");
         return;
       }
-      // Supabase admins also belong in the admin console.
+      // Supabase admins also belong in the admin console
+      // (except on the quiz edit page).
       try {
         const meRes = await fetch("/api/auth/me");
         const meData = await meRes.json();
-        if (meRes.ok && meData.user?.role === "admin") {
+        if (meRes.ok && meData.user?.role === "admin" && !isEditPage) {
           router.replace("/admin");
           return;
         }

@@ -9,7 +9,7 @@ import {
   syncSavedQuizzesFromServer,
   getLocalQuizzes,
 } from "@/lib/local";
-import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, ExternalLink } from "lucide-react";
+import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, ExternalLink, Pencil } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
 
 export default function AdminQuizzesPage() {
@@ -189,6 +189,14 @@ export default function AdminQuizzesPage() {
                       title="Open quiz"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                    <a
+                      href={`/dashboard/create?edit=${quiz.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="p-1.5 rounded hover:bg-green-50 text-[#999] hover:text-green-600 transition-colors"
+                      title="Edit quiz"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
                     </a>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDelete(quiz); }}
