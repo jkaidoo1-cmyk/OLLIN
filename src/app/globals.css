@@ -67,6 +67,14 @@ body {
   a, button { touch-action: manipulation; }
 }
 
+/* Smooth scrolling for long quiz pages */
+html { scroll-behavior: smooth; }
+
+/* Prevent iOS zoom on focus for inputs that need it (16px+ font already set) */
+@media (max-width: 639px) {
+  input, select, textarea { font-size: 16px !important; }
+}
+
 a { text-decoration: none; }
 a:hover { text-decoration: underline; }
 

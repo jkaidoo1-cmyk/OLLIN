@@ -410,7 +410,7 @@ export default function QuizPage() {
                 id="start-quiz-btn"
                 onClick={handleJoin}
                 disabled={!participantName.trim()}
-                className="btn-primary w-full py-2.5"
+                className="btn-primary w-full min-h-[48px] text-[15px] transition-all duration-150 active:scale-[0.98] disabled:opacity-50"
               >
                 Start quiz
               </button>
@@ -526,13 +526,13 @@ export default function QuizPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="bg-[#006633] text-white sticky top-0 z-50">
+      <header className="bg-[#006633] text-white sticky top-0 z-50 shadow-sm">
         <div className="max-w-3xl mx-auto px-4 h-12 flex items-center justify-between">
           <span className="text-sm font-medium truncate">{quiz!.title}</span>
           <div className="flex items-center gap-3">
             {timeLeft !== null && (
               <div className="flex items-center gap-1.5 text-sm">
-                <Clock className="w-4 h-4" />
+                <Clock className={`w-4 h-4 ${timeLeft < 60 ? "animate-pulse" : ""}`} />
                 <span className={timeLeft < 60 ? "text-red-300 font-bold" : ""}>
                   {formatTime(timeLeft)}
                 </span>
@@ -543,35 +543,58 @@ export default function QuizPage() {
             </span>
           </div>
         </div>
+        {/* Sticky progress bar — fills as questions are answered, always visible */}
+        <div className="max-w-3xl mx-auto px-4 pb-2">
+          <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-white rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${questions.length ? (answeredCount / questions.length) * 100 : 0}%` }}
+            />
+          </div>
+        </div>
       </header>
 
       <main className="flex-1 px-4 py-6">
         <div className="max-w-2xl mx-auto space-y-4">
           {questions.map((q, idx) => (
-            <div key={q.id} className="bg-white border border-[#e0e0e0] rounded-lg p-5">
+            <div key={q.id} className="bg-white border border-[#e0e0e0] rounded-lg p-4 sm:p-5">
               <div className="flex items-start gap-3 mb-3">
                 <span className="w-6 h-6 rounded-full bg-[#006633] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
                   {idx + 1}
                 </span>
-                <p className="text-sm font-medium text-[#333]">{q.question_text}</p>
+                <p className="text-[15px] sm:text-sm font-medium text-[#333] leading-snug">{q.question_text}</p>
               </div>
 
               {q.options ? (
-                <div className="space-y-2 ml-9">
+                <div className="space-y-2.5 sm:ml-9">
                   {q.options.map((opt, optIdx) => {
                     const isSelected = answers[q.id] === String(optIdx);
                     return (
                       <button
                         key={optIdx}
                         onClick={() => setAnswers((prev) => ({ ...prev, [q.id]: String(optIdx) }))}
-                        className={`w-full text-left px-4 py-2.5 rounded border text-sm transition-colors ${
+                        aria-pressed={isSelected}
+                        className={`w-full min-h-[44px] text-left px-4 py-2.5 rounded-lg border text-[15px] sm:text-sm flex items-center justify-between gap-2 transition-all duration-150 active:scale-[0.98] ${
                           isSelected
-                            ? "border-[#006633] bg-green-50 text-[#006633] font-medium"
+                            ? "border-[#006633] bg-green-50 text-[#006633] font-medium shadow-sm"
                             : "border-[#e0e0e0] bg-white text-[#333] hover:border-[#ccc]"
                         }`}
                       >
-                        <span className="font-medium mr-2">{String.fromCharCode(65 + optIdx)}.</span>
-                        {opt}
+                        <span>
+                          <span className="font-medium mr-2">{String.fromCharCode(65 + optIdx)}.</span>
+                          {opt}
+                        </span>
+                        <span
+                          className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-all duration-150 ${
+                            isSelected ? "bg-[#006633] border-[#006633]" : "border-[#ccc]"
+                          }`}
+                        >
+                          {isSelected && (
+                            <svg viewBox="0 0 16 16" className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M3 8.5 6.5 12 13 4.5" />
+                            </svg>
+                          )}
+                        </span>
                       </button>
                     );
                   })}
@@ -579,16 +602,17 @@ export default function QuizPage() {
               ) : (
                 // True/false questions have no options array — render the two
                 // canonical answers (stored as "true"/"false").
-                <div className="flex gap-2 ml-9">
+                <div className="flex gap-2.5 sm:ml-9">
                   {["true", "false"].map((val) => {
                     const isSelected = answers[q.id] === val;
                     return (
                       <button
                         key={val}
                         onClick={() => setAnswers((prev) => ({ ...prev, [q.id]: val }))}
-                        className={`px-6 py-2.5 rounded border text-sm transition-colors ${
+                        aria-pressed={isSelected}
+                        className={`flex-1 sm:flex-none min-h-[44px] px-6 rounded-lg border text-[15px] sm:text-sm transition-all duration-150 active:scale-[0.98] ${
                           isSelected
-                            ? "border-[#006633] bg-green-50 text-[#006633] font-medium"
+                            ? "border-[#006633] bg-green-50 text-[#006633] font-medium shadow-sm"
                             : "border-[#e0e0e0] bg-white text-[#333] hover:border-[#ccc]"
                         }`}
                       >
@@ -601,11 +625,11 @@ export default function QuizPage() {
             </div>
           ))}
 
-          <div className="sticky bottom-4 flex justify-center">
+          <div className="sticky bottom-0 -mx-4 sm:mx-0 px-4 sm:px-0 pt-3 pb-[calc(0.75rem_+_env(safe-area-inset-bottom))] sm:pb-3 bg-white/95 backdrop-blur border-t border-[#e0e0e0] flex justify-center">
             <button
               onClick={handleSubmit}
               disabled={submitting || answeredCount === 0}
-              className="btn-primary flex items-center gap-2 text-sm px-8 py-3 shadow-lg"
+              className="btn-primary w-full sm:w-auto gap-2 text-[15px] sm:text-sm px-8 min-h-[48px] shadow-lg disabled:opacity-50 transition-all duration-150 active:scale-[0.98]"
             >
               <Send className="w-4 h-4" />
               {submitting ? "Submitting..." : `Submit (${answeredCount}/${questions.length})`}
