@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, LifeBuoy, MessageCircle, Send } from "lucide-react";
 
@@ -9,6 +9,13 @@ export default function SupportPage() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
+  // ?from=dashboard → students came from the dashboard menu, send them back there
+  const [back, setBack] = useState<{ href: string; label: string }>({ href: "/", label: "Back to OLLIN" });
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("from") === "dashboard") {
+      setBack({ href: "/dashboard", label: "Back to dashboard" });
+    }
+  }, []);
 
   const set = (k: keyof typeof form) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -45,8 +52,8 @@ export default function SupportPage() {
   return (
     <div className="min-h-screen bg-[#f7f7f5]">
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-[#666] hover:text-[#333] mb-6 no-underline">
-          <ArrowLeft className="w-4 h-4" /> Back to OLLIN
+        <Link href={back.href} className="inline-flex items-center gap-1.5 text-sm text-[#666] hover:text-[#333] mb-6 no-underline">
+          <ArrowLeft className="w-4 h-4" /> {back.label}
         </Link>
 
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-6 mb-5">

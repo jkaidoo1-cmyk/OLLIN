@@ -8,7 +8,7 @@ import { isLocalMode, getLocalUser, disableLocalMode, getUnreadCount } from "@/l
 import { isAdmin } from "@/lib/admin";
 import type { LocalUser } from "@/lib/local";
 import { useEffect, useState, useRef } from "react";
-import { LogOut, Bell, ShieldCheck } from "lucide-react";
+import { LogOut, Bell, ShieldCheck, LifeBuoy } from "lucide-react";
 
 const pageLabels: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -210,6 +210,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       className="block px-4 py-2 text-sm text-[#333] hover:bg-[#f8f8f8] no-underline"
                     >
                       My attempts
+                    </Link>
+                    <Link
+                      href="/support?from=dashboard"
+                      onClick={() => setProfileOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-[#333] hover:bg-[#f8f8f8] no-underline"
+                    >
+                      <LifeBuoy className="w-4 h-4 text-[#006633]" />
+                      Help &amp; support
                     </Link>
                     {local && (
                       <div className="border-t border-[#e0e0e0] mt-1 pt-2 px-4 pb-1">
