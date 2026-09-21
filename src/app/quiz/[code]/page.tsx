@@ -478,7 +478,7 @@ export default function QuizPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-[#333] mb-2">{item.question.question_text}</p>
 
-                      {item.question.options && (
+                      {item.question.options ? (
                         <div className="space-y-1 mb-2">
                           {item.question.options.map((opt, optIdx) => {
                             const isSelected = item.selected === String(optIdx);
@@ -500,6 +500,18 @@ export default function QuizPage() {
                               </div>
                             );
                           })}
+                        </div>
+                      ) : (
+                        // True/false questions have no options array — show the
+                        // picked and correct answers as text.
+                        <div className="space-y-1 mb-2">
+                          {[["Your answer", item.selected === "true" ? "True" : item.selected === "false" ? "False" : "—", !!item.isCorrect], ["Correct answer", item.question.correct_answer === "true" ? "True" : item.question.correct_answer === "false" ? "False" : String(item.question.correct_answer), true]].map(([label, value, good]) => (
+                            <div key={label as string} className={`text-xs px-3 py-1.5 rounded border ${
+                              good ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-700"
+                            }`}>
+                              {label}: <span className="font-medium">{value}</span>
+                            </div>
+                          ))}
                         </div>
                       )}
 
@@ -641,9 +653,4 @@ export default function QuizPage() {
       </main>
     </div>
   );
-}
-
-function selectedIsCorrect(q: Question, selected: string | undefined): boolean {
-  if (!selected) return false;
-  return selected === q.correct_answer;
 }
