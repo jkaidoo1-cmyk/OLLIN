@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, BookOpen, CheckCircle, BarChart3 } from "lucide-react";
+import { Users, BookOpen, CheckCircle, BarChart3, LifeBuoy } from "lucide-react";
 
 export default function AdminOverviewPage() {
   const [stats, setStats] = useState({ totalUsers: 0, totalQuizzes: 0, totalAttempts: 0, publishedQuizzes: 0 });
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
   const [recentQuizzes, setRecentQuizzes] = useState<any[]>([]);
+  const [supportMsgs, setSupportMsgs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
@@ -67,6 +68,17 @@ export default function AdminOverviewPage() {
       });
       setRecentUsers(users.slice(0, 5));
       setRecentQuizzes(quizzes.slice(0, 5));
+
+      // Support requests — system notifications addressed to admins
+      try {
+        const supRes = await fetch("/api/notifications");
+        if (supRes.ok) {
+          const supData = await supRes.json();
+          setSupportMsgs(
+            (supData.notifications || []).filter((n: any) => n.title?.startsWith("Support:"))
+          );
+        }
+      } catch { /* ignore */ }
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
@@ -134,6 +146,40 @@ export default function AdminOverviewPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Support requests */}
+      <div className="bg-white border border-[#e0e0e0] rounded-lg mt-6">
+        <div className="px-4 py-3 border-b border-[#e0e0e0] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <LifeBuoy className="w-4 h-4 text-green-600" />
+            <h2 className="text-sm font-semibold text-[#333]">Support requests</h2>
+          </div>
+          {supportMsgs.some((n: any) => !n.read) && (
+            <span className="badge badge-warning">{supportMsgs.filter((n: any) => !n.read).length} new</span>
+          )}
+        </div>
+        {supportMsgs.length === 0 ? (
+          <div className="px-4 py-6 text-sm text-[#999]">No support messages yet.</div>
+        ) : (
+          <div className="divide-y divide-[#e0e0e0]">
+            {supportMsgs.slice(0, 6).map((n: any) => (
+              <div key={n.id} className={`px-4 py-3 ${n.read ? "" : "bg-green-50/40"}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className={`text-sm ${n.read ? "text-[#333]" : "font-semibold text-[#333]"}`}>
+                      {n.title.replace(/^Support:\s*/, "")}
+                    </p>
+                    <p className="text-sm text-[#666] whitespace-pre-line mt-0.5">{n.message}</p>
+                    <p className="text-xs text-[#999] mt-1">
+                      {new Date(n.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
