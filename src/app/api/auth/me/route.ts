@@ -9,7 +9,21 @@ export async function GET() {
       try {
         const { getSessionUserFromCookieStore } = await import("@/lib/session");
         const user = await getSessionUserFromCookieStore();
-        if (user) return NextResponse.json({ user: { ...user, full_name: user.email }, local: true });
+        if (user) {
+          // Enrich with the stored profile fields (name, program, year) —
+          // the session only carries id/email/role.
+          const { readLocalUsers } = await import("@/lib/local-users-store");
+          const stored = readLocalUsers().find((u) => u.id === user.id);
+          return NextResponse.json({
+            user: {
+              ...user,
+              full_name: stored?.full_name || user.email.split("@")[0],
+              program_id: stored?.program_id ?? null,
+              current_year: stored?.current_year ?? 1,
+            },
+            local: true,
+          });
+        }
       } catch { /* ignore */ }
       return NextResponse.json({ user: null }, { status: 401 });
     }
