@@ -659,6 +659,7 @@ export default function CreateQuizPage() {
               />
             </div>
 
+            {sourceMode === "material" && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-[#666] mb-1">Number of questions</label>
@@ -687,8 +688,27 @@ export default function CreateQuizPage() {
                 />
               </div>
             </div>
+            )}
 
-            {/* Question types */}
+            {sourceMode === "exam" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-xs font-medium text-[#666] mb-1">Time limit (min)</label>
+                  <input
+                    type="number"
+                    value={timeLimit}
+                    onChange={(e) => setTimeLimit(e.target.value ? Number(e.target.value) : "")}
+                    placeholder="None"
+                    min={1}
+                    max={180}
+                    className="input-field text-sm"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Question types — only for generation; exam questions keep their original format */}
+            {sourceMode === "material" && (
             <div>
               <label className="block text-xs font-medium text-[#666] mb-2">Question types</label>
               <div className="flex flex-wrap gap-2">
@@ -719,8 +739,10 @@ export default function CreateQuizPage() {
                 ))}
               </div>
             </div>
+            )}
 
             {/* Custom instructions */}
+            {sourceMode === "material" && (
             <div>
               <label className="block text-xs font-medium text-[#666] mb-1">Custom instructions (optional)</label>
               <textarea
@@ -731,6 +753,12 @@ export default function CreateQuizPage() {
                 className="input-field text-sm resize-y"
               />
             </div>
+            )}
+            {sourceMode === "exam" && (
+              <p className="text-xs text-[#666] bg-[#f8f8f8] border border-[#e0e0e0] rounded p-3">
+                Questions come exactly as they appear on your exam paper — type, wording, and answers are preserved, so there's nothing to configure here.
+              </p>
+            )}
             <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-[#333]">
               <input
                 type="checkbox"
