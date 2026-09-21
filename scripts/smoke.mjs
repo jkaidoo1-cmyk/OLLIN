@@ -20,6 +20,8 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "OllinAdmin1598";
 let passed = 0;
 let failed = 0;
 const failures = [];
+const createdQuizIds = [];
+const createdUserEmails = [];
 
 function ok(name, cond, extra = "") {
   if (cond) {
@@ -32,10 +34,10 @@ function ok(name, cond, extra = "") {
   }
 }
 
-async function api(path, { method = "GET", body, cookie } = {}) {
+async function api(path, { method = "GET", body, cookie, local } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (cookie) headers.Cookie = cookie;
-  if (body) headers["x-local-mode"] = "true";
+  if (body || local) headers["x-local-mode"] = "true";
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers,
@@ -147,6 +149,7 @@ async function run() {
   });
   ok("quiz saved via API", created.status === 200, JSON.stringify(created.json).slice(0, 120));
   const quizId = created.json?.quiz?.id || created.json?.quiz?.quiz?.id || quiz.share_code;
+  createdQuizIds.push(quizId);
   ok("quiz id returned", !!quizId);
 
   // 5. Answer-leak protection
@@ -196,6 +199,7 @@ async function run() {
     body: { title: closedQuiz.title, quiz: closedQuiz, questions: closedQ },
   });
   const closedId = closedCreated.json?.quiz?.id || closedCreated.json?.quiz?.quiz?.id || closedQuiz.share_code;
+  createdQuizIds.push(closedId);
   const closedSubmit = await api(`/api/attempts/att-${Date.now()}-closed/submit`, {
     method: "POST",
     body: {
@@ -242,6 +246,9 @@ async function run() {
   ok("duplicate email skipped", bulk.json?.skipped?.some((s) => s.reason?.includes("exists")), JSON.stringify(bulk.json?.skipped));
   ok("invalid email skipped", bulk.json?.skipped?.some((s) => s.reason?.includes("Invalid")), JSON.stringify(bulk.json?.skipped));
   ok("valid row created with temp password", bulk.json?.created?.[0]?.temp_password?.length >= 8, JSON.stringify(bulk.json?.created));
+  for (const u of bulk.json?.created || []) {
+    if (u.email) createdUserEmails.push(u.email);
+  }
 
   const anonBulk = await api("/api/admin/users/bulk", { method: "POST", body: { csv: "a@b.c,Test,student" } });
   ok("anonymous bulk import blocked (403)", anonBulk.status === 403, `got ${anonBulk.status}`);
@@ -265,6 +272,25 @@ async function run() {
     body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
   });
   ok("re-login after logout works", reLogin.status === 200, `got ${reLogin.status}`);
+
+  // 14. Cleanup — delete everything this run created
+  console.log("\nCleanup:");
+  const cleanupCookie = extractCookie(reLogin.setCookie) || adminCookie;
+  let cleaned = 0;
+  for (const id of createdQuizIds) {
+    const del = await api(`/api/quizzes/${id}`, { method: "DELETE", cookie: cleanupCookie, local: true });
+    if (del.status === 200 || del.status === 204) cleaned++;
+  }
+  for (const email of createdUserEmails) {
+    const list = await api("/api/admin/users", { cookie: cleanupCookie, local: true });
+    const match = (list.json?.users || list.json || []).find?.((u) => u.email === email);
+    const uid = match?.id;
+    const del = uid
+      ? await api(`/api/admin/users?id=${encodeURIComponent(uid)}`, { method: "DELETE", cookie: cleanupCookie, local: true })
+      : { status: 404 };
+    if (del.status === 200 || del.status === 204) cleaned++;
+  }
+  console.log(`  deleted ${cleaned}/${createdQuizIds.length + createdUserEmails.length} test artifacts`);
 
   // ─────────────────────────────────────────────────────────────
   console.log(`\n════════════════════════════════════`);
