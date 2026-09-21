@@ -221,11 +221,15 @@ export async function POST(request: NextRequest) {
 
     if (action === "toggle") {
       const key = config.api_keys.find((k: any) => k.id === body.id);
-      if (key) key.enabled = body.enabled;
+      if (key) {
+        // Coerce/absent-proof: an omitted "enabled" flips the current state
+        // instead of writing undefined (which disables the key).
+        key.enabled = body.enabled === undefined ? !key.enabled : !!body.enabled;
+      }
       config.updated_at = new Date().toISOString();
       try { writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch { /* read-only fs */ }
-      await recordAdminAction(request, admin, "key.toggle", "api_key", body.id, `${body.enabled ? "Enabled" : "Disabled"} key`);
-      return NextResponse.json({ success: true });
+      await recordAdminAction(request, admin, "key.toggle", "api_key", body.id, `${key?.enabled ? "Enabled" : "Disabled"} key`);
+      return NextResponse.json({ success: true, enabled: key?.enabled });
     }
 
     if (action === "clear_error") {

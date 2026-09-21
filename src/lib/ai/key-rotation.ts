@@ -102,7 +102,9 @@ function getFileKeys(): ApiKeyEntry[] {
     if (!existsSync(configPath)) return [];
     const raw = JSON.parse(readFileSync(configPath, "utf-8"));
     if (raw.api_keys && Array.isArray(raw.api_keys)) {
-      return raw.api_keys;
+      // Normalize: a missing/undefined "enabled" must mean ENABLED (matching
+      // the Supabase path), never disabled-by-accident.
+      return raw.api_keys.map((k: any) => ({ ...k, enabled: k.enabled !== false }));
     }
   } catch { /* ignore */ }
   return [];

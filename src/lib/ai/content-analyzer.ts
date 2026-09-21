@@ -311,7 +311,7 @@ async function callGroqAPI(
 
   // Tighter output budget: ~55 tokens per question covers question + options
   // + short explanation at the slimmed-down schema.
-  const maxTok = Math.min(4096, 320 + questionCount * 130);
+  const maxTok = Math.min(4096, Math.max(1800, 320 + questionCount * 130));
   const response = await fetch(GROQ_API_URL, {
     method: "POST",
     headers: {
@@ -365,7 +365,9 @@ async function callGeminiAPI(
 
   // Gemini uses OpenAI-compatible endpoint — exam papers need more room for
   // the full question list, so allow a larger budget in extraction mode.
-  const maxTok2 = mode === "exam" ? 8192 : Math.min(4096, 256 + questionCount * 300);
+  // Small counts need a generous floor: the analysis JSON wrapper alone is
+  // ~700 tokens, and truncation mid-string breaks JSON parsing entirely.
+  const maxTok2 = mode === "exam" ? 8192 : Math.min(4096, Math.max(1800, 256 + questionCount * 300));
   const response = await fetch(GEMINI_API_URL, {
     method: "POST",
     headers: {
