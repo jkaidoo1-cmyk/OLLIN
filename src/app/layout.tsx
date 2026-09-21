@@ -4,14 +4,14 @@ import PatternBackground from "@/components/PatternBackground";
 import { ToastProvider, ConfirmProvider } from "@/components/ui/toast";
 
 export const metadata: Metadata = {
-  title: "OLLIN – AI-Powered Quiz Platform",
+  title: "OLLIN – Quiz Platform",
   description:
-    "Upload your learning materials, let AI generate targeted questions, host quizzes, and track performance. Built for students, by students.",
-  keywords: ["quiz", "AI", "learning", "education", "study", "flashcards"],
+    "Create, share, and take quizzes built from your course materials. Track performance across your courses — built for students, by students.",
+  keywords: ["quiz", "learning", "education", "study", "flashcards"],
   authors: [{ name: "OLLIN" }],
   openGraph: {
-    title: "OLLIN – AI-Powered Quiz Platform",
-    description: "Turn any study material into an intelligent quiz in seconds.",
+    title: "OLLIN – Quiz Platform",
+    description: "Turn your study material into a quiz and share it in seconds.",
     type: "website",
   },
   icons: { icon: "/favicon.ico" },
