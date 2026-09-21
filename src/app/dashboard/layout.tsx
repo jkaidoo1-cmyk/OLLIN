@@ -8,7 +8,7 @@ import { isLocalMode, getLocalUser, disableLocalMode, getUnreadCount } from "@/l
 import { isAdmin } from "@/lib/admin";
 import type { LocalUser } from "@/lib/local";
 import { useEffect, useState, useRef } from "react";
-import { LogOut, Bell, ShieldCheck, LifeBuoy } from "lucide-react";
+import { LogOut, Bell, LifeBuoy } from "lucide-react";
 
 const pageLabels: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -241,18 +241,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       </div>
                     )}
                     <div className="border-t border-[#e0e0e0] mt-1 pt-1">
-                      <button
-                        onClick={async () => {
-                          setProfileOpen(false);
-                          // Revoke every session for this account, then log out here too.
-                          try { await fetch("/api/auth/sessions", { method: "POST" }); } catch { /* ignore */ }
-                          handleLogout();
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-[#333] hover:bg-[#f8f8f8] flex items-center gap-2"
-                      >
-                        <ShieldCheck className="w-4 h-4" />
-                        Log out everywhere
-                      </button>
                       <button
                         onClick={() => { setProfileOpen(false); handleLogout(); }}
                         className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
