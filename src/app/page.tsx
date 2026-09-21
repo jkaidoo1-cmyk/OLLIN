@@ -105,8 +105,7 @@ export default function Home() {
               <div>
                 <h4 className="text-sm font-semibold text-white mb-3">Support</h4>
                 <ul className="space-y-2 text-sm text-white/70">
-                  <li><Link href="/support" className="hover:text-white transition-colors">Help desk</Link></li>
-                  <li><Link href="/support" className="hover:text-white transition-colors">Contact admin</Link></li>
+                  <li><Link href="/support" className="hover:text-white transition-colors">Help &amp; support</Link></li>
                 </ul>
               </div>
             </div>
