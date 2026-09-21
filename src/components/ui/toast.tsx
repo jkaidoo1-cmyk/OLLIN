@@ -234,11 +234,7 @@ function ConfirmProviderInner({ children }: { children: React.ReactNode }) {
               <button
                 onClick={() => settle(true)}
                 autoFocus
-                className={`px-4 py-2 text-xs rounded min-h-[36px] border transition-colors ${
-                  danger
-                    ? "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
-                    : "bg-[#006633] border-[#006633] text-white hover:bg-[#005528]"
-                }`}
+                className="px-4 py-2 text-xs rounded min-h-[36px] bg-[#006633] text-white hover:bg-[#005528] transition-colors"
               >
                 {state.confirmLabel || (danger ? "Delete" : "Confirm")}
               </button>
