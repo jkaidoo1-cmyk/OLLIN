@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ShieldCheck, UserPlus, UserMinus, BookOpen, GraduationCap, KeyRound, RefreshCcw, Upload } from "lucide-react";
+import { ShieldCheck, UserPlus, UserMinus, BookOpen, GraduationCap, KeyRound, RefreshCcw, Upload, Trash2, FileText } from "lucide-react";
 
 interface AuditEvent {
   id: string;
@@ -28,6 +28,8 @@ const actionIcons: Record<string, typeof ShieldCheck> = {
   "key.remove": KeyRound,
   "key.toggle": KeyRound,
   "key.clear_error": KeyRound,
+  "audit.clear": FileText,
+  "audit.delete": FileText,
 };
 
 const actionColors: Record<string, string> = {
@@ -42,8 +44,10 @@ const actionColors: Record<string, string> = {
 export default function AdminActivityPage() {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null); // id | "all" | null
+  const [error, setError] = useState("");
 
-  useEffect(() => {
+  const loadEvents = () =>
     fetch("/api/admin/audit")
       .then((r) => r.json())
       .then((d) => {
@@ -51,7 +55,42 @@ export default function AdminActivityPage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
+
+  useEffect(() => {
+    loadEvents();
   }, []);
+
+  const deleteEvent = async (id: string) => {
+    if (!confirm("Delete this activity entry?")) return;
+    setDeleting(id);
+    setError("");
+    try {
+      const res = await fetch(`/api/admin/audit?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Delete failed");
+      setEvents(data.events || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const clearAll = async () => {
+    if (!confirm("Clear the ENTIRE activity log? This cannot be undone.")) return;
+    setDeleting("all");
+    setError("");
+    try {
+      const res = await fetch("/api/admin/audit?all=true", { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Clear failed");
+      setEvents(data.events || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Clear failed");
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   const formatAction = (action: string) =>
     action
@@ -61,12 +100,30 @@ export default function AdminActivityPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-[#333]">Activity</h1>
-        <p className="text-xs text-[#999] mt-0.5">
-          Record of every administrative change made on the platform
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-[#333]">Activity</h1>
+          <p className="text-xs text-[#999] mt-0.5">
+            Record of every administrative change made on the platform
+          </p>
+        </div>
+        {events.length > 0 && (
+          <button
+            onClick={clearAll}
+            disabled={deleting !== null}
+            className="text-xs px-3 py-2 border border-red-200 text-red-600 rounded hover:bg-red-50 flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            {deleting === "all" ? "Clearing…" : "Clear all"}
+          </button>
+        )}
       </div>
+
+      {error && (
+        <div className="mb-4 text-xs px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded">
+          {error}
+        </div>
+      )}
 
       {loading ? (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
@@ -102,6 +159,14 @@ export default function AdminActivityPage() {
                       {ev.actor_email || "system"} · {new Date(ev.created_at || ev.at || "").toLocaleString()}
                     </p>
                   </div>
+                  <button
+                    onClick={() => deleteEvent(ev.id)}
+                    disabled={deleting !== null}
+                    title="Delete this entry"
+                    className="p-1.5 rounded text-[#bbb] hover:text-red-600 hover:bg-red-50 flex-shrink-0 disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               );
             })}

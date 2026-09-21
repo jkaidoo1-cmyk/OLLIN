@@ -62,6 +62,7 @@ export default function AdminUsersPage() {
   const [showImport, setShowImport] = useState(false);
   const [csvText, setCsvText] = useState("");
   const [importing, setImporting] = useState(false);
+  const [csvFileName, setCsvFileName] = useState("");
   const [importResult, setImportResult] = useState<{ created: Array<{ email: string; temp_password?: string }>; skipped: Array<{ email: string; reason: string }> } | null>(null);
 
   const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
@@ -629,13 +630,47 @@ export default function AdminUsersPage() {
               <p className="text-xs text-[#666]">
                 One account per line. Columns: <span className="font-mono">email, name, role, program, year, password</span> — only email is required. Program accepts a code (e.g. <span className="font-mono">BSc CS</span>). Passwords are generated when omitted. Existing accounts are skipped.
               </p>
-              <textarea
-                value={csvText}
-                onChange={(e) => setCsvText(e.target.value)}
-                placeholder={"j.kusi@univ.edu,Kwame Kusi,student,BSc CS,2\na.mensah@univ.edu,Abena Mensah,student,BSc CS,2"}
-                rows={7}
-                className="input-field text-xs font-mono"
-              />
+              <label className="block">
+                <span className="text-xs font-medium text-[#333] block mb-1.5">Upload a .csv file</span>
+                <input
+                  type="file"
+                  accept=".csv,text/csv,text/plain"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > 1024 * 1024) {
+                      setSaveError("CSV file is too large (max 1 MB)");
+                      return;
+                    }
+                    try {
+                      const text = await file.text();
+                      setCsvText(text);
+                      setCsvFileName(file.name);
+                      setImportResult(null);
+                      setSaveError("");
+                    } catch {
+                      setSaveError("Could not read the file");
+                    }
+                  }}
+                  disabled={importing}
+                  className="input-field text-xs file:mr-3 file:px-3 file:py-1.5 file:rounded file:border-0 file:bg-[#f0fdf4] file:text-[#006633] file:text-xs file:font-medium file:cursor-pointer"
+                />
+              </label>
+              {csvFileName && (
+                <p className="text-xs text-green-700 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5" /> Loaded: {csvFileName} ({csvText.split(/\r?\n/).filter((l) => l.trim()).length} rows) — review below, then click Import.
+                </p>
+              )}
+              <details className="text-xs">
+                <summary className="text-[#666] cursor-pointer select-none">Or paste CSV text instead</summary>
+                <textarea
+                  value={csvText}
+                  onChange={(e) => { setCsvText(e.target.value); setCsvFileName(""); }}
+                  placeholder={"j.kusi@univ.edu,Kwame Kusi,student,BSc CS,2\na.mensah@univ.edu,Abena Mensah,student,BSc CS,2"}
+                  rows={7}
+                  className="input-field text-xs font-mono mt-2"
+                />
+              </details>
               <div className="flex items-center gap-2 justify-end">
                 <button onClick={() => setShowImport(false)} className="px-3 py-2 text-xs text-[#666] hover:text-[#333]" disabled={importing}>
                   Cancel
