@@ -189,59 +189,55 @@ function ConfirmProviderInner({ children }: { children: React.ReactNode }) {
   });
 
   const danger = state?.tone === "danger";
-  const HeaderIcon = danger ? AlertTriangle : Info;
 
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
       {state && (
         <div
-          className="fixed inset-0 z-[90] bg-black/40 flex items-center justify-center p-4 animate-[fade-in_.15s_ease-out]"
+          className="fixed inset-0 z-[90] bg-black/30 flex items-center justify-center p-4 animate-[fade-in_.15s_ease-out]"
           onClick={() => settle(false)}
         >
           <div
             role="alertdialog"
             aria-modal="true"
-            className="bg-white rounded-lg shadow-xl border border-[#e0e0e0] w-full max-w-sm animate-[dialog-in_.18s_ease-out]"
+            className="bg-white rounded-lg shadow-2xl w-full max-w-sm p-6 animate-[dialog-in_.18s_ease-out]"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header row — matches the app's modal pattern (CSV import, forms) */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-[#e0e0e0]">
-              <h2 className="text-sm font-bold text-[#333] flex items-center gap-2">
-                <HeaderIcon
+            {/* Icon chip + text — same chip language as the Activity list */}
+            <div className="flex items-start gap-3">
+              <div
+                className={`w-9 h-9 rounded flex items-center justify-center flex-shrink-0 ${
+                  danger ? "bg-red-50" : "bg-[#e6f0e8]"
+                }`}
+              >
+                <AlertTriangle
                   className={`w-4 h-4 ${danger ? "text-red-500" : "text-[#006633]"}`}
                 />
-                {state.title}
-              </h2>
-              <button
-                onClick={() => settle(false)}
-                className="p-1 hover:bg-[#f0f0f0] rounded"
-                aria-label="Close"
-              >
-                <X className="w-4 h-4 text-[#666]" />
-              </button>
+              </div>
+              <div className="flex-1 min-w-0 pt-0.5">
+                <h2 className="text-sm font-semibold text-[#333] leading-snug">{state.title}</h2>
+                {state.body && (
+                  <p className="text-xs text-[#666] mt-1.5 leading-relaxed">{state.body}</p>
+                )}
+              </div>
             </div>
 
-            {/* Body */}
-            {state.body && (
-              <div className="px-5 py-4">
-                <p className="text-xs text-[#666] leading-relaxed">{state.body}</p>
-              </div>
-            )}
-
-            {/* Footer actions — same button language as the rest of the app */}
-            <div className="flex justify-end gap-2 px-5 py-3 border-t border-[#e0e0e0]">
+            {/* Quiet cancel + tinted action button (no heavy borders) */}
+            <div className="flex justify-end gap-1.5 mt-5">
               <button
                 onClick={() => settle(false)}
-                className="px-3.5 py-2 text-xs text-[#666] hover:text-[#333] border border-[#e0e0e0] rounded hover:bg-[#f8f8f8] min-h-[36px] transition-colors"
+                className="px-3.5 py-2 text-xs text-[#666] hover:text-[#333] rounded min-h-[36px] transition-colors"
               >
                 {state.cancelLabel || "Cancel"}
               </button>
               <button
                 onClick={() => settle(true)}
                 autoFocus
-                className={`px-3.5 py-2 text-xs text-white rounded min-h-[36px] transition-colors ${
-                  danger ? "bg-red-600 hover:bg-red-700" : "bg-[#006633] hover:bg-[#005528]"
+                className={`px-4 py-2 text-xs rounded min-h-[36px] border transition-colors ${
+                  danger
+                    ? "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
+                    : "bg-[#006633] border-[#006633] text-white hover:bg-[#005528]"
                 }`}
               >
                 {state.confirmLabel || (danger ? "Delete" : "Confirm")}
