@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Plus, Loader2, Trash2, GraduationCap, Save, X, Pen, AlertCircle } from "lucide-react";
 import { Program } from "@/lib/types";
 import { clearStaleAdminSession } from "@/lib/admin";
+import { useConfirm } from "@/components/ui/toast";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -24,6 +25,7 @@ interface EditState {
 }
 
 export default function AdminProgramsPage() {
+  const confirmDialog = useConfirm();
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -81,8 +83,14 @@ export default function AdminProgramsPage() {
     setShowForm(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (!confirm("Remove this program? (changes won't apply until you save)")) return;
+  const handleDelete = async (id: string) => {
+    const ok = await confirmDialog({
+      title: "Remove this program?",
+      body: "It stays visible below until you save — nothing is deleted server-side yet.",
+      confirmLabel: "Remove",
+      tone: "danger",
+    });
+    if (!ok) return;
     setPending((prev) => [...prev, { type: "delete", programId: id }]);
   };
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import PatternBackground from "@/components/PatternBackground";
+import { ToastProvider, ConfirmProvider } from "@/components/ui/toast";
 
 export const metadata: Metadata = {
   title: "OLLIN – AI-Powered Quiz Platform",
@@ -25,7 +26,11 @@ export default function RootLayout({
     <html lang="en" className="h-full">
       <body className="min-h-full flex flex-col antialiased relative">
         <PatternBackground />
-        <div className="relative z-10 flex flex-col min-h-full">{children}</div>
+        <ToastProvider>
+          <ConfirmProvider>
+            <div className="relative z-10 flex flex-col min-h-full">{children}</div>
+          </ConfirmProvider>
+        </ToastProvider>
       </body>
     </html>
   );

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ShieldCheck, UserPlus, UserMinus, BookOpen, GraduationCap, KeyRound, RefreshCcw, Upload, Trash2, FileText } from "lucide-react";
+import { useConfirm, useToast } from "@/components/ui/toast";
 
 interface AuditEvent {
   id: string;
@@ -42,6 +43,8 @@ const actionColors: Record<string, string> = {
 };
 
 export default function AdminActivityPage() {
+  const confirmDialog = useConfirm();
+  const toast = useToast();
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null); // id | "all" | null
@@ -61,7 +64,12 @@ export default function AdminActivityPage() {
   }, []);
 
   const deleteEvent = async (id: string) => {
-    if (!confirm("Delete this activity entry?")) return;
+    const ok = await confirmDialog({
+      title: "Delete this activity entry?",
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     setDeleting(id);
     setError("");
     try {
@@ -69,6 +77,7 @@ export default function AdminActivityPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Delete failed");
       setEvents(data.events || []);
+      toast.success("Entry deleted");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed");
     } finally {
@@ -77,7 +86,13 @@ export default function AdminActivityPage() {
   };
 
   const clearAll = async () => {
-    if (!confirm("Clear the ENTIRE activity log? This cannot be undone.")) return;
+    const ok = await confirmDialog({
+      title: "Clear the entire activity log?",
+      body: "Every recorded event will be permanently removed. This cannot be undone.",
+      confirmLabel: "Clear all",
+      tone: "danger",
+    });
+    if (!ok) return;
     setDeleting("all");
     setError("");
     try {
@@ -85,6 +100,7 @@ export default function AdminActivityPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Clear failed");
       setEvents(data.events || []);
+      toast.success("Activity log cleared");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Clear failed");
     } finally {

@@ -8,6 +8,7 @@ import { isLocalMode, getLocalQuizByCode, getLocalQuestions, getLocalUser } from
 import { Quiz, Question, QuizAttempt } from "@/lib/types";
 import { Clock, Send, CheckCircle, AlertCircle, User } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { useToast } from "@/components/ui/toast";
 import { formatTime } from "@/lib/utils";
 
 export default function QuizPage() {
@@ -45,6 +46,7 @@ export default function QuizPage() {
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoJoiningRef = useRef(false);
+  const toast = useToast();
 
   // Check if user is already logged in
   useEffect(() => {
@@ -259,7 +261,7 @@ export default function QuizPage() {
       // Grading failed (network/server). Block the submission rather than
       // grade client-side — silently accepting a fakeable score is worse
       // than a retry.
-      alert("Could not submit your quiz. Please check your connection and try again.");
+      toast.error("Could not submit your quiz. Check your connection and try again.");
       setSubmitting(false);
       return;
     }

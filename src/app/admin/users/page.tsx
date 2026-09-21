@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { UserPlus, Loader2, Trash2, Shield, GraduationCap, Mail, Eye, EyeOff, Save, X, AlertCircle, Pencil, Upload, FileText } from "lucide-react";
 import { Program } from "@/lib/types";
 import { clearStaleAdminSession } from "@/lib/admin";
+import { useConfirm } from "@/components/ui/toast";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -34,6 +35,7 @@ interface EditState {
 }
 
 export default function AdminUsersPage() {
+  const confirmDialog = useConfirm();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -183,8 +185,14 @@ export default function AdminUsersPage() {
     setEditing(null);
   };
 
-  const handleDelete = (userId: string) => {
-    if (!confirm("Remove this user? (changes won't apply until you save)")) return;
+  const handleDelete = async (userId: string) => {
+    const ok = await confirmDialog({
+      title: "Remove this user?",
+      body: "They keep access until you save — nothing is deleted server-side yet.",
+      confirmLabel: "Remove",
+      tone: "danger",
+    });
+    if (!ok) return;
     setPending((prev) => [...prev, { type: "delete", userId }]);
   };
 

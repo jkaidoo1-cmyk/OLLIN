@@ -5,6 +5,7 @@ import { Plus, Loader2, Trash2, BookOpen, Save, X, ChevronDown, ChevronUp, Clock
 import { Course, Program, Quiz } from "@/lib/types";
 import { getSavedQuizzes, removeSavedQuiz, syncSavedQuizzesFromServer } from "@/lib/local";
 import { clearStaleAdminSession } from "@/lib/admin";
+import { useConfirm } from "@/components/ui/toast";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -27,6 +28,7 @@ interface EditState {
 }
 
 export default function AdminCoursesPage() {
+  const confirmDialog = useConfirm();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
@@ -158,8 +160,14 @@ export default function AdminCoursesPage() {
     setShowForm(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (!confirm("Remove this course? (changes won't apply until you save)")) return;
+  const handleDelete = async (id: string) => {
+    const ok = await confirmDialog({
+      title: "Remove this course?",
+      body: "It stays visible below until you save — nothing is deleted server-side yet.",
+      confirmLabel: "Remove",
+      tone: "danger",
+    });
+    if (!ok) return;
     setPending((prev) => [...prev, { type: "delete", courseId: id }]);
   };
 

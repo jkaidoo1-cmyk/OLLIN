@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Plus, Trash2, Power, PowerOff, Key, AlertCircle, Info, XCircle } from "lucide-react";
+import { useConfirm, useToast } from "@/components/ui/toast";
 
 interface ApiKeyEntry {
   id: string;
@@ -28,6 +29,8 @@ function formatTokens(n: number): string {
 }
 
 export default function AdminSettingsPage() {
+  const confirmDialog = useConfirm();
+  const toast = useToast();
   const [keys, setKeys] = useState<ApiKeyEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [newKey, setNewKey] = useState("");
@@ -92,7 +95,7 @@ export default function AdminSettingsPage() {
         provider: newProvider,
       });
       setNewKey("");
-      setSuccess("Key added. It now works for every user on this platform.");
+      toast.success("Key added — it now works for every user on this platform.");
       await refreshFromServer();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add key");
@@ -102,10 +105,16 @@ export default function AdminSettingsPage() {
   };
 
   const handleRemoveKey = async (id: string) => {
-    if (!confirm("Remove this API key?")) return;
+    const ok = await confirmDialog({
+      title: "Remove this API key?",
+      body: "AI question generation will fall back to your remaining keys.",
+      confirmLabel: "Remove key",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       await callConfig({ action: "remove", id });
-      setSuccess("Key removed");
+      toast.success("Key removed");
       await refreshFromServer();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove key");

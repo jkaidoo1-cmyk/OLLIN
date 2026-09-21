@@ -10,8 +10,11 @@ import {
   getLocalQuizzes,
 } from "@/lib/local";
 import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, ExternalLink } from "lucide-react";
+import { useConfirm, useToast } from "@/components/ui/toast";
 
 export default function AdminQuizzesPage() {
+  const confirmDialog = useConfirm();
+  const toast = useToast();
   const [quizzes, setQuizzes] = useState<any[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [courses, setCourses] = useState<any[]>([]);
@@ -92,7 +95,13 @@ export default function AdminQuizzesPage() {
   };
 
   const handleDelete = async (quiz: any) => {
-    if (!confirm(`Delete "${quiz.title}" and all its questions?`)) return;
+    const ok = await confirmDialog({
+      title: `Delete "${quiz.title}"?`,
+      body: "The quiz and all its questions will be permanently deleted. This cannot be undone.",
+      confirmLabel: "Delete quiz",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/quizzes/${quiz.id}`, {
         method: "DELETE",
@@ -100,20 +109,21 @@ export default function AdminQuizzesPage() {
       });
       if (!res.ok) {
         const d = await res.json();
-        setError(d.error || "Failed to delete quiz");
+        toast.error(d.error || "Failed to delete quiz");
         return;
       }
       // Remove from local cache too
       const remaining = getLocalQuizzes().filter((q) => q.id !== quiz.id);
       localStorage.setItem("ollin_local_quizzes", JSON.stringify(remaining));
       setQuizzes((prev) => prev.filter((q) => q.id !== quiz.id));
+      toast.success(`"${quiz.title}" deleted`);
       if (expandedId === quiz.id) setExpandedId(null);
       // Remove from saved-to-course associations
       const { getSavedQuizzes } = await import("@/lib/local");
       const saved = getSavedQuizzes().filter((s) => s.quiz_id !== quiz.id);
       localStorage.setItem("ollin_local_saved_quizzes", JSON.stringify(saved));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete quiz");
+      toast.error(err instanceof Error ? err.message : "Failed to delete quiz");
     }
   };
 
