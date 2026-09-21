@@ -82,8 +82,10 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="bg-[#006633] text-white">
-        <div className="max-w-6xl mx-auto px-6 py-8">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+        <div className="max-w-6xl mx-auto px-6 py-6">
+          {/* On phones the two link columns sit side by side next to nothing —
+              brand row on top, links in a compact 2-col row below. */}
+          <div className="flex flex-col sm:grid sm:grid-cols-3 gap-6">
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Logo onDark />
@@ -91,23 +93,25 @@ export default function Home() {
               </div>
               <p className="text-sm text-white/70">Quiz platform for students</p>
             </div>
-            <div>
-              <h4 className="text-sm font-semibold text-white mb-3">Quick Links</h4>
-              <ul className="space-y-2 text-sm text-white/70">
-                <li><Link href="/dashboard" className="text-white/70 hover:text-white no-underline">Dashboard</Link></li>
-                <li><Link href="/dashboard/create" className="text-white/70 hover:text-white no-underline">Create quiz</Link></li>
-                <li><Link href="/join" className="text-white/70 hover:text-white no-underline">Join a quiz</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold text-white mb-3">Support</h4>
-              <ul className="space-y-2 text-sm text-white/70">
-                <li><span className="text-white/70">Help desk</span></li>
-                <li><span className="text-white/70">Contact admin</span></li>
-              </ul>
+            <div className="grid grid-cols-2 gap-6 sm:contents">
+              <div>
+                <h4 className="text-sm font-semibold text-white mb-3">Quick Links</h4>
+                <ul className="space-y-2 text-sm text-white/70">
+                  <li><Link href="/dashboard" className="text-white/70 hover:text-white no-underline">Dashboard</Link></li>
+                  <li><Link href="/dashboard/create" className="text-white/70 hover:text-white no-underline">Create quiz</Link></li>
+                  <li><Link href="/join" className="text-white/70 hover:text-white no-underline">Join a quiz</Link></li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-white mb-3">Support</h4>
+                <ul className="space-y-2 text-sm text-white/70">
+                  <li><span className="text-white/70">Help desk</span></li>
+                  <li><span className="text-white/70">Contact admin</span></li>
+                </ul>
+              </div>
             </div>
           </div>
-          <div className="border-t border-white/20 mt-6 pt-4 text-xs text-white/50">
+          <div className="border-t border-white/20 mt-5 pt-3 text-xs text-white/50">
             &copy; {new Date().getFullYear()} OLLIN. All rights reserved.
           </div>
         </div>
