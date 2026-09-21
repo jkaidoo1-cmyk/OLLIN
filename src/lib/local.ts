@@ -155,7 +155,11 @@ export function getLocalQuizById(id: string): Quiz | undefined {
 }
 
 export function getLocalQuizByCode(code: string): Quiz | undefined {
-  return getLocalQuizzes().find((q) => q.share_code === code);
+  // Normalized comparison so "cez772", "CEZ-772", " cez-772 " all match.
+  const norm = code.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  return getLocalQuizzes().find(
+    (q) => (q.share_code || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase() === norm
+  );
 }
 
 export function getLocalQuestions(quizId: string): Question[] {

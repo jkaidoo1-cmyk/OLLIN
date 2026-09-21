@@ -255,11 +255,17 @@ export async function getQuizByCode(
   code: string,
   local?: boolean
 ): Promise<Quiz | null> {
+  // Codes are matched in normalized form (alphanumerics only, uppercase) so
+  // "cez772", "CEZ-772", and " cez-772 " all find the same quiz.
+  const norm = code.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+
   if (checkLocal(local)) {
     if (isServer) {
       // Check file first (student-created quizzes), then hardcoded defaults
       const fileQuizzes = readServerQuizzes();
-      const fromFile = fileQuizzes.find((q) => q.share_code === code);
+      const fromFile = fileQuizzes.find(
+        (q) => (q.share_code || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase() === norm
+      );
       if (fromFile) return fromFile;
       return serverGetLocalQuizByCode(code) || null;
     }
@@ -272,6 +278,15 @@ export async function getQuizByCode(
     .select("*")
     .eq("share_code", code)
     .single();
+
+  if (error && norm) {
+    // Exact match failed — fall back to a normalized comparison client-side.
+    const { data: all } = await supabase.from("quizzes").select("*");
+    const match = (all || []).find(
+      (q: any) => (q.share_code || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase() === norm
+    );
+    if (match) return match;
+  }
 
   if (error) return null;
   return data;

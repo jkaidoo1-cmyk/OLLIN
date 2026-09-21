@@ -7,14 +7,19 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
+    const { id: rawId } = await params;
+    // Users type codes on their phone in any form: "cez772", "cez-772",
+    // " CEZ-772 ". Normalize (strip non-alphanumerics, uppercase) before
+    // matching — stored codes compare in the same normalized form.
+    const norm = rawId.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+    const id = norm || rawId;
 
     const local = request.headers.get("x-local-mode") === "true" || !request.headers.get("authorization");
 
-    // Try by ID first, then by share code
-    let quiz = await getQuizById(id, local);
+    // Try by ID first (deep links), then by normalized share code
+    let quiz = await getQuizById(rawId, local);
     if (!quiz) {
-      quiz = await getQuizByCode(id, local);
+      quiz = await getQuizByCode(norm, local);
     }
 
     if (!quiz) {
