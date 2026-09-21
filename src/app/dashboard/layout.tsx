@@ -177,28 +177,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       Dashboard
                     </Link>
                     <Link
-                      href="/dashboard/create"
-                      replace
-                      onClick={() => setProfileOpen(false)}
-                      className="block px-4 py-2 text-sm text-[#333] hover:bg-[#f8f8f8] no-underline"
-                    >
-                      Create quiz
-                    </Link>
-                    <Link
                       href="/dashboard/quizzes"
                       replace
                       onClick={() => setProfileOpen(false)}
                       className="block px-4 py-2 text-sm text-[#333] hover:bg-[#f8f8f8] no-underline"
                     >
                       My quizzes
-                    </Link>
-                    <Link
-                      href="/join"
-                      replace
-                      onClick={() => setProfileOpen(false)}
-                      className="block px-4 py-2 text-sm text-[#333] hover:bg-[#f8f8f8] no-underline"
-                    >
-                      Join quiz
                     </Link>
                     <Link
                       href="/dashboard/test-quizzes"
