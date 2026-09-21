@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { checkThrottle } from "@/lib/rate-limit";
+import { getSessionUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/server";
 
 /**
@@ -57,8 +58,23 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const name = clamp(body.name, 80) || "Anonymous";
-    const contact = clamp(body.contact, 120);
+    let name = clamp(body.name, 80);
+    let contact = clamp(body.contact, 120);
+
+    // Logged-in senders are always identifiable, even if they leave the
+    // name/contact fields blank — the account identity travels with it.
+    const session = await getSessionUser(request);
+    if (session) {
+      let fullName = "";
+      try {
+        const { readLocalUsers } = await import("@/lib/local-users-store");
+        fullName = readLocalUsers().find((u) => u.id === session.id)?.full_name || "";
+      } catch { /* non-local session (Supabase) — fall back to email */ }
+      if (!name) name = fullName || session.email;
+      if (!contact) contact = session.email;
+    }
+
+    name = name || "Anonymous";
     const subject = clamp(body.subject, 120) || "General";
     const message = clamp(body.message, 2000);
 
