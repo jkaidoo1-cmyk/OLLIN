@@ -148,7 +148,10 @@ export async function createQuiz(
   const isLocal = checkLocal(local);
 
   if (isLocal) {
-    const user = getLocalUser();
+    // getLocalUser lives in a "use client" module — calling it from the server
+    // throws. On the server the creator is resolved by the route (or stays
+    // anonymous); only browser callers read the localStorage user.
+    const user = isServer ? null : getLocalUser();
     const quiz: Quiz = {
       id: `local-quiz-${Date.now()}`,
       host_id: user?.id || "anonymous",
