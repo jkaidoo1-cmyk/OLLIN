@@ -79,6 +79,8 @@ export async function registerSession(
   writeFileStore(store);
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function isSessionValid(userId: string, sid: string): Promise<boolean> {
   // Prefer the file store when it has a record for this user: it's written
   // on every login unless the Supabase insert provably succeeded, so it is
@@ -87,6 +89,14 @@ export async function isSessionValid(userId: string, sid: string): Promise<boole
   const records = store[userId];
   if (records && records.length > 0) {
     return prune(records).some((r) => r.sid === sid);
+  }
+
+  // Non-UUID (built-in/local) users register ONLY in the file store (see
+  // registerSession). On an ephemeral filesystem (Vercel) that record is
+  // gone, and a Supabase lookup below could never have it — fail open here
+  // or every local account would be permanently invalid in production.
+  if (!UUID_RE.test(userId)) {
+    return true;
   }
 
   try {

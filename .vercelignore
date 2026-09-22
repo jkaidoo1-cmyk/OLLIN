@@ -1,0 +1,9 @@
+# Local runtime data — never ship to deployments.
+# These are this machine's file-mode stores; bundling them makes the
+# serverless deployment serve stale local data and breaks session
+# validation (read-only fs can never update the sessions file).
+.ollin-*.json
+.ollin-session-secret
+
+# Secrets / env files are excluded by the CLI already; keep it explicit.
+.env*
