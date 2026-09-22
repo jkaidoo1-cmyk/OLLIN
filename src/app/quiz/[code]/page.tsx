@@ -58,7 +58,7 @@ export default function QuizPage() {
       if (isLocalMode()) {
         const localUser = getLocalUser();
         if (localUser) {
-          setCurrentUser({ name: localUser.full_name, isGuest: false });
+          setCurrentUser({ name: localUser.full_name, email: localUser.email, isGuest: false });
           setParticipantName(localUser.full_name);
         }
         return;
@@ -67,7 +67,7 @@ export default function QuizPage() {
         const { data } = await supabase.auth.getUser();
         if (data.user) {
           const name = data.user.user_metadata?.full_name || data.user.email?.split("@")[0] || "Student";
-          setCurrentUser({ name, isGuest: false });
+          setCurrentUser({ name, email: data.user.email, isGuest: false });
           setParticipantName(name);
         }
       }
@@ -257,11 +257,11 @@ export default function QuizPage() {
         selected: gradedMap[q.id]?.selected_answer || answers[q.id] || null,
         isCorrect: !!gradedMap[q.id]?.is_correct,
       }));
-    } catch {
-      // Grading failed (network/server). Block the submission rather than
-      // grade client-side — silently accepting a fakeable score is worse
-      // than a retry.
-      toast.error("Could not submit your quiz. Check your connection and try again.");
+    } catch (err) {
+      // Grading failed. Surface the server's reason (e.g. "You have already
+      // taken this quiz.") rather than a generic connection error.
+      const msg = err instanceof Error && err.message ? err.message : "Could not submit your quiz. Check your connection and try again.";
+      toast.error(msg);
       setSubmitting(false);
       return;
     }
