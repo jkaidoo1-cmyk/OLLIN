@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getLocalUser } from "@/lib/local";
 import { Quiz, Course } from "@/lib/types";
-import { BookOpen, Clock, Play, Search } from "lucide-react";
+import { BookOpen, Clock, Play, Search, Share2, Check } from "lucide-react";
 
 interface CourseWithQuizzes {
   course: Course;
@@ -23,6 +23,40 @@ export default function TestQuizzesPage() {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [sharedId, setSharedId] = useState<string | null>(null);
+
+  /** Share a quiz with friends: native share sheet on phones, clipboard fallback. */
+  const shareQuiz = async (quiz: Quiz) => {
+    const url = `${window.location.origin}/quiz/${quiz.share_code}`;
+    // Friends don't need accounts — the quiz link opens in guest mode.
+    const shareData: ShareData = {
+      title: quiz.title,
+      text: `Take my quiz on OLLIN: ${quiz.title} — code ${quiz.share_code}`,
+      url,
+    };
+    if (typeof navigator !== "undefined" && "share" in navigator) {
+      try {
+        await navigator.share(shareData);
+        return; // shared through the native sheet (WhatsApp, etc.)
+      } catch (err) {
+        if ((err as Error)?.name === "AbortError") return; // user cancelled
+        // share failed for another reason — fall through to copy
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Clipboard API unavailable (insecure context) — legacy fallback.
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setSharedId(quiz.id);
+    setTimeout(() => setSharedId(null), 2000);
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -188,6 +222,21 @@ export default function TestQuizzesPage() {
                         )}
                       </div>
                     </div>
+                    <button
+                      onClick={() => shareQuiz(quiz)}
+                      title={`Share link: /quiz/${quiz.share_code}`}
+                      className={`px-3 py-2 border text-xs font-medium rounded transition-colors flex items-center gap-1.5 flex-shrink-0 ${
+                        sharedId === quiz.id
+                          ? "border-green-300 bg-green-50 text-green-700"
+                          : "border-[#e0e0e0] text-[#333] hover:border-green-400"
+                      }`}
+                    >
+                      {sharedId === quiz.id ? (
+                        <><Check className="w-3.5 h-3.5" /> Link copied</>
+                      ) : (
+                        <><Share2 className="w-3.5 h-3.5" /> Share</>
+                      )}
+                    </button>
                     <Link
                       href={`/quiz/${quiz.share_code}`}
                       className="px-4 py-2 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors flex items-center gap-1.5 flex-shrink-0"
