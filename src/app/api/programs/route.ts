@@ -16,12 +16,16 @@ function readLocalPrograms() {
   if (existsSync(path)) {
     try { return JSON.parse(readFileSync(path, "utf-8")); } catch { /* ignore */ }
   }
-  writeFileSync(path, JSON.stringify(DEFAULT_PROGRAMS, null, 2));
+  // Missing store: serve the in-memory default. Never seed by writing —
+  // serverless filesystems (Vercel) are read-only and this used to throw
+  // EROFS on every GET.
   return DEFAULT_PROGRAMS;
 }
 
 function writeLocalPrograms(programs: unknown[]) {
-  writeFileSync(getProgramsPath(), JSON.stringify(programs, null, 2));
+  // Read-only fs (Vercel): degrade gracefully; persistence comes from
+  // Supabase once configured there.
+  try { writeFileSync(getProgramsPath(), JSON.stringify(programs, null, 2)); } catch { /* read-only fs */ }
 }
 
 // GET — list all programs
