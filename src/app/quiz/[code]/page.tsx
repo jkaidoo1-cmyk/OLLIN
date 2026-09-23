@@ -46,6 +46,8 @@ export default function QuizPage() {
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoJoiningRef = useRef(false);
+  // Server-trusted attempt start: the moment the quiz UI was joined.
+  const joinedAtRef = useRef<string | null>(null);
   const toast = useToast();
 
   // Check if user is already logged in
@@ -169,6 +171,7 @@ export default function QuizPage() {
     if (!participantName.trim()) return;
 
     if (isGuest || isLocalMode()) {
+      joinedAtRef.current = new Date().toISOString();
       setJoined(true);
       return;
     }
@@ -185,6 +188,7 @@ export default function QuizPage() {
         setAttempt(data);
       }
     }
+    joinedAtRef.current = new Date().toISOString();
     setJoined(true);
   };
 
@@ -201,6 +205,9 @@ export default function QuizPage() {
     const timeTaken = quiz.time_limit_minutes
       ? quiz.time_limit_minutes * 60 - (timeLeft || 0)
       : null;
+    // Server-observed join time: recorded when the questions were first
+    // shown, before any answers. Lets the server cap time taken itself.
+    const startedAt = joinedAtRef.current || new Date().toISOString();
 
     let score = 0;
     let correct = 0;
@@ -215,6 +222,7 @@ export default function QuizPage() {
           participant_name: participantName || "Anonymous",
           participant_email: currentUser?.email || null,
           time_taken_seconds: timeTaken,
+          started_at: startedAt,
           answers: questions.map((q) => ({
             question_id: q.id,
             selected_answer: answers[q.id] || "",

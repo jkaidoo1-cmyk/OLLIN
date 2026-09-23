@@ -26,9 +26,13 @@ interface StoredNotification {
   type: "quiz" | "result" | "system";
   read: boolean;
   created_at: string;
+  /** Support-message sender identity (optional) — routes admin replies in-app. */
+  sender_id?: string | null;
+  sender_email?: string | null;
+  sender_name?: string;
 }
 
-function readNotifsFile(): StoredNotification[] {
+export function readNotifsFile(): StoredNotification[] {
   try {
     const path = NOTIFS_PATH();
     if (existsSync(path)) {
@@ -38,7 +42,7 @@ function readNotifsFile(): StoredNotification[] {
   return [];
 }
 
-function writeNotifsFile(notifs: StoredNotification[]) {
+export function writeNotifsFile(notifs: StoredNotification[]) {
   try {
     writeFileSync(NOTIFS_PATH(), JSON.stringify(notifs, null, 2));
   } catch { /* read-only fs (Vercel) — Supabase is the persistent store */ }

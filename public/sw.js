@@ -12,7 +12,7 @@
  * vanish. Offline users see the offline page instead of a broken quiz.
  */
 
-const CACHE = "ollin-v1";
+const CACHE = "ollin-v2";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {

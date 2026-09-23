@@ -164,22 +164,99 @@ export default function AdminOverviewPage() {
         ) : (
           <div className="divide-y divide-[#e0e0e0]">
             {supportMsgs.slice(0, 6).map((n: any) => (
-              <div key={n.id} className={`px-4 py-3 ${n.read ? "" : "bg-green-50/40"}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className={`text-sm ${n.read ? "text-[#333]" : "font-semibold text-[#333]"}`}>
-                      {n.title.replace(/^Support:\s*/, "")}
-                    </p>
-                    <p className="text-sm text-[#666] whitespace-pre-line mt-0.5">{n.message}</p>
-                    <p className="text-xs text-[#999] mt-1">
-                      {new Date(n.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <SupportMessageCard key={n.id} msg={n} onReplied={fetchOverview} />
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** One support message with an inline reply box (admin overview). */
+function SupportMessageCard({ msg, onReplied }: { msg: any; onReplied: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const senderKnown = !!(msg.sender_id || msg.sender_email);
+
+  const send = async () => {
+    if (!text.trim() || sending) return;
+    setSending(true);
+    setNote(null);
+    try {
+      const res = await fetch("/api/support/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notification_id: msg.id, reply: text.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setNote(data.delivered === "in_app" ? "Reply delivered to the student's notifications." : null);
+        setText("");
+        setOpen(false);
+        onReplied();
+      } else if (data.contact) {
+        setNote(`No in-app account to notify — contact them at ${data.contact}`);
+      } else {
+        setNote(data.error || "Could not send the reply.");
+      }
+    } catch {
+      setNote("Could not send the reply.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className={`px-4 py-3 ${msg.read ? "" : "bg-green-50/40"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className={`text-sm ${msg.read ? "text-[#333]" : "font-semibold text-[#333]"}`}>
+            {msg.title.replace(/^Support:\s*/, "")}
+          </p>
+          <p className="text-sm text-[#666] whitespace-pre-line mt-0.5">{msg.message}</p>
+          <p className="text-xs text-[#999] mt-1">
+            {new Date(msg.created_at).toLocaleString()}
+            {senderKnown ? " · can reply in-app" : " · guest — reply via their contact"}
+          </p>
+          {note && <p className="text-xs text-green-700 bg-green-50 border border-green-100 rounded px-2 py-1 mt-1.5">{note}</p>}
+          {open && (
+            <div className="mt-2 flex flex-col gap-1.5">
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Write your reply… (delivered to the student's notifications)"
+                rows={3}
+                className="input-field text-sm resize-y"
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={send}
+                  disabled={sending || !text.trim()}
+                  className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
+                >
+                  {sending ? "Sending…" : "Send reply"}
+                </button>
+                <button
+                  onClick={() => setOpen(false)}
+                  className="px-3 py-1.5 border border-[#e0e0e0] text-xs rounded text-[#666] hover:border-[#ccc]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="px-2.5 py-1.5 border border-[#e0e0e0] text-[#333] text-xs rounded hover:border-green-400 transition-colors flex items-center gap-1 flex-shrink-0"
+          title={senderKnown ? "Reply in-app" : "This guest left no account — reply via contact info"}
+        >
+          Reply
+        </button>
       </div>
     </div>
   );

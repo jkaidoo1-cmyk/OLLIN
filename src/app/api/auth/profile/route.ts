@@ -17,11 +17,34 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  let body: { current_year?: number; full_name?: string };
+  let body: { current_year?: number; full_name?: string; current_password?: string; new_password?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  // ── Password change (self-service) ─────────────────────
+  // Requires the current password; revokes nothing else — same-device session
+  // stays valid, other devices keep working until their cookie expires.
+  if (body.new_password !== undefined) {
+    const newPassword = String(body.new_password);
+    if (newPassword.length < 6) {
+      return NextResponse.json({ error: "New password must be at least 6 characters" }, { status: 400 });
+    }
+    const { verifyPassword, hashPassword } = await import("@/lib/local-users-store");
+    const users = readLocalUsers();
+    const me = users.find((u) => u.id === session.id);
+    if (!me) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+    if (!body.current_password || !verifyPassword(String(body.current_password), me)) {
+      return NextResponse.json({ error: "Current password is incorrect" }, { status: 403 });
+    }
+    me.password_hash = hashPassword(newPassword);
+    delete me.password;
+    writeLocalUsers(users);
+    return NextResponse.json({ message: "Password updated" });
   }
 
   const updates: { current_year?: number; full_name?: string } = {};

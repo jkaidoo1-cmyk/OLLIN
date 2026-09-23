@@ -8,13 +8,14 @@ import { isLocalMode, getLocalUser, disableLocalMode, getUnreadCount } from "@/l
 import { isAdmin } from "@/lib/admin";
 import type { LocalUser } from "@/lib/local";
 import { useEffect, useState, useRef } from "react";
-import { LogOut, Bell, LifeBuoy } from "lucide-react";
+import { LogOut, Bell, LifeBuoy, UserRound } from "lucide-react";
 
 const pageLabels: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/dashboard/create": "Create quiz",
   "/dashboard/quizzes": "My quizzes",
   "/dashboard/test-quizzes": "Test quizzes",
+  "/dashboard/profile": "My profile",
   "/join": "Join quiz",
   "/dashboard/notifications": "Notifications",
 };
@@ -199,6 +200,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       className="block px-4 py-2 text-sm text-[#333] hover:bg-[#f8f8f8] no-underline"
                     >
                       My attempts
+                    </Link>
+                    <Link
+                      href="/dashboard/profile"
+                      onClick={() => setProfileOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-[#333] hover:bg-[#f8f8f8] no-underline"
+                    >
+                      <UserRound className="w-4 h-4 text-[#006633]" />
+                      My profile
                     </Link>
                     <Link
                       href="/support?from=dashboard"

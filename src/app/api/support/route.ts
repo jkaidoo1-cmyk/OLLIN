@@ -97,7 +97,13 @@ export async function POST(request: NextRequest) {
       const supabaseAdmin = await createAdminClient();
       if (supabaseAdmin) {
         const { error } = await supabaseAdmin.from("notifications").insert(
-          adminIds.map((user_id) => ({ user_id, title, message: full, type: "system" }))
+          adminIds.map((user_id) => ({
+            user_id, title, message: full, type: "system",
+            // Sender identity — routes the admin's reply back in-app.
+            sender_id: session?.id || null,
+            sender_email: session?.email || (contact && contact.includes("@") ? contact : null),
+            sender_name: name,
+          }))
         );
         if (!error) return NextResponse.json({ ok: true });
       }
@@ -113,6 +119,10 @@ export async function POST(request: NextRequest) {
     } catch { notifs = []; }
 
     const now = new Date().toISOString();
+    // Sender identity — lets the admin's reply be routed back in-app.
+    const senderMeta: Record<string, string | null> = session
+      ? { sender_id: session.id, sender_email: session.email, sender_name: name }
+      : { sender_id: null, sender_email: contact && contact.includes("@") ? contact : null, sender_name: name };
     for (const user_id of adminIds) {
       notifs.unshift({
         id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -122,6 +132,7 @@ export async function POST(request: NextRequest) {
         type: "system",
         read: false,
         created_at: now,
+        ...senderMeta,
       });
     }
     try {

@@ -28,6 +28,9 @@ interface AttemptWithAnswers extends QuizAttempt {
     is_correct: boolean | null;
     marks_awarded: number;
   }[];
+  // Server-side attempts store selections as a record instead (no grading
+  // data), so correctness is recomputed against the creator's questions.
+  answers?: Record<string, string | null> | null;
 }
 
 export default function QuizDetailPage() {
@@ -135,17 +138,29 @@ export default function QuizDetailPage() {
     (a) => a.score_percentage >= (quiz?.passing_score || 50)
   ).length;
 
+  const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
   const questionStats = questions.map((q) => {
-    const answersOnQ = completedAttempts.flatMap((a) =>
-      (a.attempt_answers || []).filter((aa) => aa.question_id === q.id)
-    );
-    const correctCount = answersOnQ.filter((aa) => aa.is_correct).length;
+    // Count every answer we can grade: graded arrays (Supabase) or raw
+    // selection records (server attempts) graded against the answer key.
+    let totalAnswers = 0;
+    let correctCount = 0;
+    for (const a of completedAttempts) {
+      if (a.attempt_answers?.length) {
+        const aa = a.attempt_answers.find((x) => x.question_id === q.id);
+        if (!aa || aa.selected_answer == null) continue;
+        totalAnswers++;
+        if (aa.is_correct) correctCount++;
+      } else if (a.answers && a.answers[q.id] != null) {
+        totalAnswers++;
+        if (norm(a.answers[q.id]) === norm(q.correct_answer)) correctCount++;
+      }
+    }
     return {
       question: q,
-      totalAnswers: answersOnQ.length,
+      totalAnswers,
       correctPercentage:
-        answersOnQ.length > 0
-          ? Math.round((correctCount / answersOnQ.length) * 100)
+        totalAnswers > 0
+          ? Math.round((correctCount / totalAnswers) * 100)
           : 0,
     };
   });
@@ -311,6 +326,9 @@ export default function QuizDetailPage() {
                   </div>
                   <span className="font-bold w-8 text-right text-slate-600">{qs.correctPercentage}%</span>
                 </div>
+                <span className="w-16 text-right text-[10px] text-slate-400 flex-shrink-0">
+                  {qs.totalAnswers > 0 ? `${qs.totalAnswers} answered` : "no answers"}
+                </span>
               </div>
             ))}
           </div>

@@ -41,6 +41,36 @@ export async function POST(
           );
         }
 
+        // ── Per-attempt time-limit enforcement ────────────────
+        // The client timer is advisory. The server derives elapsed time from
+        // the joined-at timestamp it is handed (set before any answers were
+        // recorded) and refuses submissions impossibly past the limit.
+        // Grace period absorbs network/submit latency, not extra thinking time.
+        const GRACE_SECONDS = 30;
+        if (quiz.time_limit_minutes) {
+          const limitSec = quiz.time_limit_minutes * 60;
+          const startedMs = body.started_at ? new Date(body.started_at).getTime() : NaN;
+          if (!Number.isNaN(startedMs) && startedMs > 0) {
+            const elapsedSec = (Date.now() - startedMs) / 1000;
+            if (elapsedSec > limitSec + GRACE_SECONDS) {
+              return NextResponse.json(
+                { error: "Time is up for this quiz. Your answers could not be submitted." },
+                { status: 403 }
+              );
+            }
+            // Clamp the stored duration so the leaderboard never shows
+            // "15 min quiz · 3 h taken" from a manipulated client.
+            if (elapsedSec > limitSec) {
+              body.time_taken_seconds = limitSec;
+            } else if (typeof time_taken_seconds === "number" && time_taken_seconds > elapsedSec + GRACE_SECONDS) {
+              body.time_taken_seconds = Math.max(1, Math.round(elapsedSec));
+            }
+          } else if (typeof time_taken_seconds === "number" && time_taken_seconds > limitSec + GRACE_SECONDS) {
+            // No start timestamp (old client) — at least clamp an absurd claim.
+            body.time_taken_seconds = limitSec;
+ }
+        }
+
         // ── Duplicate-submission guard ────────────────────────
         // One completed attempt per logged-in participant per quiz. The
         // submitter's claimed email is not trusted on its own — resolve the

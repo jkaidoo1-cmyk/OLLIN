@@ -41,7 +41,21 @@ export default function RootLayout({
         </ToastProvider>
         <script
           dangerouslySetInnerHTML={{
-            __html: `if ('serviceWorker' in navigator) window.addEventListener('load', function(){ navigator.serviceWorker.register('/sw.js').catch(function(){}); });`,
+            __html: `if ('serviceWorker' in navigator) window.addEventListener('load', function() {
+              navigator.serviceWorker.register('/sw.js').catch(function(){});
+              // A new service worker takes over via skipWaiting + clients.claim.
+              // Reload once so the page picks up the fresh app shell instead of
+              // serving stale cached chunks until a manual hard refresh.
+              // (Only when a controller already existed — first install needs no reload.)
+              var refreshing = false;
+              if (navigator.serviceWorker.controller) {
+                navigator.serviceWorker.addEventListener('controllerchange', function() {
+                  if (refreshing) return;
+                  refreshing = true;
+                  window.location.reload();
+                });
+              }
+            });`,
           }}
         />
       </body>

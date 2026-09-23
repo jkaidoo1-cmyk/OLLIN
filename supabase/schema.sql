@@ -176,7 +176,11 @@ create table if not exists public.notifications (
   message text not null default '',
   type text not null default 'system' check (type in ('quiz', 'result', 'system')),
   read boolean not null default false,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- Support-message sender identity (nullable) — routes admin replies in-app.
+  sender_id uuid references public.profiles(id) on delete set null,
+  sender_email text,
+  sender_name text
 );
 
 -- ============================================================
