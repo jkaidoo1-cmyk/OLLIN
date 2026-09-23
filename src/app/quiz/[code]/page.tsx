@@ -77,6 +77,65 @@ export default function QuizPage() {
     checkUser();
   }, [guestName, supabase]);
 
+  // Entry check + auto-join, in one place: a logged-in student who already
+  // completed this quiz gets their result screen instead of the quiz (the
+  // server rejects duplicate submissions at submit time, so failing early
+  // saves them from answering everything only to be told "already taken").
+  // Everyone else auto-joins only AFTER the check resolves — never before.
+  const [alreadyTaken, setAlreadyTaken] = useState<{ score_percentage: number } | null>(null);
+  const [attemptResolved, setAttemptResolved] = useState(false);
+  useEffect(() => {
+    if (!quiz || joined || loading) return;
+    // Guests with a URL name have no account to check — join immediately.
+    if (isGuest && guestName) {
+      setAttemptResolved(true);
+      if (!autoJoiningRef.current) {
+        autoJoiningRef.current = true;
+        handleJoin();
+      }
+      return;
+    }
+    if (!currentUser || currentUser.isGuest) return;
+    let cancelled = false;
+    (async () => {
+      let found: { score_percentage: number } | null = null;
+      try {
+        if (isLocalMode()) {
+          const res = await fetch("/api/attempts?mine=true");
+          if (res.ok) {
+            const data = await res.json();
+            const match = (data.attempts || []).find(
+              (a: { quiz_id: string; status: string }) => a.quiz_id === quiz.id && a.status === "completed"
+            );
+            if (match) found = { score_percentage: match.score_percentage ?? 0 };
+          }
+        } else if (supabase) {
+          const { data: userData } = await supabase.auth.getUser();
+          if (userData.user) {
+            const { data } = await supabase
+              .from("quiz_attempts")
+              .select("score_percentage")
+              .eq("quiz_id", quiz.id)
+              .eq("participant_id", userData.user.id)
+              .eq("status", "completed")
+              .limit(1);
+            if (data && data.length) found = { score_percentage: data[0].score_percentage ?? 0 };
+          }
+        }
+      } catch { /* fail open — the server still blocks duplicate submits */ }
+      if (cancelled) return;
+      if (found) {
+        setAlreadyTaken(found);
+      } else if (!autoJoiningRef.current) {
+        autoJoiningRef.current = true;
+        handleJoin();
+      }
+      setAttemptResolved(true);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quiz?.id, currentUser?.email, joined, loading]);
+
   useEffect(() => {
     const fetchQuiz = async () => {
       // Always try the public API first (works for guests, local, and logged-in users)
@@ -169,6 +228,7 @@ export default function QuizPage() {
 
   const handleJoin = async () => {
     if (!participantName.trim()) return;
+    if (alreadyTaken) return; // entry check owns this state
 
     if (isGuest || isLocalMode()) {
       joinedAtRef.current = new Date().toISOString();
@@ -312,15 +372,9 @@ export default function QuizPage() {
     } catch { /* leaderboard optional */ }
   }, [submitting, submitted, quiz, questions, answers, attempt, timeLeft, isGuest, participantName, supabase, currentUser]);
 
-  // Auto-join for logged-in users and guests with URL name (MUST be before conditional returns)
-  const shouldAutoJoin = (currentUser && !currentUser.isGuest) || (isGuest && !!guestName);
-
-  useEffect(() => {
-    if (shouldAutoJoin && !joined && !loading && quiz && !autoJoiningRef.current) {
-      autoJoiningRef.current = true;
-      handleJoin();
-    }
-  }, [shouldAutoJoin, joined, loading, quiz]);
+  // Auto-join for guests with a URL name happens inside the entry check.
+  // Logged-in users never see a separate auto-join effect — the check itself
+  // joins them when clean, which removes the stale-state race entirely.
 
   // ─── Conditional renders (ALL hooks declared above) ───
 
@@ -355,8 +409,9 @@ export default function QuizPage() {
     );
   }
 
-  // Auto-joining spinner
-  if (shouldAutoJoin && !joined) {
+  // Entry-check-in-progress: logged-in user whose duplicate check hasn't
+  // resolved yet (they either join or see the taken screen right after).
+  if (currentUser && !currentUser.isGuest && !attemptResolved && !joined) {
     return (
       <div className="min-h-screen flex flex-col">
         <header className="bg-[#006633] text-white h-14 flex items-center px-6">
@@ -364,6 +419,32 @@ export default function QuizPage() {
         </header>
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-[#006633] border-t-transparent rounded-full animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
+  // Already taken — the student completed this quiz before; no retake.
+  if (alreadyTaken && !joined) {
+    const passed = alreadyTaken.score_percentage >= (quiz?.passing_score || 50);
+    return (
+      <div className="min-h-screen flex flex-col">
+        <header className="bg-[#006633] text-white h-14 flex items-center px-6">
+          <Logo onDark />
+        </header>
+        <div className="flex-1 flex items-center justify-center px-4">
+          <div className="bg-white border border-[#e0e0e0] rounded-lg p-8 max-w-md text-center">
+            <CheckCircle className={`w-12 h-12 mx-auto mb-3 ${passed ? "text-green-600" : "text-amber-500"}`} />
+            <h1 className="text-lg font-semibold text-[#333] mb-1">You have already taken this quiz</h1>
+            <p className="text-sm text-[#666] mb-4">
+              Your score: <span className="font-semibold text-[#333]">{alreadyTaken.score_percentage}%</span>
+              {quiz && <> on “{quiz.title}”</>}. Each student gets one attempt.
+            </p>
+            <div className="flex items-center justify-center gap-2">
+              <Link href="/dashboard/attempts" className="btn-primary text-sm">View my attempts</Link>
+              <Link href="/dashboard" className="text-sm text-[#666] hover:text-[#333] px-3 py-2">Dashboard</Link>
+            </div>
+          </div>
         </div>
       </div>
     );
