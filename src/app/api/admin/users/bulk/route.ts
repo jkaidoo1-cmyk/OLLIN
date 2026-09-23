@@ -152,7 +152,20 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (mutated) writeLocalUsers(users);
+    if (mutated) {
+      const saved = writeLocalUsers(users);
+      if (!saved) {
+        return NextResponse.json(
+          {
+            error:
+              "Could not save the imported accounts — this deployment has no writable storage (and Supabase is not connected). Nothing was imported. Connect Supabase in Settings → Environment Variables to enable persistent imports.",
+            not_persisted: true,
+            would_create: result.created,
+          },
+          { status: 507 }
+        );
+      }
+    }
 
     await recordAdminAction(
       request,

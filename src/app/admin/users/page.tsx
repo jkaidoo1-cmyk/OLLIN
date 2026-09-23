@@ -687,6 +687,7 @@ export default function AdminUsersPage() {
                   onClick={async () => {
                     setImporting(true);
                     setImportResult(null);
+                    setSaveError("");
                     try {
                       const res = await fetch("/api/admin/users/bulk", {
                         method: "POST",
@@ -716,6 +717,11 @@ export default function AdminUsersPage() {
                   {importing ? "Importing…" : "Import"}
                 </button>
               </div>
+              {saveError && (
+                <div className="text-xs px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded flex items-start gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" /> {saveError}
+                </div>
+              )}
               {importResult && (
                 <div className="text-xs border border-[#e0e0e0] rounded p-3 space-y-2">
                   <p className="text-green-700 font-medium">{importResult.created.length} account(s) created</p>

@@ -112,7 +112,17 @@ export async function POST(request: NextRequest) {
         created_at: new Date().toISOString(),
       };
       users.push(newUser);
-      writeLocalUsers(users);
+      const saved = writeLocalUsers(users);
+      if (!saved) {
+        return NextResponse.json(
+          {
+            error:
+              "Could not save the account — this deployment has no writable storage (and Supabase is not connected). Connect Supabase to enable persistent user management.",
+            not_persisted: true,
+          },
+          { status: 507 }
+        );
+      }
       const admin = await getSessionAdmin(request);
       await recordAdminAction(request, admin, "user.create", "user", newUser.id, `Created ${newUser.role} account ${newUser.email}`);
       return NextResponse.json({ user: publicUser(newUser), message: "Account created" });

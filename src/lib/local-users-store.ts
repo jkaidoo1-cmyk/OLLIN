@@ -123,14 +123,16 @@ export function readLocalUsers(): StoredLocalUser[] {
   return seeded;
 }
 
-export function writeLocalUsers(users: StoredLocalUser[]) {
-  // Serverless hosts (Vercel) have a read-only filesystem. Writes are
-  // best-effort there: the seeded users still work for this warm instance,
-  // and persistent storage comes from Supabase when configured.
+export function writeLocalUsers(users: StoredLocalUser[]): boolean {
+  // Serverless hosts (Vercel) have a read-only filesystem. Callers that
+  // create/modify accounts must check the return value and tell the admin
+  // when nothing was saved — reporting success here would be a lie, since
+  // the accounts vanish as soon as the instance is recycled.
   try {
     writeFileSync(getUsersPath(), JSON.stringify(users, null, 2));
+    return true;
   } catch {
-    /* read-only fs — keep going */
+    return false; // read-only fs — persistent storage comes from Supabase
   }
 }
 
