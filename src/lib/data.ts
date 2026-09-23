@@ -527,6 +527,10 @@ export async function submitAttempt(
     const graded = await gradeAnswers();
     const correct = graded.filter((a) => a.is_correct).length;
     const total = graded.length;
+    // Keep the selections for question-by-question review (My attempts and
+    // the review endpoint read this record).
+    const answersRecord: Record<string, string> = {};
+    for (const a of graded) answersRecord[a.question_id] = a.selected_answer;
     const attempt: QuizAttempt = {
       id: attemptId,
       quiz_id: quizIdHint || "",
@@ -543,11 +547,15 @@ export async function submitAttempt(
       marks_total: total,
       status: "completed",
       created_at: new Date().toISOString(),
-    };
+      answers: answersRecord,
+    } as QuizAttempt & { answers?: Record<string, string> };
     // Persist so the attempt counts toward leaderboards and analytics —
-    // previously graded attempts were returned but never stored.
+    // previously graded attempts were returned but never stored. Replace any
+    // in_progress placeholder with the same id instead of appending a twin.
     const all = readServerAttempts();
-    all.push(attempt);
+    const idx = all.findIndex((a) => a.id === attemptId);
+    if (idx >= 0) all[idx] = attempt;
+    else all.push(attempt);
     writeServerAttempts(all);
     return attempt;
   }
@@ -570,6 +578,16 @@ export async function submitAttempt(
     });
   }
 
+  const { data: existing } = await supabase
+    .from("quiz_attempts")
+    .select("started_at")
+    .eq("id", attemptId)
+    .single();
+  const startedMs = existing?.started_at ? new Date(existing.started_at).getTime() : null;
+  const elapsedSeconds =
+    meta?.time_taken_seconds ??
+    (startedMs ? Math.max(0, Math.round((Date.now() - startedMs) / 1000)) : null);
+
   const correct = graded.filter((a) => a.is_correct).length;
   const total = graded.length;
   const marksEarned = graded.reduce((s, a) => s + a.marks_awarded, 0);
@@ -578,9 +596,7 @@ export async function submitAttempt(
     .from("quiz_attempts")
     .update({
       completed_at: new Date().toISOString(),
-      time_taken_seconds: Math.round(
-        (Date.now() - new Date().getTime()) / 1000
-      ),
+      time_taken_seconds: elapsedSeconds,
       correct_answers: correct,
       score_percentage: total > 0 ? Math.round((correct / total) * 100) : 0,
       marks_earned: marksEarned,

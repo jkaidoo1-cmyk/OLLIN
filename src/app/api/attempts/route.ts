@@ -128,7 +128,11 @@ export async function POST(request: NextRequest) {
     };
 
     const attempts = readServerAttempts();
-    attempts.push(attempt);
+    // Replace an existing row with the same id (in_progress → completed on
+    // resubmit) so My attempts doesn't show a 0% twin next to the real one.
+    const idx = attempts.findIndex((a) => a.id === attempt.id);
+    if (idx >= 0) attempts[idx] = attempt;
+    else attempts.push(attempt);
     writeServerAttempts(attempts);
 
     return NextResponse.json({ attempt });

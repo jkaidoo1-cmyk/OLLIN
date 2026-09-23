@@ -335,7 +335,7 @@ export default function AdminSettingsPage() {
             <select
               value={newProvider}
               onChange={(e) => setNewProvider(e.target.value)}
-              className="text-xs border border-[#ccc] rounded px-2 py-2 bg-white text-[#333]"
+              className="text-xs border border-[#ccc] rounded px-2 py-2 bg-white text-[#333] shrink-0"
             >
               <option value="groq">Groq</option>
               <option value="gemini">Google Gemini</option>
@@ -345,7 +345,7 @@ export default function AdminSettingsPage() {
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
               placeholder="Paste your API key here"
-              className="flex-1 text-xs border border-[#ccc] rounded px-3 py-2 bg-white text-[#333] outline-none focus:border-[#006633] focus:ring-1 focus:ring-[#006633]"
+              className="flex-1 min-w-0 text-xs border border-[#ccc] rounded px-3 py-2 bg-white text-[#333] outline-none focus:border-[#006633] focus:ring-1 focus:ring-[#006633]"
             />
             <button
               onClick={handleAddKey}
