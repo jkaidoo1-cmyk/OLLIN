@@ -4,8 +4,9 @@ import { readLocalUsers, writeLocalUsers } from "@/lib/local-users-store";
 
 /**
  * PATCH /api/auth/profile — a logged-in user updates their own profile.
- * Only safe self-service fields are accepted: current_year and full_name.
- * Role, program assignment, and email stay admin-controlled.
+ * Only safe self-service fields are accepted: current_year and password.
+ * Full name, role, program assignment, and email stay admin-controlled —
+ * a full_name value in the body is silently ignored.
  *
  * Works in both backends:
  *   - Supabase configured → updates profiles via the service-role client
@@ -47,7 +48,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ message: "Password updated" });
   }
 
-  const updates: { current_year?: number; full_name?: string } = {};
+  const updates: { current_year?: number } = {};
   if (body.current_year !== undefined) {
     const y = Number(body.current_year);
     if (!Number.isInteger(y) || y < 1 || y > 8) {
@@ -55,13 +56,7 @@ export async function PATCH(request: NextRequest) {
     }
     updates.current_year = y;
   }
-  if (body.full_name !== undefined) {
-    const name = String(body.full_name).trim();
-    if (name.length < 1 || name.length > 120) {
-      return NextResponse.json({ error: "Invalid name" }, { status: 400 });
-    }
-    updates.full_name = name;
-  }
+  // full_name deliberately not accepted — names are managed by the admin.
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   }
@@ -84,7 +79,6 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     if (updates.current_year !== undefined) user.current_year = updates.current_year;
-    if (updates.full_name !== undefined) user.full_name = updates.full_name;
     writeLocalUsers(users);
     return NextResponse.json({ message: "Profile updated" });
   } catch (error) {

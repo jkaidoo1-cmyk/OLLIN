@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AtSign, Check, ChevronDown, ChevronRight, Download, Eye, EyeOff, GraduationCap, KeyRound, LifeBuoy, Loader2, LogOut, Pencil, UserRound, X } from "lucide-react";
+import { AtSign, ChevronDown, ChevronRight, Download, Eye, EyeOff, GraduationCap, KeyRound, LifeBuoy, Loader2, LogOut, UserRound } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { isLocalMode, disableLocalMode } from "@/lib/local";
@@ -45,10 +45,6 @@ export default function ProfilePage() {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<OpenSection>(null);
-
-  // Inline name editing in the banner
-  const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
 
   const [savingYear, setSavingYear] = useState(false);
   const [savedYearFlash, setSavedYearFlash] = useState<number | null>(null);
@@ -96,37 +92,6 @@ export default function ProfilePage() {
         localStorage.setItem("ollin_local_user", JSON.stringify(u));
       }
     } catch { /* mirror is optional */ }
-  };
-
-  const startNameEdit = () => {
-    setNameDraft(me?.full_name || "");
-    setEditingName(true);
-  };
-
-  const saveName = async () => {
-    const trimmed = nameDraft.trim();
-    if (!trimmed || !me || trimmed === me.full_name) {
-      setEditingName(false);
-      return;
-    }
-    try {
-      const res = await fetch("/api/auth/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ full_name: trimmed }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setMe((m) => (m ? { ...m, full_name: trimmed } : m));
-        syncLocalMirror({ full_name: trimmed });
-        toast.success("Name updated");
-      } else {
-        toast.error(data.error || "Could not update name");
-      }
-    } catch {
-      toast.error("Could not update name. Check your connection.");
-    }
-    setEditingName(false);
   };
 
   const saveYear = async (y: number) => {
@@ -253,38 +218,7 @@ export default function ProfilePage() {
             {initial}
           </div>
           <div className="min-w-0 flex-1">
-            {editingName ? (
-              <div className="flex items-center gap-1.5">
-                <input
-                  autoFocus
-                  value={nameDraft}
-                  onChange={(e) => setNameDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") saveName();
-                    if (e.key === "Escape") setEditingName(false);
-                  }}
-                  maxLength={120}
-                  className="input-field text-sm font-semibold py-1.5 max-w-[220px]"
-                />
-                <button onClick={saveName} className="p-2 text-white/80 hover:text-white hover:bg-white/15 rounded transition-colors" aria-label="Save name">
-                  <Check className="w-4 h-4" />
-                </button>
-                <button onClick={() => setEditingName(false)} className="p-2 text-white/60 hover:text-white hover:bg-white/15 rounded transition-colors" aria-label="Cancel">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 group/name">
-                <h1 className="text-lg font-bold text-white truncate">{me.full_name || "Student"}</h1>
-                <button
-                  onClick={startNameEdit}
-                  className="p-1.5 text-white/70 hover:text-white hover:bg-white/15 rounded transition-colors shrink-0"
-                  aria-label="Edit name"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
+            <h1 className="text-lg font-bold text-white truncate">{me.full_name || "Student"}</h1>
             <p className="text-sm text-white/70 truncate">{me.email}</p>
           </div>
         </div>
@@ -307,22 +241,6 @@ export default function ProfilePage() {
 
       {/* ── Settings list ── */}
       <div className="bg-white border border-[#e0e0e0] rounded-lg divide-y divide-[#f0f0f0] overflow-hidden">
-        {/* Name row (jumps to the banner editor) */}
-        <button
-          type="button"
-          onClick={startNameEdit}
-          className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-[#fafafa] transition-colors text-left"
-        >
-          <span className="w-8 h-8 rounded-lg bg-[#e6f0e8] flex items-center justify-center shrink-0">
-            <UserRound className="w-4 h-4 text-[#006633]" />
-          </span>
-          <span className="flex-1 min-w-0">
-            <span className="block text-sm font-medium text-[#333]">Full name</span>
-            <span className="block text-xs text-[#999] truncate">{me.full_name || "Not set"}</span>
-          </span>
-          <ChevronRight className="w-4 h-4 text-[#ccc] shrink-0" />
-        </button>
-
         {/* Year row — expands to the picker */}
         <div>
           <button
@@ -450,14 +368,14 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {/* Email row — read-only */}
+        {/* Name + email row — read-only, admin-managed */}
         <div className="flex items-center gap-3 px-4 py-3.5">
           <span className="w-8 h-8 rounded-lg bg-[#f0f0f0] flex items-center justify-center shrink-0">
-            <AtSign className="w-4 h-4 text-[#999]" />
+            <UserRound className="w-4 h-4 text-[#999]" />
           </span>
           <span className="flex-1 min-w-0">
-            <span className="block text-sm font-medium text-[#333]">Email</span>
-            <span className="block text-xs text-[#999] truncate">{me.email}</span>
+            <span className="block text-sm font-medium text-[#333]">Full name</span>
+            <span className="block text-xs text-[#999] truncate">{me.full_name || "Not set"} · {me.email}</span>
           </span>
           <span className="text-xs text-[#999] shrink-0">Managed by admin</span>
         </div>
