@@ -35,6 +35,9 @@ export default function QuizPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Terminal submit rejection (time up / closed / duplicate) — shows a
+  // resolution screen; the quiz UI is no longer reachable or retryable.
+  const [rejection, setRejection] = useState<{ message: string } | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [rank, setRank] = useState<{ rank: number; total: number } | null>(null);
   const [results, setResults] = useState<{
@@ -232,6 +235,23 @@ export default function QuizPage() {
 
     if (isGuest || isLocalMode()) {
       joinedAtRef.current = new Date().toISOString();
+      // Record the start server-side so the time limit survives page
+      // refreshes — otherwise a student could reset their timer forever.
+      try {
+        const res = await fetch("/api/attempts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            quiz_id: quiz!.id,
+            participant_name: participantName || "Guest",
+            status: "in_progress",
+          }),
+        });
+        if (res.ok) {
+          const d = await res.json();
+          if (d.attempt?.id) setAttempt(d.attempt);
+        }
+      } catch { /* server will still grade on submit */ }
       setJoined(true);
       return;
     }
@@ -262,12 +282,13 @@ export default function QuizPage() {
     // score. The client only renders what the server returns — participants
     // can't grade their own submission or fake their score.
     const attemptId = attempt?.id || `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    // The server's own record of when this attempt started (from the
+    // in_progress row) is authoritative over anything the client claims —
+    // a refreshed page would otherwise report a fresh start time.
+    const startedAt = attempt?.started_at || joinedAtRef.current || new Date().toISOString();
     const timeTaken = quiz.time_limit_minutes
       ? quiz.time_limit_minutes * 60 - (timeLeft || 0)
       : null;
-    // Server-observed join time: recorded when the questions were first
-    // shown, before any answers. Lets the server cap time taken itself.
-    const startedAt = joinedAtRef.current || new Date().toISOString();
 
     let score = 0;
     let correct = 0;
@@ -326,9 +347,58 @@ export default function QuizPage() {
         isCorrect: !!gradedMap[q.id]?.is_correct,
       }));
     } catch (err) {
-      // Grading failed. Surface the server's reason (e.g. "You have already
-      // taken this quiz.") rather than a generic connection error.
+      // Grading failed. Surface the server's reason (e.g. "Time is up",
+      // "You have already taken this quiz") rather than a generic error.
       const msg = err instanceof Error && err.message ? err.message : "Could not submit your quiz. Check your connection and try again.";
+      // Terminal rejections (time up / quiz closed / duplicate) leave the
+      // submit button failing forever, so hand the student a resolution
+      // screen instead of leaving them trapped in the quiz UI. Network-type
+      // failures stay retryable with the toast + button.
+      const terminal = /time is up|has closed|not open yet|already taken/i.test(msg);
+      if (terminal) {
+        setRejection({ message: msg });
+        if (isLocalMode() && /time is up/i.test(msg) && quiz) {
+          // Mark the attempt timed out so My attempts / the admin roster
+          // can distinguish "missed the deadline" from "never showed up".
+          // Server-side: My attempts reads the server record, not
+          // localStorage, and the route replaces the in_progress row.
+          try {
+            await fetch(`/api/attempts`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", ...(isLocalMode() ? { "x-local-mode": "true" } : {}) },
+              body: JSON.stringify({
+                quiz_id: quiz.id,
+                participant_name: participantName || currentUser?.name || "Anonymous",
+                participant_email: currentUser?.email || null,
+                status: "timed_out",
+                completed_at: new Date().toISOString(),
+                time_taken_seconds: quiz.time_limit_minutes ? quiz.time_limit_minutes * 60 : null,
+                total_questions: questions.length,
+                answers,
+              }),
+            });
+          } catch { /* best-effort record */ }
+          // Also mirror into localStorage for offline guest review.
+          try {
+            const { saveLocalAttempt } = await import("@/lib/local");
+            const localUser = getLocalUser();
+            saveLocalAttempt({
+              id: attemptId,
+              quiz_id: quiz.id,
+              participant_email: localUser?.email || currentUser?.email || null,
+              participant_name: participantName || "Anonymous",
+              score_percentage: 0,
+              correct_answers: 0,
+              total_questions: questions.length,
+              time_taken_seconds: timeTaken,
+              answers,
+              status: "timed_out",
+              completed_at: new Date().toISOString(),
+            });
+          } catch { /* best-effort record */ }
+        }
+        return;
+      }
       toast.error(msg);
       setSubmitting(false);
       return;
@@ -419,6 +489,32 @@ export default function QuizPage() {
         </header>
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-[#006633] border-t-transparent rounded-full animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
+  // Terminal rejection — time up, quiz closed, or duplicate. The student
+  // gets a way out instead of a submit button that fails forever.
+  if (rejection) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <header className="bg-[#006633] text-white h-14 flex items-center px-6">
+          <Logo onDark />
+        </header>
+        <div className="flex-1 flex items-center justify-center px-4">
+          <div className="bg-white border border-[#e0e0e0] rounded-lg p-8 max-w-md text-center">
+            <Clock className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+            <h1 className="text-lg font-semibold text-[#333] mb-2">Submission not accepted</h1>
+            <p className="text-sm text-[#666] mb-5">{rejection.message}</p>
+            <p className="text-xs text-[#999] mb-5">
+              If you think this is a mistake (e.g. you lost connection near the end), message the admin from the Help desk.
+            </p>
+            <div className="flex items-center justify-center gap-2">
+              <Link href="/dashboard/attempts" className="btn-primary text-sm">My attempts</Link>
+              <Link href="/support" className="text-sm text-[#666] hover:text-[#333] px-3 py-2">Help desk</Link>
+            </div>
+          </div>
         </div>
       </div>
     );

@@ -130,7 +130,14 @@ export async function POST(request: NextRequest) {
     const attempts = readServerAttempts();
     // Replace an existing row with the same id (in_progress → completed on
     // resubmit) so My attempts doesn't show a 0% twin next to the real one.
-    const idx = attempts.findIndex((a) => a.id === attempt.id);
+    // For timed-out markers (which mint a fresh client id) also retire any
+    // leftover in_progress row for the same participant + quiz.
+    let idx = attempts.findIndex((a) => a.id === attempt.id);
+    if (idx < 0 && attempt.status === "timed_out" && attempt.participant_email) {
+      idx = attempts.findIndex(
+        (a) => a.quiz_id === attempt.quiz_id && a.participant_email === attempt.participant_email && a.status === "in_progress"
+      );
+    }
     if (idx >= 0) attempts[idx] = attempt;
     else attempts.push(attempt);
     writeServerAttempts(attempts);

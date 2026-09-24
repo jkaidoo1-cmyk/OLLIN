@@ -13,6 +13,7 @@ interface MyAttempt {
   time_taken_seconds: number | null;
   completed_at: string;
   answers: Record<string, string> | null;
+  status?: string;
 }
 
 interface ReviewQuestion {
@@ -130,7 +131,12 @@ export default function MyAttemptsPage() {
                     <span className="text-sm font-bold">{a.score_percentage}%</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[#333] truncate">{a.quiz_title || "Untitled quiz"}</p>
+                    <p className="text-sm font-medium text-[#333] truncate">
+                      {a.quiz_title || "Untitled quiz"}
+                      {a.status === "timed_out" && (
+                        <span className="ml-2 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded align-middle">Timed out — not submitted</span>
+                      )}
+                    </p>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-[#999]">
                       <span>{a.correct_answers}/{a.total_questions} correct</span>
                       {a.time_taken_seconds != null && (

@@ -49,7 +49,34 @@ export async function POST(
         const GRACE_SECONDS = 30;
         if (quiz.time_limit_minutes) {
           const limitSec = quiz.time_limit_minutes * 60;
-          const startedMs = body.started_at ? new Date(body.started_at).getTime() : NaN;
+          // Prefer the start time recorded server-side at join (survives page
+          // refreshes — a refreshed client would otherwise report a fresh
+          // start and buy unlimited time). Fall back to the client's claim,
+          // then to the in_progress row's own timestamp.
+          let serverStartMs: number | null = null;
+          try {
+            const { getSessionUser } = await import("@/lib/session");
+            const { readServerAttempts } = await import("@/lib/data");
+            const sess = await getSessionUser(request).catch(() => null);
+            const email = sess?.email || body.participant_email || null;
+            const rows = readServerAttempts().filter(
+              (a: any) =>
+                a.quiz_id === quizId &&
+                a.status !== "abandoned" &&
+                (a.id === id || (email && a.participant_email === email))
+            );
+            for (const row of rows) {
+              const rec = row?.started_at ? new Date(row.started_at).getTime() : NaN;
+              if (!Number.isNaN(rec) && rec > 0) {
+                serverStartMs = serverStartMs === null ? rec : Math.min(serverStartMs, rec);
+              }
+            }
+          } catch { /* best-effort lookup */ }
+          const clientStartMs = body.started_at ? new Date(body.started_at).getTime() : NaN;
+          const candidates = [serverStartMs, Number.isNaN(clientStartMs) ? null : clientStartMs]
+            .filter((v): v is number => typeof v === "number" && v > 0);
+          // Earliest credible start wins — extra time is never granted.
+          const startedMs = candidates.length ? Math.min(...candidates) : NaN;
           if (!Number.isNaN(startedMs) && startedMs > 0) {
             const elapsedSec = (Date.now() - startedMs) / 1000;
             if (elapsedSec > limitSec + GRACE_SECONDS) {
