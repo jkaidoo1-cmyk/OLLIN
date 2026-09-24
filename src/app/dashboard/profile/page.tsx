@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AtSign, Check, ChevronDown, ChevronRight, Download, Eye, EyeOff, GraduationCap, KeyRound, LifeBuoy, Loader2, LogOut, Pencil, Share, Smartphone, UserRound, X } from "lucide-react";
+import { AtSign, Check, ChevronDown, ChevronRight, Download, Eye, EyeOff, GraduationCap, KeyRound, LifeBuoy, Loader2, LogOut, Pencil, UserRound, X } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { isLocalMode, disableLocalMode } from "@/lib/local";
@@ -62,7 +62,6 @@ export default function ProfilePage() {
 
   // PWA install
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
-  const [installOpen, setInstallOpen] = useState(false);
   const [installDone, setInstallDone] = useState(false);
 
   useEffect(() => {
@@ -228,14 +227,11 @@ export default function ProfilePage() {
   const handleInstall = async () => {
     if (installDone || window.matchMedia("(display-mode: standalone)").matches) return;
     if (installEvent) {
-      setInstallOpen(false);
       await installEvent.prompt();
       const { outcome } = await installEvent.userChoice;
       if (outcome === "accepted") setInstallDone(true);
       setInstallEvent(null); // the prompt can only fire once
-      return;
     }
-    setInstallOpen((v) => !v); // no native prompt (iOS, unsupported) — show manual steps
   };
 
   const initial = (me.full_name || me.email).charAt(0).toUpperCase();
@@ -471,44 +467,24 @@ export default function ProfilePage() {
       <div className="bg-white border border-[#e0e0e0] rounded-lg divide-y divide-[#f0f0f0] overflow-hidden">
         {/* Install as an app — hidden entirely once running standalone */}
         {typeof window !== "undefined" && !window.matchMedia("(display-mode: standalone)").matches && !installDone && (
-          <div>
-            <button
-              type="button"
-              onClick={handleInstall}
-              aria-expanded={installOpen}
-              className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-[#fafafa] transition-colors text-left"
-            >
-              <span className="w-8 h-8 rounded-lg bg-[#e6f0e8] flex items-center justify-center shrink-0">
-                <Smartphone className="w-4 h-4 text-[#006633]" />
-              </span>
-              <span className="flex-1 min-w-0">
-                <span className="block text-sm font-medium text-[#333]">Install app</span>
-                <span className="block text-xs text-[#999]">Add OLLIN to your home screen</span>
-              </span>
-              {installEvent ? <Download className="w-4 h-4 text-[#006633] shrink-0" /> : <ChevronDown className={`w-4 h-4 text-[#ccc] shrink-0 transition-transform ${installOpen ? "rotate-180" : ""}`} />}
-            </button>
-            {installOpen && !installEvent && (
-              <div className="px-4 pb-4">
-                <div className="bg-[#fafafa] border border-[#f0f0f0] rounded-md p-3 space-y-2">
-                  <p className="text-xs font-medium text-[#333]">
-                    {isIos() ? "On iPhone or iPad:" : "In your browser menu:"}
-                  </p>
-                  {isIos() ? (
-                    <ol className="text-xs text-[#666] space-y-1 list-decimal list-inside">
-                      <li>Tap the <Share className="w-3 h-3 inline -mt-0.5" /> Share button in Safari</li>
-                      <li>Scroll and tap <strong>Add to Home Screen</strong></li>
-                      <li>Tap <strong>Add</strong></li>
-                    </ol>
-                  ) : (
-                    <ol className="text-xs text-[#666] space-y-1 list-decimal list-inside">
-                      <li>Open the browser menu (⋮ or ⋯)</li>
-                      <li>Look for <strong>Install app</strong> or <strong>Add to Home screen</strong></li>
-                    </ol>
-                  )}
-                </div>
-              </div>
+          <button
+            type="button"
+            onClick={handleInstall}
+            className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-[#fafafa] transition-colors text-left"
+          >
+            <span className="w-8 h-8 rounded-lg bg-[#006633] flex items-center justify-center shrink-0">
+              <Download className="w-4 h-4 text-white" />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-medium text-[#333]">Download app</span>
+              <span className="block text-xs text-[#999]">Adds OLLIN to your home screen</span>
+            </span>
+            {installEvent ? (
+              <span className="text-xs font-medium text-[#006633] shrink-0">Get</span>
+            ) : (
+              <span className="text-xs text-[#999] shrink-0">{isIos() ? "via Safari share" : "via browser menu"}</span>
             )}
-          </div>
+          </button>
         )}
         <a
           href="/support?from=dashboard"
