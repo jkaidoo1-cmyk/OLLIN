@@ -27,7 +27,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [profileOpen, setProfileOpen] = useState(false);
   const [local, setLocal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [currentYear, setCurrentYear] = useState<number>(1);
+  const [currentYear] = useState<number>(1);
   const supabase = createClient();
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -46,7 +46,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             return;
           }
           setUser({ email: localUser.email, name: localUser.full_name });
-          setCurrentYear(localUser.current_year || 1);
+          // Year/class selection lives on the profile page now — the dropdown
+          // was removed to keep the menu lean.
           // Show a storage notice only when the server is NOT persisting to
           // Supabase — a healthy server session is not a local.
           try {
@@ -217,38 +218,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       <LifeBuoy className="w-4 h-4 text-[#006633]" />
                       Help &amp; support
                     </Link>
-                    {local && (
-                      <div className="border-t border-[#e0e0e0] mt-1 pt-2 px-4 pb-1">
-                        <label className="block text-[10px] font-medium text-[#999] uppercase tracking-wider mb-1">My year</label>
-                        <select
-                          value={currentYear}
-                          onChange={async (e) => {
-                            const y = Number(e.target.value);
-                            setCurrentYear(y);
-                            // Persist server-side so the year applies on any device
-                            try {
-                              await fetch("/api/auth/profile", {
-                                method: "PATCH",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ current_year: y }),
-                              });
-                            } catch { /* non-critical */ }
-                            // Mirror locally so course filtering updates instantly
-                            const u = getLocalUser();
-                            if (u) {
-                              u.current_year = y;
-                              localStorage.setItem("ollin_local_user", JSON.stringify(u));
-                            }
-                          }}
-                          className="w-full text-sm border border-[#e0e0e0] rounded px-2 py-1.5 text-[#333] bg-white"
-                        >
-                          <option value={1}>Year 1</option>
-                          <option value={2}>Year 2</option>
-                          <option value={3}>Year 3</option>
-                          <option value={4}>Year 4</option>
-                        </select>
-                      </div>
-                    )}
                     <div className="border-t border-[#e0e0e0] mt-1 pt-1">
                       <button
                         onClick={() => { setProfileOpen(false); handleLogout(); }}
