@@ -86,7 +86,10 @@ export async function POST(request: NextRequest) {
     }
 
     const title = `Support: ${subject}`;
-    const full = contact
+    // Logged-in senders: sign with the name only — their email rides in the
+    // notification's sender_email metadata (that's what routes the admin's
+    // reply), so printing it in the body just leaks it into the UI.
+    const full = !session && contact
       ? `${message}\n\n— ${name} (${contact})`
       : `${message}\n\n— ${name}`;
 
