@@ -81,8 +81,12 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-[#006633] text-white">
-        <div className="max-w-6xl mx-auto px-6 py-6">
+      <footer className="bg-[#006633] text-white relative overflow-hidden">
+        {/* Decorative circles — same motif as the green banners */}
+        <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-white/5" aria-hidden />
+        <div className="absolute -bottom-20 -left-10 w-44 h-44 rounded-full bg-white/5" aria-hidden />
+        <div className="absolute top-1/2 left-1/3 w-24 h-24 rounded-full bg-white/[0.04]" aria-hidden />
+        <div className="relative max-w-6xl mx-auto px-6 py-6">
           {/* On phones the two link columns sit side by side next to nothing —
               brand row on top, links in a compact 2-col row below. */}
           <div className="flex flex-col sm:grid sm:grid-cols-3 gap-6">
