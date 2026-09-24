@@ -272,7 +272,15 @@ export async function getQuizByCode(
     return getLocalQuizByCode(code) || null;
   }
 
-  const supabase = await getServerSupabase();
+  let supabase;
+  try {
+    supabase = await getServerSupabase();
+  } catch {
+    // No Supabase configured (or unreachable) — file-backed server mode is
+    // the store. Without this, joining throws NO_BACKEND on deployments
+    // like Vercel where only the built-in seed and files exist.
+    return serverGetLocalQuizByCode(code) || null;
+  }
   const { data, error } = await supabase
     .from("quizzes")
     .select("*")
@@ -383,7 +391,15 @@ export async function getQuizQuestions(
     return getLocalQuestions(quizId);
   }
 
-  const supabase = await getServerSupabase();
+  let supabase;
+  try {
+    supabase = await getServerSupabase();
+  } catch {
+    // No Supabase — file-backed server mode (includes the built-in test quiz).
+    return readServerQuestions().filter((q) => q.quiz_id === quizId).length > 0
+      ? readServerQuestions().filter((q) => q.quiz_id === quizId)
+      : serverGetLocalQuestions(quizId);
+  }
   const { data, error } = await supabase
     .from("questions")
     .select("*")
