@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { UserPlus, Loader2, Trash2, Shield, GraduationCap, Mail, Eye, EyeOff, Save, X, AlertCircle, Pencil, Upload, FileText } from "lucide-react";
+import { UserPlus, Loader2, Trash2, Shield, GraduationCap, Mail, Eye, EyeOff, Save, X, AlertCircle, Pencil, Upload, FileText, Users } from "lucide-react";
+import PageBanner, { BannerButton } from "@/components/PageBanner";
 import { Program } from "@/lib/types";
 import { clearStaleAdminSession } from "@/lib/admin";
 import { useConfirm } from "@/components/ui/toast";
@@ -301,26 +302,21 @@ export default function AdminUsersPage() {
 
   return (
     <div className="pb-24">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-[#333]">Users</h1>
-          <p className="text-xs text-[#999] mt-0.5">{displayUsers.length} accounts {pending.length > 0 && `(${pending.length} pending)`}</p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <button
-            onClick={() => setShowImport(true)}
-            className="text-xs px-3 py-2 border border-[#e0e0e0] rounded hover:border-green-400 text-[#666] flex items-center gap-1.5 justify-center"
-          >
-            <Upload className="w-3.5 h-3.5" /> Import CSV
-          </button>
-          <button
-            onClick={() => { setShowForm(!showForm); setEditing(null); }}
-            className="btn-primary text-xs flex items-center gap-1.5"
-          >
-            <UserPlus className="w-3.5 h-3.5" /> Create user
-          </button>
-        </div>
-      </div>
+      <PageBanner
+        title="Users"
+        subtitle={`${displayUsers.length} accounts${pending.length > 0 ? ` (${pending.length} pending)` : ""}`}
+        icon={<Users className="w-5 h-5" />}
+        actions={
+          <>
+            <BannerButton variant="ghost" onClick={() => setShowImport(true)}>
+              <Upload className="w-3.5 h-3.5" /> Import CSV
+            </BannerButton>
+            <BannerButton onClick={() => { setShowForm(!showForm); setEditing(null); }}>
+              <UserPlus className="w-3.5 h-3.5" /> Create user
+            </BannerButton>
+          </>
+        }
+      />
 
       {saveError && (
         <div className="mb-4 text-xs px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded flex items-center gap-2">

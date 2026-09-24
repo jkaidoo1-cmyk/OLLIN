@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ShieldCheck, UserPlus, UserMinus, BookOpen, GraduationCap, KeyRound, RefreshCcw, Upload, Trash2, FileText } from "lucide-react";
+import { ShieldCheck, UserPlus, UserMinus, BookOpen, GraduationCap, KeyRound, RefreshCcw, Upload, Trash2, FileText, ScrollText as ActivityIcon } from "lucide-react";
+import PageBanner from "@/components/PageBanner";
 import { useConfirm, useToast } from "@/components/ui/toast";
 
 interface AuditEvent {
@@ -116,24 +117,23 @@ export default function AdminActivityPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-[#333]">Activity</h1>
-          <p className="text-xs text-[#999] mt-0.5">
-            Record of every administrative change made on the platform
-          </p>
-        </div>
-        {events.length > 0 && (
-          <button
-            onClick={clearAll}
-            disabled={deleting !== null}
-            className="text-xs px-3 py-2 border border-red-200 text-red-600 rounded hover:bg-red-50 flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            {deleting === "all" ? "Clearing…" : "Clear all"}
-          </button>
-        )}
-      </div>
+      <PageBanner
+        title="Activity"
+        subtitle="Record of every administrative change made on the platform"
+        icon={<ActivityIcon className="w-5 h-5" />}
+        actions={
+          events.length > 0 ? (
+            <button
+              onClick={clearAll}
+              disabled={deleting !== null}
+              className="text-xs px-3 py-2 bg-white/15 text-white rounded hover:bg-red-500/80 flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {deleting === "all" ? "Clearing…" : "Clear all"}
+            </button>
+          ) : undefined
+        }
+      />
 
       {error && (
         <div className="mb-4 text-xs px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded">

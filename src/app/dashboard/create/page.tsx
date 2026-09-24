@@ -7,6 +7,7 @@ import { generateQuizCode } from "@/lib/utils";
 import { isLocalMode, addLocalQuiz, getLocalUser } from "@/lib/local";
 import { cleanText } from "@/lib/utils";
 import { Quiz, Course, Profile } from "@/lib/types";
+import PageBanner from "@/components/PageBanner";
 import {
   Upload,
   FileText,
@@ -498,11 +499,12 @@ export default function CreateQuizPage() {
 
   // ── Main form ──────────────────────
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-[#333]">Create quiz</h1>
-        <p className="text-xs text-[#999] mt-0.5">Upload material, configure, and publish</p>
-      </div>
+    <div className="max-w-3xl mx-auto space-y-5">
+      <PageBanner
+        title="Create quiz"
+        subtitle="Upload material, configure, and publish"
+        icon={<Pencil className="w-5 h-5" />}
+      />
 
       <div className="space-y-5">
         {/* Course */}

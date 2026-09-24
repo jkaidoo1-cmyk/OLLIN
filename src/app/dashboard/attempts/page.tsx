@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Award, ChevronDown, ChevronRight, Clock, CheckCircle2, XCircle, History } from "lucide-react";
+import PageBanner from "@/components/PageBanner";
 
 interface MyAttempt {
   id: string;
@@ -90,13 +91,12 @@ export default function MyAttemptsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-[#333]">My attempts</h1>
-        <p className="text-xs text-[#999] mt-0.5">
-          Every quiz you have taken, with question-by-question review
-        </p>
-      </div>
+    <div className="max-w-4xl mx-auto space-y-6">
+      <PageBanner
+        title="My attempts"
+        subtitle="Every quiz you have taken, with question-by-question review"
+        icon={<History className="w-5 h-5" />}
+      />
 
       {loading ? (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">

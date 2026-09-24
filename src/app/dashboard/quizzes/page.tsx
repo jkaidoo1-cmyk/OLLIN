@@ -7,7 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizzes } from "@/lib/local";
 import { Quiz, Course } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
-import { Plus, Copy, CheckCircle, ExternalLink, Pencil } from "lucide-react";
+import { Plus, Copy, CheckCircle, ExternalLink, Pencil, FileText } from "lucide-react";
+import PageBanner, { BannerButton } from "@/components/PageBanner";
 
 export default function MyQuizzesPage() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -94,12 +95,16 @@ export default function MyQuizzesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-[#333]">My quizzes</h1>
-        <Link href="/dashboard/create" className="btn-primary text-sm">
-          <Plus className="w-4 h-4" /> New quiz
-        </Link>
-      </div>
+      <PageBanner
+        title="My quizzes"
+        subtitle="Quizzes you have created"
+        icon={<FileText className="w-5 h-5" />}
+        actions={
+          <BannerButton href="/dashboard/create">
+            <Plus className="w-4 h-4" /> New quiz
+          </BannerButton>
+        }
+      />
 
       {/* Filters */}
       <div className="flex items-center gap-2 mb-4 overflow-x-auto">

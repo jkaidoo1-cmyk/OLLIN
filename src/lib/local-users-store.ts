@@ -89,9 +89,13 @@ export function readLocalUsers(): StoredLocalUser[] {
       // Migrate: ensure built-in accounts exist. Seeded accounts carry
       // plaintext that verifyPassword upgrades lazily, so this only fixes
       // identity/role (e.g. a file created before the demo account existed).
+      // Match by id OR email so a pre-existing account (e.g. created with a
+      // generated id) isn't duplicated by its built-in counterpart.
       let changed = false;
       for (const def of DEFAULT_LOCAL_USERS) {
-        const existing = users.find((u) => u.id === def.id);
+        const existing = users.find(
+          (u) => u.id === def.id || u.email.toLowerCase() === def.email.toLowerCase()
+        );
         if (!existing) {
           users.push({
             id: def.id,

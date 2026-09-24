@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Plus, Loader2, Trash2, BookOpen, Save, X, ChevronDown, ChevronUp, Clock, Pen, AlertCircle } from "lucide-react";
+import PageBanner, { BannerButton } from "@/components/PageBanner";
 import { Course, Program, Quiz } from "@/lib/types";
 import { getSavedQuizzes, removeSavedQuiz, syncSavedQuizzesFromServer } from "@/lib/local";
 import { clearStaleAdminSession } from "@/lib/admin";
@@ -252,15 +253,16 @@ export default function AdminCoursesPage() {
 
   return (
     <div className="pb-24">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-[#333]">Courses</h1>
-          <p className="text-xs text-[#999] mt-0.5">{displayCourses.length} courses {pending.length > 0 && `(${pending.length} pending)`}</p>
-        </div>
-        <button onClick={() => setShowForm(!showForm)} className="btn-primary text-xs flex items-center gap-1.5">
-          <Plus className="w-3.5 h-3.5" /> Add course
-        </button>
-      </div>
+      <PageBanner
+        title="Courses"
+        subtitle={`${displayCourses.length} courses${pending.length > 0 ? ` (${pending.length} pending)` : ""}`}
+        icon={<BookOpen className="w-5 h-5" />}
+        actions={
+          <BannerButton onClick={() => setShowForm(!showForm)}>
+            <Plus className="w-3.5 h-3.5" /> Add course
+          </BannerButton>
+        }
+      />
 
       {saveError && (
         <div className="flex items-start gap-2 text-xs px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded mb-4">

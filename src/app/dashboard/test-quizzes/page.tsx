@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getLocalUser } from "@/lib/local";
 import { Quiz, Course } from "@/lib/types";
 import { BookOpen, Clock, Play, Search, Share2, Check } from "lucide-react";
+import PageBanner from "@/components/PageBanner";
 
 interface CourseWithQuizzes {
   course: Course;
@@ -120,13 +121,12 @@ export default function TestQuizzesPage() {
     );
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-[#333]">Test Quizzes</h1>
-        <p className="text-xs text-[#999] mt-0.5">
-          Take quizzes available in your courses
-        </p>
-      </div>
+    <div className="max-w-4xl mx-auto space-y-6">
+      <PageBanner
+        title="Test quizzes"
+        subtitle="Take quizzes available in your courses"
+        icon={<BookOpen className="w-5 h-5" />}
+      />
 
       {loading ? (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
