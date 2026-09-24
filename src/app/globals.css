@@ -51,6 +51,26 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/*
+ * Guard against accidental pull-to-refresh on mobile.
+ *
+ * `overscroll-behavior-y: none` on body stops the bounce INSIDE the page,
+ * but Chrome still lets the browser-level pull-to-refresh trigger when the
+ * user drags down while already at the top (the gesture starts on html).
+ * Setting it on both html and body, with touch-action pan-x pan-y as a
+ * second line of defense, stops the page reloading mid-scroll — which on
+ * the quiz page would otherwise discard a student's answers.
+ */
+html {
+  overscroll-behavior-y: none;
+}
+
+@media (max-width: 639px) {
+  html {
+    touch-action: pan-x pan-y;
+  }
+}
+
 /* Inputs need 16px on mobile or iOS zooms the page when focusing them. */
 @media (max-width: 639px) {
   .input-field {
