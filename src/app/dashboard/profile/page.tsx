@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AtSign, Check, ChevronDown, ChevronRight, Eye, EyeOff, GraduationCap, KeyRound, LifeBuoy, Loader2, LogOut, Pencil, UserRound, X } from "lucide-react";
+import { AtSign, Check, ChevronDown, ChevronRight, Download, Eye, EyeOff, GraduationCap, KeyRound, LifeBuoy, Loader2, LogOut, Pencil, Share, Smartphone, UserRound, X } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { isLocalMode, disableLocalMode } from "@/lib/local";
@@ -25,7 +25,18 @@ interface Me {
   current_year?: number | null;
 }
 
-type OpenSection = "year" | "password" | null;
+type OpenSection = "year" | "password" | "install" | null;
+
+/** Chrome/Edge fire beforeinstallprompt with this shape; lib.dom doesn't declare it. */
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
+const isIos = () =>
+  typeof navigator !== "undefined" &&
+  (/iphone|ipad|ipod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)); // iPadOS 13+
 
 export default function ProfilePage() {
   const toast = useToast();
@@ -48,6 +59,21 @@ export default function ProfilePage() {
   const [confirmPw, setConfirmPw] = useState("");
   const [savingPw, setSavingPw] = useState(false);
   const [showPw, setShowPw] = useState(false);
+
+  // PWA install
+  const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
+  const [installOpen, setInstallOpen] = useState(false);
+  const [installDone, setInstallDone] = useState(false);
+
+  useEffect(() => {
+    const onPrompt = (e: Event) => {
+      e.preventDefault(); // keep our in-app entry point as the only trigger
+      setInstallEvent(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", () => setInstallDone(true));
+    return () => window.removeEventListener("beforeinstallprompt", onPrompt);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -198,6 +224,19 @@ export default function ProfilePage() {
       </div>
     );
   }
+
+  const handleInstall = async () => {
+    if (installDone || window.matchMedia("(display-mode: standalone)").matches) return;
+    if (installEvent) {
+      setInstallOpen(false);
+      await installEvent.prompt();
+      const { outcome } = await installEvent.userChoice;
+      if (outcome === "accepted") setInstallDone(true);
+      setInstallEvent(null); // the prompt can only fire once
+      return;
+    }
+    setInstallOpen((v) => !v); // no native prompt (iOS, unsupported) — show manual steps
+  };
 
   const initial = (me.full_name || me.email).charAt(0).toUpperCase();
   const year = me.current_year || 1;
@@ -430,6 +469,47 @@ export default function ProfilePage() {
 
       {/* ── More ── */}
       <div className="bg-white border border-[#e0e0e0] rounded-lg divide-y divide-[#f0f0f0] overflow-hidden">
+        {/* Install as an app — hidden entirely once running standalone */}
+        {typeof window !== "undefined" && !window.matchMedia("(display-mode: standalone)").matches && !installDone && (
+          <div>
+            <button
+              type="button"
+              onClick={handleInstall}
+              aria-expanded={installOpen}
+              className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-[#fafafa] transition-colors text-left"
+            >
+              <span className="w-8 h-8 rounded-lg bg-[#e6f0e8] flex items-center justify-center shrink-0">
+                <Smartphone className="w-4 h-4 text-[#006633]" />
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-medium text-[#333]">Install app</span>
+                <span className="block text-xs text-[#999]">Add OLLIN to your home screen</span>
+              </span>
+              {installEvent ? <Download className="w-4 h-4 text-[#006633] shrink-0" /> : <ChevronDown className={`w-4 h-4 text-[#ccc] shrink-0 transition-transform ${installOpen ? "rotate-180" : ""}`} />}
+            </button>
+            {installOpen && !installEvent && (
+              <div className="px-4 pb-4">
+                <div className="bg-[#fafafa] border border-[#f0f0f0] rounded-md p-3 space-y-2">
+                  <p className="text-xs font-medium text-[#333]">
+                    {isIos() ? "On iPhone or iPad:" : "In your browser menu:"}
+                  </p>
+                  {isIos() ? (
+                    <ol className="text-xs text-[#666] space-y-1 list-decimal list-inside">
+                      <li>Tap the <Share className="w-3 h-3 inline -mt-0.5" /> Share button in Safari</li>
+                      <li>Scroll and tap <strong>Add to Home Screen</strong></li>
+                      <li>Tap <strong>Add</strong></li>
+                    </ol>
+                  ) : (
+                    <ol className="text-xs text-[#666] space-y-1 list-decimal list-inside">
+                      <li>Open the browser menu (⋮ or ⋯)</li>
+                      <li>Look for <strong>Install app</strong> or <strong>Add to Home screen</strong></li>
+                    </ol>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <a
           href="/support?from=dashboard"
           className="flex items-center gap-3 px-4 py-3.5 hover:bg-[#fafafa] no-underline transition-colors"
