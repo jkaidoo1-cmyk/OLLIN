@@ -12,12 +12,37 @@ interface CourseWithQuizzes {
 }
 
 /**
- * Test quizzes — admin-saved quizzes for the student's courses.
+ * Test quizzes — admin-saved quizzes for the student's courses, plus the
+ * built-in OLLIN Test Quiz (TST-101) that exists on every deployment so
+ * anyone can try the platform from any device.
  * All data is read from the server APIs (single source of truth):
  *   - /api/saved-quizzes  → quiz ↔ course links saved by the admin
  *   - /api/courses        → courses, filtered by the student's year
  *   - /api/quizzes        → quiz metadata (title, code, time limit)
  */
+
+/** The built-in platform test quiz — always offered, independent of courses. */
+const BUILT_IN_TEST_QUIZ: Quiz & { built_in: true } = {
+  id: "quiz-test-tst101",
+  host_id: "system",
+  title: "OLLIN Test Quiz",
+  description: "Try the platform — 5 quick questions.",
+  share_code: "TST-101",
+  time_limit_minutes: 15,
+  max_attempts: 1,
+  show_answers_after: "after_completion",
+  shuffle_questions: false,
+  shuffle_options: false,
+  passing_score: 50,
+  starts_at: null,
+  ends_at: null,
+  status: "published",
+  course_id: null,
+  material_id: null,
+  created_at: "2026-09-24T17:00:00.000Z",
+  updated_at: "2026-09-24T17:00:00.000Z",
+  built_in: true,
+};
 export default function TestQuizzesPage() {
   const [coursesWithQuizzes, setCoursesWithQuizzes] = useState<CourseWithQuizzes[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
@@ -112,7 +137,32 @@ export default function TestQuizzesPage() {
     load();
   }, []);
 
-  const filteredQuizzes = coursesWithQuizzes
+  // The built-in test quiz appears unless a search excludes it (a course filter hides it automatically).
+  const showBuiltIn =
+    !selectedCourseId &&
+    "ollin test quiz".includes(searchQuery.trim().toLowerCase());
+  const builtInFirst: CourseWithQuizzes[] = [
+    ...(showBuiltIn
+      ? [
+          {
+            course: {
+              id: "built-in",
+              code: "TEST",
+              name: "Platform test quiz",
+              description: null,
+              program_id: null,
+              year: null,
+              created_at: BUILT_IN_TEST_QUIZ.created_at,
+              updated_at: BUILT_IN_TEST_QUIZ.updated_at,
+            } as Course,
+            quizzes: [BUILT_IN_TEST_QUIZ],
+          },
+        ]
+      : []),
+    ...coursesWithQuizzes,
+  ];
+
+  const filteredQuizzes = builtInFirst
     .filter((c) => (selectedCourseId ? c.course.id === selectedCourseId : true))
     .flatMap((c) => c.quizzes)
     .filter((q) =>
@@ -133,7 +183,7 @@ export default function TestQuizzesPage() {
           <BookOpen className="w-8 h-8 text-[#ccc] mx-auto mb-3 animate-pulse" />
           <p className="text-sm text-[#666]">Loading…</p>
         </div>
-      ) : coursesWithQuizzes.length === 0 ? (
+      ) : builtInFirst.length === 0 ? (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
           <BookOpen className="w-8 h-8 text-[#ccc] mx-auto mb-3" />
           <p className="text-sm text-[#666]">No quizzes available yet</p>
@@ -155,7 +205,7 @@ export default function TestQuizzesPage() {
             >
               All courses
             </button>
-            {coursesWithQuizzes.map(({ course, quizzes }) => (
+            {builtInFirst.map(({ course, quizzes }) => (
               <button
                 key={course.id}
                 onClick={() => setSelectedCourseId(course.id)}
@@ -197,26 +247,26 @@ export default function TestQuizzesPage() {
                 return (
                   <div
                     key={quiz.id}
-                    className="bg-white border border-[#e0e0e0] rounded-lg p-4 flex items-center gap-4 hover:border-green-300 transition-colors"
+                    className="bg-white border border-[#e0e0e0] rounded-lg p-4 flex flex-wrap items-center gap-3 sm:gap-4 hover:border-green-300 transition-colors"
                   >
                     <div className="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center flex-shrink-0">
                       <BookOpen className="w-5 h-5" />
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-[140px]">
                       <p className="text-sm font-medium text-[#333] truncate">
                         {quiz.title}
                       </p>
-                      <div className="flex items-center gap-3 mt-0.5">
+                      <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
                         {course && (
                           <span className="text-xs text-[#999]">
                             {course.code}
                           </span>
                         )}
-                        <span className="text-xs text-[#999] font-mono">
+                        <span className="text-xs text-[#999] font-mono whitespace-nowrap">
                           {quiz.share_code}
                         </span>
                         {quiz.time_limit_minutes && (
-                          <span className="text-xs text-[#999] flex items-center gap-1">
+                          <span className="text-xs text-[#999] flex items-center gap-1 whitespace-nowrap">
                             <Clock className="w-3 h-3" /> {quiz.time_limit_minutes} min
                           </span>
                         )}
