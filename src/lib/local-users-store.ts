@@ -12,7 +12,7 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
-import { DEFAULT_LOCAL_USERS, ADMIN_PASSWORD } from "./local-constants";
+import { DEFAULT_LOCAL_USERS, ADMIN_PASSWORD, DEMO_EMAIL } from "./local-constants";
 
 export interface StoredLocalUser {
   id: string;
@@ -63,13 +63,18 @@ function getUsersPath() {
   return join(process.cwd(), ".ollin-users.json");
 }
 
+/**
+ * Seed accounts carry plaintext passwords; hashing happens lazily on first
+ * verify (see verifyPassword's migration path) so serverless cold starts
+ * don't pay the scrypt cost for accounts nobody is logging into.
+ */
 function seedDefaults(): StoredLocalUser[] {
   return DEFAULT_LOCAL_USERS.map((u) => ({
     id: u.id,
     email: u.email,
     full_name: u.full_name,
     role: u.role,
-    password_hash: hashPassword(u.password),
+    password: u.password, // hashed on first successful verify
     program_id: null,
     current_year: u.current_year,
     created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
@@ -81,9 +86,9 @@ export function readLocalUsers(): StoredLocalUser[] {
   if (existsSync(path)) {
     try {
       const users: StoredLocalUser[] = JSON.parse(readFileSync(path, "utf-8"));
-      // Migrate: ensure built-in accounts exist. Their password is managed
-      // via ADMIN_PASSWORD comparisons in the auth route (hash upgrade is
-      // lazy through verifyPassword), so seeding only fixes identity/role.
+      // Migrate: ensure built-in accounts exist. Seeded accounts carry
+      // plaintext that verifyPassword upgrades lazily, so this only fixes
+      // identity/role (e.g. a file created before the demo account existed).
       let changed = false;
       for (const def of DEFAULT_LOCAL_USERS) {
         const existing = users.find((u) => u.id === def.id);
@@ -151,3 +156,8 @@ export function publicUser(u: StoredLocalUser) {
 
 /** Local credentials used by the built-in admin (kept in sync with local-constants). */
 export const LOCAL_ADMIN_PASSWORD = ADMIN_PASSWORD;
+
+/** Is this the built-in demo student account? Used to protect it from edits that would lock it out. */
+export function isDemoAccount(user: { id: string; email: string }): boolean {
+  return user.id === "demo-001" || user.email.toLowerCase() === DEMO_EMAIL.toLowerCase();
+}

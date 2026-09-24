@@ -34,8 +34,13 @@ export async function POST(request: NextRequest) {
     const user = users.find((u) => u.email.toLowerCase() === String(email).toLowerCase());
     const authed = !!user && verifyPassword(password, user);
     // The built-in admin account always accepts ADMIN_PASSWORD: if the stored
-    // hash is out of sync (e.g. pre-hash legacy file), re-sync it.
+    // hash is out of sync (e.g. pre-hash legacy file), re-sync it. Seeded
+    // accounts carry plaintext until their first verify, which hashes here.
     if (!authed && user && user.id === "admin-001" && password === ADMIN_PASSWORD) {
+      user.password_hash = hashPassword(password);
+      delete user.password;
+      usersChanged = true;
+    } else if (!authed && user && user.id === "demo-001" && password === (user.password || "")) {
       user.password_hash = hashPassword(password);
       delete user.password;
       usersChanged = true;
