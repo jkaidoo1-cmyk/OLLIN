@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AtSign, Eye, EyeOff, GraduationCap, KeyRound, Loader2, LogOut, LifeBuoy, ShieldCheck, UserRound } from "lucide-react";
+import { AtSign, ChevronRight, Eye, EyeOff, GraduationCap, KeyRound, Loader2, LogOut, LifeBuoy, ShieldCheck, UserRound } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { isLocalMode, disableLocalMode } from "@/lib/local";
@@ -162,7 +162,10 @@ export default function ProfilePage() {
   }
 
   const initial = (me.full_name || me.email).charAt(0).toUpperCase();
-  const pwStrength = newPw.length === 0 ? null : newPw.length < 6 ? "weak" : "ok";
+  const pwLen = newPw.length;
+  const pwScore = pwLen === 0 ? 0 : pwLen < 6 ? 1 : pwLen < 10 ? 2 : 3;
+  const pwLabel = ["", "Too short — 6 minimum", "Decent — add more for strength", "Strong password"][pwScore];
+  const pwColor = ["bg-[#e0e0e0]", "bg-red-400", "bg-amber-400", "bg-green-500"][pwScore];
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -200,50 +203,69 @@ export default function ProfilePage() {
       <div className="grid gap-6 md:grid-cols-2">
         {/* Details you can change */}
         <form onSubmit={saveProfile} className="bg-white border border-[#e0e0e0] rounded-lg p-5 h-fit">
-          <h2 className="text-sm font-semibold text-[#333] mb-4 flex items-center gap-2">
-            <UserRound className="w-4 h-4 text-[#006633]" />
-            Your details
-          </h2>
-          <label className="block text-xs font-medium text-[#666] mb-1">Full name</label>
+          <div className="flex items-start gap-3 mb-5">
+            <div className="w-9 h-9 rounded-lg bg-[#e6f0e8] flex items-center justify-center shrink-0">
+              <UserRound className="w-4 h-4 text-[#006633]" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-[#333]">Your details</h2>
+              <p className="text-xs text-[#999]">The name teachers see, and your class year.</p>
+            </div>
+          </div>
+          <label className="block text-xs font-medium text-[#666] mb-1.5">Full name</label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="input-field text-sm mb-4"
+            className="input-field text-sm mb-5"
             placeholder="Your name"
             maxLength={120}
             required
           />
-          <label className="block text-xs font-medium text-[#666] mb-1">Current year</label>
-          <select
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            className="input-field text-sm mb-4"
-          >
+          <label className="block text-xs font-medium text-[#666] mb-1.5">Current year</label>
+          <div className="grid grid-cols-3 gap-2 mb-3">
             {[1, 2, 3, 4, 5, 6].map((y) => (
-              <option key={y} value={y}>Year {y}</option>
+              <button
+                key={y}
+                type="button"
+                onClick={() => setYear(y)}
+                className={`py-2.5 rounded-md text-sm font-medium border transition-colors ${
+                  year === y
+                    ? "bg-[#006633] text-white border-[#006633]"
+                    : "bg-white text-[#333] border-[#e0e0e0] hover:border-[#006633] hover:text-[#006633]"
+                }`}
+              >
+                Year {y}
+              </button>
             ))}
-          </select>
-          <p className="text-xs text-[#999] mb-4">
+          </div>
+          <p className="text-xs text-[#999] mb-5">
             Your year decides which courses you see on the dashboard.
           </p>
-          <button
-            type="submit"
-            disabled={savingProfile || !name.trim() || (name.trim() === me.full_name && year === (me.current_year || 1))}
-            className="btn-primary w-full"
-          >
-            {savingProfile && <Loader2 className="w-4 h-4 animate-spin" />}
-            Save changes
-          </button>
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={savingProfile || !name.trim() || (name.trim() === me.full_name && year === (me.current_year || 1))}
+              className="btn-primary w-full sm:w-auto"
+            >
+              {savingProfile && <Loader2 className="w-4 h-4 animate-spin" />}
+              Save changes
+            </button>
+          </div>
         </form>
 
         {/* Security */}
         <form onSubmit={changePassword} className="bg-white border border-[#e0e0e0] rounded-lg p-5 h-fit">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-sm font-semibold text-[#333] flex items-center gap-2">
-              <KeyRound className="w-4 h-4 text-[#006633]" />
-              Change password
-            </h2>
+          <div className="flex items-start justify-between mb-5">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-[#e6f0e8] flex items-center justify-center shrink-0">
+                <KeyRound className="w-4 h-4 text-[#006633]" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-[#333]">Change password</h2>
+                <p className="text-xs text-[#999]">Confirm your current one first.</p>
+              </div>
+            </div>
             <button
               type="button"
               onClick={() => setShowPw(!showPw)}
@@ -253,33 +275,35 @@ export default function ProfilePage() {
               {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-          <p className="text-xs text-[#999] mb-4">You'll need your current password to set a new one.</p>
-          <label className="block text-xs font-medium text-[#666] mb-1">Current password</label>
+          <label className="block text-xs font-medium text-[#666] mb-1.5">Current password</label>
           <input
             type={showPw ? "text" : "password"}
             value={currentPw}
             onChange={(e) => setCurrentPw(e.target.value)}
-            className="input-field text-sm mb-3"
+            className="input-field text-sm mb-4"
             autoComplete="current-password"
             required
           />
-          <label className="block text-xs font-medium text-[#666] mb-1">New password</label>
+          <label className="block text-xs font-medium text-[#666] mb-1.5">New password</label>
           <input
             type={showPw ? "text" : "password"}
             value={newPw}
             onChange={(e) => setNewPw(e.target.value)}
-            className="input-field text-sm mb-1.5"
+            className="input-field text-sm mb-2"
             placeholder="Minimum 6 characters"
             autoComplete="new-password"
             required
           />
-          {pwStrength && (
-            <p className={`text-xs mb-2 flex items-center gap-1 ${pwStrength === "weak" ? "text-[#856404]" : "text-[#155724]"}`}>
-              <ShieldCheck className="w-3 h-3" />
-              {pwStrength === "weak" ? "Too short — 6 characters minimum" : "Looks good"}
-            </p>
-          )}
-          <label className="block text-xs font-medium text-[#666] mb-1">Confirm new password</label>
+          {/* Strength meter */}
+          <div className={`flex items-center gap-2 mb-4 ${pwLen === 0 ? "opacity-0" : ""}`}>
+            <div className="flex gap-1 flex-1">
+              {[1, 2, 3].map((seg) => (
+                <div key={seg} className={`h-1 flex-1 rounded-full ${pwScore >= seg ? pwColor : "bg-[#e0e0e0]"}`} />
+              ))}
+            </div>
+            <span className="text-xs text-[#666] whitespace-nowrap">{pwLabel}</span>
+          </div>
+          <label className="block text-xs font-medium text-[#666] mb-1.5">Confirm new password</label>
           <input
             type={showPw ? "text" : "password"}
             value={confirmPw}
@@ -289,38 +313,49 @@ export default function ProfilePage() {
             required
           />
           {confirmPw.length > 0 && newPw !== confirmPw && (
-            <p className="text-xs text-[#721c24] mb-2">Passwords don't match yet.</p>
+            <p className="text-xs text-[#721c24] -mt-2 mb-3">Passwords don&apos;t match yet.</p>
           )}
-          <button
-            type="submit"
-            disabled={savingPw || !currentPw || !newPw || !confirmPw}
-            className="btn-primary w-full"
-          >
-            {savingPw && <Loader2 className="w-4 h-4 animate-spin" />}
-            Change password
-          </button>
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={savingPw || !currentPw || !newPw || !confirmPw}
+              className="btn-primary w-full sm:w-auto"
+            >
+              {savingPw && <Loader2 className="w-4 h-4 animate-spin" />}
+              Change password
+            </button>
+          </div>
         </form>
       </div>
 
-      {/* Account actions */}
-      <div className="bg-white border border-[#e0e0e0] rounded-lg p-5">
-        <h2 className="text-sm font-semibold text-[#333] mb-3">Account</h2>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <a
-            href="/support?from=dashboard"
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-[#333] border border-[#e0e0e0] rounded hover:bg-[#f8f8f8] no-underline transition-colors"
-          >
+      {/* Account actions — settings list */}
+      <div className="bg-white border border-[#e0e0e0] rounded-lg overflow-hidden">
+        <a
+          href="/support?from=dashboard"
+          className="flex items-center gap-3 px-4 py-3.5 hover:bg-[#f8f8f8] no-underline transition-colors"
+        >
+          <span className="w-8 h-8 rounded-lg bg-[#e6f0e8] flex items-center justify-center shrink-0">
             <LifeBuoy className="w-4 h-4 text-[#006633]" />
-            Help &amp; support
-          </a>
-          <button
-            onClick={handleLogout}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-red-600 border border-[#e0e0e0] rounded hover:bg-red-50 transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            Log out
-          </button>
-        </div>
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-medium text-[#333]">Help &amp; support</span>
+            <span className="block text-xs text-[#999]">Message your administrator</span>
+          </span>
+          <ChevronRight className="w-4 h-4 text-[#ccc] shrink-0" />
+        </a>
+        <div className="border-t border-[#f0f0f0]" />
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-red-50 transition-colors text-left"
+        >
+          <span className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
+            <LogOut className="w-4 h-4 text-red-600" />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-medium text-red-600">Log out</span>
+            <span className="block text-xs text-[#999]">End your session on this device</span>
+          </span>
+        </button>
       </div>
     </div>
   );
