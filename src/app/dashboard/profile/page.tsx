@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { KeyRound, Loader2, UserRound } from "lucide-react";
+import { KeyRound, Loader2, LogOut, LifeBuoy, UserRound } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
+import { useRouter } from "next/navigation";
+import { isLocalMode, disableLocalMode } from "@/lib/local";
+import { createClient } from "@/lib/supabase/client";
 
 /**
  * Student profile — self-service account page.
@@ -23,6 +26,8 @@ interface Me {
 
 export default function ProfilePage() {
   const toast = useToast();
+  const router = useRouter();
+  const supabase = createClient();
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -83,6 +88,18 @@ export default function ProfilePage() {
     } finally {
       setSavingProfile(false);
     }
+  };
+
+  const handleLogout = async () => {
+    if (isLocalMode()) {
+      // Clear the httpOnly session cookie server-side too.
+      try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
+      disableLocalMode();
+      router.push("/");
+      return;
+    }
+    if (supabase) await supabase.auth.signOut();
+    router.push("/");
   };
 
   const changePassword = async (e: React.FormEvent) => {
@@ -248,6 +265,27 @@ export default function ProfilePage() {
           Change password
         </button>
       </form>
+
+      {/* Help & support + logout — moved here from the profile dropdown */}
+      <div className="bg-white border border-[#e0e0e0] rounded-lg p-5">
+        <h2 className="text-sm font-semibold text-[#333] mb-3">More</h2>
+        <div className="space-y-2">
+          <a
+            href="/support?from=dashboard"
+            className="flex items-center gap-2 px-4 py-2.5 text-sm text-[#333] border border-[#e0e0e0] rounded hover:bg-[#f8f8f8] no-underline transition-colors"
+          >
+            <LifeBuoy className="w-4 h-4 text-[#006633]" />
+            Help &amp; support
+          </a>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 border border-[#e0e0e0] rounded hover:bg-red-50 transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Log out
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
