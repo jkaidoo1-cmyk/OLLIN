@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Plus, Trash2, Power, PowerOff, Key, AlertCircle, Info, XCircle, Settings as SettingsIcon } from "lucide-react";
-import PageBanner from "@/components/PageBanner";
+import { Loader2, Plus, Trash2, Power, PowerOff, Key, AlertCircle, Info, XCircle } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
 
 interface ApiKeyEntry {
@@ -164,12 +163,8 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <div className="pb-24 max-w-2xl space-y-6">
-      <PageBanner
-        title="Settings"
-        subtitle="AI providers, API keys, and platform configuration"
-        icon={<SettingsIcon className="w-5 h-5" />}
-      />
+    <div className="pb-24 max-w-2xl">
+      <h1 className="text-xl font-bold text-[#333] mb-6">Settings</h1>
 
       {/* Source indicator */}
       {source === "env" ? (

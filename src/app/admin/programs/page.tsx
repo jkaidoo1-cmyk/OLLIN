@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Plus, Loader2, Trash2, GraduationCap, Save, X, Pen, AlertCircle } from "lucide-react";
-import PageBanner, { BannerButton } from "@/components/PageBanner";
 import { Program } from "@/lib/types";
 import { clearStaleAdminSession } from "@/lib/admin";
 import { useConfirm } from "@/components/ui/toast";
@@ -170,16 +169,15 @@ export default function AdminProgramsPage() {
 
   return (
     <div className="pb-24">
-      <PageBanner
-        title="Programs"
-        subtitle={`${displayPrograms.length} programs${pending.length > 0 ? ` (${pending.length} pending)` : ""}`}
-        icon={<GraduationCap className="w-5 h-5" />}
-        actions={
-          <BannerButton onClick={() => setShowForm(!showForm)}>
-            <Plus className="w-3.5 h-3.5" /> Add program
-          </BannerButton>
-        }
-      />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-6">
+        <div>
+          <h1 className="text-xl font-bold text-[#333]">Programs</h1>
+          <p className="text-xs text-[#999] mt-0.5">{displayPrograms.length} programs {pending.length > 0 && `(${pending.length} pending)`}</p>
+        </div>
+        <button onClick={() => setShowForm(!showForm)} className="btn-primary text-xs flex items-center gap-1.5">
+          <Plus className="w-3.5 h-3.5" /> Add program
+        </button>
+      </div>
 
       {saveError && (
         <div className="flex items-start gap-2 text-xs px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded mb-4">

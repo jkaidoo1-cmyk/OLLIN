@@ -9,8 +9,7 @@ import {
   syncSavedQuizzesFromServer,
   getLocalQuizzes,
 } from "@/lib/local";
-import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, ExternalLink, Pencil, FileText } from "lucide-react";
-import PageBanner from "@/components/PageBanner";
+import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, ExternalLink, Pencil } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
 
 export default function AdminQuizzesPage() {
@@ -130,11 +129,12 @@ export default function AdminQuizzesPage() {
 
   return (
     <div>
-      <PageBanner
-        title="Quizzes"
-        subtitle={`${quizzes.length} quiz${quizzes.length !== 1 ? "zes" : ""} total`}
-        icon={<FileText className="w-5 h-5" />}
-      />
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-xl font-bold text-[#333]">Quizzes</h1>
+          <p className="text-xs text-[#999] mt-0.5">{quizzes.length} quiz{quizzes.length !== 1 ? "zes" : ""} total</p>
+        </div>
+      </div>
 
       {error && (
         <div className="mb-4 text-xs px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded">{error}</div>

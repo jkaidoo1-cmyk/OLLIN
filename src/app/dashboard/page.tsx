@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizzes, getLocalAttempts, getLocalUser } from "@/lib/local";
-import PageBanner, { BannerButton } from "@/components/PageBanner";
 import { Quiz, QuizAttempt } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
 import {
@@ -174,23 +173,29 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Welcome banner + Quick Actions */}
-      <PageBanner
-        title={<>Welcome back{userName ? `, ${userName}` : ""}</>}
-        subtitle={`${quizzes.length} quiz${quizzes.length !== 1 ? "zes" : ""} · ${totalParticipants} total attempt${totalParticipants !== 1 ? "s" : ""}`}
-        actions={
-          <>
-            <BannerButton href="/join" variant="ghost">
-              <ArrowRight className="w-4 h-4" />
-              Join quiz
-            </BannerButton>
-            <BannerButton href="/dashboard/create">
-              <Plus className="w-4 h-4" />
-              New quiz
-            </BannerButton>
-          </>
-        }
-      />
+      {/* Welcome + Quick Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-[#333]">
+            Welcome back{userName ? `, ${userName}` : ""}
+          </h1>
+          <p className="text-sm text-[#999] mt-0.5">
+            {quizzes.length} quiz{quizzes.length !== 1 ? "zes" : ""} · {totalParticipants} total attempt{totalParticipants !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard/create" className="btn-primary text-sm">
+            <Plus className="w-4 h-4" />
+            New quiz
+          </Link>
+          <Link
+            href="/join"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#006633] bg-white border border-[#006633] rounded-md hover:bg-[#f0f8f2] transition-colors no-underline"
+          >
+            Join quiz
+          </Link>
+        </div>
+      </div>
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

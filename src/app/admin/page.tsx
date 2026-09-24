@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, BookOpen, CheckCircle, BarChart3, LifeBuoy, LayoutDashboard } from "lucide-react";
-import PageBanner from "@/components/PageBanner";
+import { Users, BookOpen, CheckCircle, BarChart3, LifeBuoy } from "lucide-react";
 
 export default function AdminOverviewPage() {
   const [stats, setStats] = useState({ totalUsers: 0, totalQuizzes: 0, totalAttempts: 0, publishedQuizzes: 0 });
@@ -86,12 +85,8 @@ export default function AdminOverviewPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <PageBanner
-        title="Admin Overview"
-        subtitle="Users, quizzes, and platform activity at a glance"
-        icon={<LayoutDashboard className="w-5 h-5" />}
-      />
+    <div>
+      <h1 className="text-xl font-bold text-[#333] mb-6">Admin Overview</h1>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

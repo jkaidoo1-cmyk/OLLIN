@@ -9,7 +9,6 @@ import {
   Notification,
 } from "@/lib/local";
 import { Bell, BookOpen, BarChart3, Info, Trash2, X } from "lucide-react";
-import PageBanner from "@/components/PageBanner";
 
 const typeIcons: Record<string, typeof Bell> = {
   quiz: BookOpen,
@@ -59,25 +58,22 @@ export default function NotificationsPage() {
 
 
   return (
-    <div className="space-y-6">
-      <PageBanner
-        title="Notifications"
-        icon={<Bell className="w-5 h-5" />}
-        actions={
-          <>
-            {notifications.some((n) => !n.read) && (
-              <button onClick={markAllRead} className="text-sm text-white/90 hover:text-white font-medium">
-                Mark all as read
-              </button>
-            )}
-            {notifications.length > 0 && (
-              <button onClick={handleClearAll} className="text-sm text-white/80 hover:text-white font-medium">
-                Clear all
-              </button>
-            )}
-          </>
-        }
-      />
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-bold text-[#333]">Notifications</h1>
+        <div className="flex items-center gap-3">
+          {notifications.some((n) => !n.read) && (
+            <button onClick={markAllRead} className="text-sm text-[#006633] hover:text-[#005528] font-medium">
+              Mark all as read
+            </button>
+          )}
+          {notifications.length > 0 && (
+            <button onClick={handleClearAll} className="text-sm text-red-500 hover:text-red-700 font-medium">
+              Clear all
+            </button>
+          )}
+        </div>
+      </div>
 
       {loading ? (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
