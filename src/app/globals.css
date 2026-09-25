@@ -182,6 +182,12 @@ a:hover { text-decoration: underline; }
   outline: none;
   transition: border-color 150ms;
 }
+/* Inputs with a leading icon use a Tailwind pl-* utility; this class-level
+   padding would otherwise win the cascade (unlayered beats Tailwind's
+   utilities layer) and push the text under the icon. */
+.input-field[class*=" pl-"] {
+  padding-left: revert-layer;
+}
 
 .input-field:focus {
   border-color: var(--primary);
