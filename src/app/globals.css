@@ -105,16 +105,32 @@ html { scroll-behavior: smooth; }
 }
 
 /* ─── Page transitions ─────────────────────────────── */
-/* Root template remounts on navigation, replaying this for every route. */
-@keyframes page-enter {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+/* Root template remounts on navigation, replaying these for every route.
+   The wrapper fades only — never transforms — because a transform would
+   turn it into the containing block for position:fixed children (admin
+   bottom bars, modals) and break sticky headers. Content blocks rise in
+   with a stagger; `backwards` fill means transforms fully release after
+   the animation, restoring fixed/sticky geometry exactly. */
+@keyframes page-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes block-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
 }
 .page-enter {
-  animation: page-enter 0.25s ease-out both;
+  animation: page-fade 0.2s ease-out;
 }
+/* First child is usually the sticky header — keep it instant so the page
+   feels anchored while the content follows. */
+.page-enter > :nth-child(2) { animation: block-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.04s backwards; }
+.page-enter > :nth-child(3) { animation: block-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.10s backwards; }
+.page-enter > :nth-child(4) { animation: block-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.16s backwards; }
+.page-enter > :nth-child(5) { animation: block-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.22s backwards; }
+.page-enter > :nth-child(n+6) { animation: block-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.28s backwards; }
 @media (prefers-reduced-motion: reduce) {
-  .page-enter { animation: none; }
+  .page-enter, .page-enter > * { animation: none !important; }
 }
 
 /* Prevent iOS zoom on focus for inputs that need it (16px+ font already set) */
