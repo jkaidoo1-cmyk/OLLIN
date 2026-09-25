@@ -161,7 +161,7 @@ export default function AdminQuizzesPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[#333] truncate">{quiz.title}</p>
                     <div className="flex items-center gap-3 mt-1">
-                      <span className="text-xs text-[#999] font-mono">{quiz.share_code}</span>
+                      <span className="text-xs text-[#999] font-mono whitespace-nowrap">{quiz.share_code}</span>
                       <span className="text-xs text-[#999] flex items-center gap-1">
                         <BookOpen className="w-3 h-3" />{" "}
                         {questions.length > 0 ? `${questions.length} questions` : "…"}

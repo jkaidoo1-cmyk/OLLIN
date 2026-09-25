@@ -97,8 +97,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded text-white font-medium ml-1">Admin</span>
           </Link>
 
-          {/* Nav links — full-width scrollable row on mobile, centered on desktop */}
-          <nav className="order-last sm:order-none w-full sm:w-auto sm:flex-1 sm:justify-center flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* Nav links — full-width scrollable row on mobile, centered on desktop.
+              -mx-2 px-2 lets the first/last items align with the header padding
+              while the row itself scrolls to reveal the cut-off item. */}
+          <nav className="order-last sm:order-none w-full sm:w-auto sm:flex-1 sm:justify-center flex items-center gap-1 overflow-x-auto -mx-2 px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {adminNav.map((item) => {
               const isActive = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
               return (
