@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizzes } from "@/lib/local";
+import { SkeletonText, SkeletonList } from "@/components/Skeleton";
 import { Quiz, Course } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
 import { Plus, Copy, CheckCircle, ExternalLink, Pencil } from "lucide-react";
@@ -83,11 +84,9 @@ export default function MyQuizzesPage() {
 
   if (loading) {
     return (
-      <div className="py-6">
-        <div className="h-6 w-32 bg-[#e0e0e0] rounded mb-6" />
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => <div key={i} className="h-16 bg-white border border-[#e0e0e0] rounded-lg" />)}
-        </div>
+      <div className="py-6" aria-busy="true">
+        <SkeletonText className="h-6 w-32 mb-6" />
+        <SkeletonList rows={3} rowClass="h-16" />
       </div>
     );
   }

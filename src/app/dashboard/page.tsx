@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizzes, getLocalAttempts, getLocalUser } from "@/lib/local";
+import { SkeletonText, SkeletonStats } from "@/components/Skeleton";
 import { Quiz, QuizAttempt } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
 import {
@@ -159,14 +160,10 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="py-6 space-y-4">
-        <div className="h-8 w-48 bg-[#e0e0e0] rounded" />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-20 bg-[#e0e0e0] rounded-lg" />
-          ))}
-        </div>
-        <div className="h-48 bg-[#e0e0e0] rounded-lg" />
+      <div className="py-6 space-y-4" aria-busy="true">
+        <SkeletonText className="h-8 w-48" />
+        <SkeletonStats />
+        <div className="skeleton h-48" />
       </div>
     );
   }

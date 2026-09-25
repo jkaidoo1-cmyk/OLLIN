@@ -146,6 +146,22 @@ a:hover { text-decoration: underline; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 99px; }
 
+/* ─── Skeletons ───────────────────────────────────── */
+/* Content-placeholder shimmer, shown while a page fetches its data. */
+@keyframes skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.skeleton {
+  border-radius: var(--radius-lg, 8px);
+  background: linear-gradient(90deg, #eef1ee 25%, #f7f9f7 40%, #eef1ee 55%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+
 /* ─── Card ───────────────────────────────────────── */
 .card {
   background: var(--card-bg);

@@ -9,6 +9,7 @@ import {
   Notification,
 } from "@/lib/local";
 import { Bell, BookOpen, BarChart3, Info, Trash2, X } from "lucide-react";
+import { SkeletonPanel } from "@/components/Skeleton";
 
 const typeIcons: Record<string, typeof Bell> = {
   quiz: BookOpen,
@@ -76,10 +77,7 @@ export default function NotificationsPage() {
       </div>
 
       {loading ? (
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
-          <Bell className="w-8 h-8 text-[#ccc] mx-auto mb-3 animate-pulse" />
-          <p className="text-sm text-[#666]">Loading…</p>
-        </div>
+        <SkeletonPanel rows={3} />
       ) : notifications.length === 0 ? (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
           <Bell className="w-8 h-8 text-[#ccc] mx-auto mb-3" />

@@ -5,6 +5,7 @@ import { Plus, Loader2, Trash2, GraduationCap, Save, X, Pen, AlertCircle } from 
 import { Program } from "@/lib/types";
 import { clearStaleAdminSession } from "@/lib/admin";
 import { useConfirm } from "@/components/ui/toast";
+import { SkeletonList } from "@/components/Skeleton";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -259,7 +260,7 @@ export default function AdminProgramsPage() {
       )}
 
       {loading ? (
-        <div className="text-center py-8 text-sm text-[#999]">Loading...</div>
+        <SkeletonList rows={3} rowClass="h-14" />
       ) : displayPrograms.length === 0 ? (
         <div className="text-center py-8 text-sm text-[#999]">No programs yet.</div>
       ) : (

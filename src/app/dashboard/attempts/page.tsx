@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Award, ChevronDown, ChevronRight, Clock, CheckCircle2, XCircle, History } from "lucide-react";
+import { SkeletonPanel } from "@/components/Skeleton";
 
 interface MyAttempt {
   id: string;
@@ -99,10 +100,7 @@ export default function MyAttemptsPage() {
       </div>
 
       {loading ? (
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
-          <History className="w-8 h-8 text-[#ccc] mx-auto mb-3 animate-pulse" />
-          <p className="text-sm text-[#666]">Loading…</p>
-        </div>
+        <SkeletonPanel rows={4} />
       ) : attempts.length === 0 ? (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
           <History className="w-8 h-8 text-[#ccc] mx-auto mb-3" />

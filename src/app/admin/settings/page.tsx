@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, Plus, Trash2, Power, PowerOff, Key, AlertCircle, Info, XCircle } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
+import { SkeletonList } from "@/components/Skeleton";
 
 interface ApiKeyEntry {
   id: string;
@@ -159,7 +160,7 @@ export default function AdminSettingsPage() {
   const totalCost = keys.reduce((s, k) => s + k.estimated_cost_usd, 0);
 
   if (loading) {
-    return <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-[#999]" /></div>;
+    return <div className="py-6 space-y-4 max-w-2xl" aria-busy="true"><SkeletonList rows={4} rowClass="h-16" /></div>;
   }
 
   return (

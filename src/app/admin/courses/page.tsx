@@ -6,6 +6,7 @@ import { Course, Program, Quiz } from "@/lib/types";
 import { getSavedQuizzes, removeSavedQuiz, syncSavedQuizzesFromServer } from "@/lib/local";
 import { clearStaleAdminSession } from "@/lib/admin";
 import { useConfirm } from "@/components/ui/toast";
+import { SkeletonList } from "@/components/Skeleton";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -382,7 +383,7 @@ export default function AdminCoursesPage() {
       )}
 
       {loading ? (
-        <div className="text-center py-8 text-sm text-[#999]">Loading...</div>
+        <SkeletonList rows={4} rowClass="h-14" />
       ) : displayCourses.length === 0 ? (
         <div className="text-center py-8 text-sm text-[#999]">No courses yet. Add one above.</div>
       ) : (

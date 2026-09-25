@@ -5,6 +5,7 @@ import { UserPlus, Loader2, Trash2, Shield, GraduationCap, Mail, Eye, EyeOff, Sa
 import { Program } from "@/lib/types";
 import { clearStaleAdminSession } from "@/lib/admin";
 import { useConfirm } from "@/components/ui/toast";
+import { SkeletonList } from "@/components/Skeleton";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -527,7 +528,7 @@ export default function AdminUsersPage() {
 
       {/* User List */}
       {loading ? (
-        <div className="text-center py-8 text-sm text-[#999]">Loading...</div>
+        <SkeletonList rows={5} rowClass="h-14" />
       ) : displayUsers.length === 0 ? (
         <div className="text-center py-8 text-sm text-[#999]">No users found</div>
       ) : (

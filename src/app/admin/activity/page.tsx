@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ShieldCheck, UserPlus, UserMinus, BookOpen, GraduationCap, KeyRound, RefreshCcw, Upload, Trash2, FileText } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
+import { SkeletonPanel } from "@/components/Skeleton";
 
 interface AuditEvent {
   id: string;
@@ -142,10 +143,7 @@ export default function AdminActivityPage() {
       )}
 
       {loading ? (
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
-          <ShieldCheck className="w-8 h-8 text-[#ccc] mx-auto mb-3 animate-pulse" />
-          <p className="text-sm text-[#666]">Loading activity…</p>
-        </div>
+        <SkeletonPanel rows={5} />
       ) : events.length === 0 ? (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
           <ShieldCheck className="w-8 h-8 text-[#ccc] mx-auto mb-3" />

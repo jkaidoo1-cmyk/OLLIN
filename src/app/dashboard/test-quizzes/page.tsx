@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getLocalUser } from "@/lib/local";
 import { Quiz, Course } from "@/lib/types";
+import { SkeletonList } from "@/components/Skeleton";
 import { BookOpen, Clock, Play, Search, Share2, Check } from "lucide-react";
 
 interface CourseWithQuizzes {
@@ -179,10 +180,7 @@ export default function TestQuizzesPage() {
       </div>
 
       {loading ? (
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
-          <BookOpen className="w-8 h-8 text-[#ccc] mx-auto mb-3 animate-pulse" />
-          <p className="text-sm text-[#666]">Loading…</p>
-        </div>
+        <SkeletonList rows={3} rowClass="h-24" />
       ) : builtInFirst.length === 0 ? (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
           <BookOpen className="w-8 h-8 text-[#ccc] mx-auto mb-3" />
