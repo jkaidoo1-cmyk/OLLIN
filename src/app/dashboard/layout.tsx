@@ -4,11 +4,12 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { isLocalMode, getLocalUser, disableLocalMode, getUnreadCount } from "@/lib/local";
+import { isLocalMode, getLocalUser, disableLocalMode, getUnreadCount, getLocalQuizzes } from "@/lib/local";
 import { isAdmin } from "@/lib/admin";
 import type { LocalUser } from "@/lib/local";
 import { useEffect, useState, useRef } from "react";
 import { Bell, UserRound } from "lucide-react";
+import { warmAll } from "@/lib/prefetch";
 
 const pageLabels: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -96,6 +97,46 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       document.removeEventListener("visibilitychange", refresh);
     };
   }, [pathname]);
+
+  // Warm page data while the student is still on the current page, so
+  // navigating to any dashboard page renders content on first paint.
+  // Keys/fetchers mirror what each page reads (see src/lib/prefetch.ts).
+  useEffect(() => {
+    warmAll([
+      ["quizzes", async () => {
+        try {
+          const res = await fetch("/api/quizzes", { headers: { "x-local-mode": "true" } });
+          if (!res.ok) return getLocalQuizzes();
+          const data = await res.json();
+          const server: { id: string }[] = data.quizzes || [];
+          const ids = new Set(server.map((q) => q.id));
+          return [...server, ...getLocalQuizzes().filter((q) => !ids.has(q.id))];
+        } catch { return getLocalQuizzes(); }
+      }],
+      ["courses", async () => {
+        try {
+          const res = await fetch("/api/courses", { headers: { "x-local-mode": "true" } });
+          const data = await res.json();
+          return data.courses || [];
+        } catch { return []; }
+      }],
+      ["my-attempts", async () => {
+        try {
+          const res = await fetch("/api/attempts?mine=true");
+          if (!res.ok) return [];
+          const data = await res.json();
+          return data.attempts || [];
+        } catch { return []; }
+      }],
+      ["saved-quizzes", async () => {
+        try {
+          const res = await fetch("/api/saved-quizzes");
+          const data = await res.json();
+          return data.saved || [];
+        } catch { return []; }
+      }],
+    ]);
+  }, []);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {

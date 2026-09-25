@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizzes, getLocalAttempts, getLocalUser } from "@/lib/local";
 import { SkeletonText, SkeletonStats } from "@/components/Skeleton";
+import { warmResource } from "@/lib/prefetch";
 import { Quiz, QuizAttempt } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
 import {
@@ -40,7 +41,8 @@ export default function DashboardPage() {
       if (isLocalMode()) {
         const localUser = getLocalUser();
         if (localUser) setUserName(localUser.full_name.split(" ")[0]);
-        const quizList = getLocalQuizzes();
+        // Warmed on layout mount — typically already resolved at first paint.
+        const quizList = await warmResource<Quiz[]>("quizzes", async () => getLocalQuizzes());
         setQuizzes(quizList);
         const attempts: QuizAttempt[] = [];
         for (const q of quizList) {

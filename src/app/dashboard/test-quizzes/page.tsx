@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getLocalUser } from "@/lib/local";
 import { Quiz, Course } from "@/lib/types";
 import { SkeletonList } from "@/components/Skeleton";
+import { warmResource } from "@/lib/prefetch";
 import { BookOpen, Clock, Play, Search, Share2, Check } from "lucide-react";
 
 interface CourseWithQuizzes {
@@ -87,15 +88,22 @@ export default function TestQuizzesPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [savedRes, coursesRes, quizzesRes] = await Promise.all([
-          fetch("/api/saved-quizzes"),
-          fetch("/api/courses"),
-          fetch("/api/quizzes"),
+        // These three resources are warmed on layout mount; Promise.all via
+        // warmResource shares those in-flight promises instead of refetching.
+        const [savedData, coursesData, quizzesData] = await Promise.all([
+          warmResource("saved-quizzes", async () => {
+            const res = await fetch("/api/saved-quizzes");
+            return res.json().catch(() => ({ saved: [] }));
+          }),
+          warmResource("courses", async () => {
+            const res = await fetch("/api/courses");
+            return res.json().catch(() => ({ courses: [] }));
+          }),
+          warmResource("quizzes", async () => {
+            const res = await fetch("/api/quizzes");
+            return res.json().catch(() => ({ quizzes: [] }));
+          }),
         ]);
-        const savedData = await savedRes.json().catch(() => ({ saved: [] }));
-        const coursesData = await coursesRes.json().catch(() => ({ courses: [] }));
-        const quizzesData = await quizzesRes.json().catch(() => ({ quizzes: [] }));
-
         const savedLinks: Array<{ quiz_id: string; course_id: string }> = savedData.saved || [];
         const allCourses: Course[] = coursesData.courses || [];
         const allQuizzes: Quiz[] = quizzesData.quizzes || [];

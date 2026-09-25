@@ -3,6 +3,19 @@
 import { useEffect, useState } from "react";
 import { Award, ChevronDown, ChevronRight, Clock, CheckCircle2, XCircle, History } from "lucide-react";
 import { SkeletonPanel } from "@/components/Skeleton";
+import { useResource } from "@/lib/prefetch";
+
+interface AttemptRow {
+  id: string;
+  quiz_id: string;
+  score_percentage: number;
+  correct_answers: number;
+  total_questions: number;
+  time_taken_seconds: number | null;
+  completed_at: string;
+  answers: Record<string, string> | null;
+  status?: string;
+}
 
 interface MyAttempt {
   id: string;
@@ -31,7 +44,33 @@ function scoreColor(score: number): string {
   return "text-red-600 bg-red-50";
 }
 
+const attemptsFetcher = async (): Promise<MyAttempt[]> => {
+  try {
+    const res = await fetch("/api/attempts?mine=true");
+    if (!res.ok) throw new Error("Please log in to see your attempts.");
+    const data = await res.json();
+    const rows: MyAttempt[] = data.attempts || [];
+
+    // Attach quiz titles in one call (shares the cached quizzes resource)
+    try {
+      const qRes = await fetch("/api/quizzes");
+      const qData = await qRes.json();
+      const titles = new Map<string, string>(
+        (qData.quizzes || []).map((q: { id: string; title: string }) => [q.id, q.title])
+      );
+      for (const a of rows) a.quiz_title = titles.get(a.quiz_id) || "Untitled quiz";
+    } catch { /* titles optional */ }
+
+    rows.sort((a, b) => (b.completed_at || "").localeCompare(a.completed_at || ""));
+    return rows;
+  } catch {
+    return [];
+  }
+};
+
 export default function MyAttemptsPage() {
+  // Reads the resource warmed on layout mount — usually already resolved.
+  const { data: warmed, loading: warmLoading } = useResource("my-attempts", attemptsFetcher);
   const [attempts, setAttempts] = useState<MyAttempt[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -39,32 +78,10 @@ export default function MyAttemptsPage() {
   const [reviewLoading, setReviewLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/attempts?mine=true");
-        if (!res.ok) throw new Error("Please log in to see your attempts.");
-        const data = await res.json();
-        const rows: MyAttempt[] = data.attempts || [];
-
-        // Attach quiz titles in one call
-        try {
-          const qRes = await fetch("/api/quizzes");
-          const qData = await qRes.json();
-          const titles = new Map<string, string>(
-            (qData.quizzes || []).map((q: { id: string; title: string }) => [q.id, q.title])
-          );
-          for (const a of rows) a.quiz_title = titles.get(a.quiz_id) || "Untitled quiz";
-        } catch { /* titles optional */ }
-
-        rows.sort((a, b) => (b.completed_at || "").localeCompare(a.completed_at || ""));
-        setAttempts(rows);
-      } catch {
-        setAttempts([]);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+    if (warmLoading) return;
+    setAttempts(warmed || []);
+    setLoading(false);
+  }, [warmed, warmLoading]);
 
   const loadReview = async (attempt: MyAttempt) => {
     if (reviewData[attempt.id] || !attempt.answers) return;

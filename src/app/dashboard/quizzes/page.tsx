@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizzes } from "@/lib/local";
 import { SkeletonText, SkeletonList } from "@/components/Skeleton";
+import { warmResource } from "@/lib/prefetch";
 import { Quiz, Course } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
 import { Plus, Copy, CheckCircle, ExternalLink, Pencil } from "lucide-react";
@@ -22,25 +23,26 @@ export default function MyQuizzesPage() {
   useEffect(() => {
     const fetchQuizzes = async () => {
       if (isLocalMode()) {
-        // Server file is the source of truth (covers quizzes created in other
-        // browsers); the local cache is merged in only as a fallback.
+        // Shared with the layout warm-up: usually already resolved, so the
+        // page paints with content immediately.
         try {
-          const res = await fetch("/api/quizzes", { headers: { "x-local-mode": "true" } });
-          if (res.ok) {
+          const merged = await warmResource("quizzes", async () => {
+            const res = await fetch("/api/quizzes", { headers: { "x-local-mode": "true" } });
+            if (!res.ok) return getLocalQuizzes();
             const data = await res.json();
             const server: Quiz[] = data.quizzes || [];
             const ids = new Set(server.map((q) => q.id));
-            const extras = getLocalQuizzes().filter((q) => !ids.has(q.id));
-            setQuizzes([...server, ...extras]);
-          } else {
-            setQuizzes(getLocalQuizzes());
-          }
+            return [...server, ...getLocalQuizzes().filter((q) => !ids.has(q.id))];
+          });
+          setQuizzes(merged);
         } catch {
           setQuizzes(getLocalQuizzes());
         }
         try {
-          const res = await fetch("/api/courses", { headers: { "x-local-mode": "true" } });
-          const data = await res.json();
+          const data = await warmResource("courses", async () => {
+            const res = await fetch("/api/courses", { headers: { "x-local-mode": "true" } });
+            return res.json().catch(() => ({ courses: [] }));
+          });
           setCourses(data.courses || []);
         } catch { /* ignore */ }
         setLoading(false);

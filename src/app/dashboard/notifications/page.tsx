@@ -8,6 +8,7 @@ import {
   clearAllNotifications,
   Notification,
 } from "@/lib/local";
+import { useResource } from "@/lib/prefetch";
 import { Bell, BookOpen, BarChart3, Info, Trash2, X } from "lucide-react";
 import { SkeletonPanel } from "@/components/Skeleton";
 
@@ -24,18 +25,21 @@ const typeColors: Record<string, string> = {
 };
 
 export default function NotificationsPage() {
+  // First paint reads the warmed cache; the "notifications-updated" event
+  // (marks, deletes, admin replies) re-fetches fresh.
+  const { data: warmed, loading: warmLoading, reload } = useResource("notifications", getNotifications);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = () => {
-    getNotifications().then((n) => {
-      setNotifications(n);
-      setLoading(false);
-    });
-  };
+  const load = () => reload();
 
   useEffect(() => {
-    load();
+    if (warmLoading) return;
+    setNotifications(warmed || []);
+    setLoading(false);
+  }, [warmed, warmLoading]);
+
+  useEffect(() => {
     window.addEventListener("notifications-updated", load);
     return () => window.removeEventListener("notifications-updated", load);
   }, []);
