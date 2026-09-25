@@ -108,6 +108,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ── Resume an unfinished attempt instead of minting a new one ──
+    // A student who joined, refreshed (or lost connection) and comes back
+    // must resume the SAME attempt with its ORIGINAL start time. Otherwise:
+    //   (a) the page starts a fresh timer for time already spent, and
+    //   (b) the abandoned in_progress row lingers as a 0% phantom in
+    //       My attempts and the creator's roster.
+    if (status === "in_progress") {
+      const attemptsNow = readServerAttempts();
+      const resumable = attemptsNow.find(
+        (a: any) =>
+          a.quiz_id === quiz_id &&
+          a.status === "in_progress" &&
+          (participantEmail
+            ? a.participant_email === participantEmail
+            : a.participant_name === (participant_name || "Anonymous") && !a.participant_email)
+      );
+      if (resumable) {
+        // Refresh the display name (they may have typed a different one)
+        resumable.participant_name = participant_name || resumable.participant_name;
+        if (participantEmail && !resumable.participant_email) {
+          resumable.participant_email = participantEmail;
+        }
+        writeServerAttempts(attemptsNow);
+        return NextResponse.json({ attempt: resumable, resumed: true });
+      }
+    }
+
     const attempt = {
       id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       quiz_id,
@@ -127,20 +154,20 @@ export async function POST(request: NextRequest) {
       created_at: new Date().toISOString(),
     };
 
-    const attempts = readServerAttempts();
+    const attemptsList = readServerAttempts();
     // Replace an existing row with the same id (in_progress → completed on
     // resubmit) so My attempts doesn't show a 0% twin next to the real one.
     // For timed-out markers (which mint a fresh client id) also retire any
     // leftover in_progress row for the same participant + quiz.
-    let idx = attempts.findIndex((a) => a.id === attempt.id);
+    let idx = attemptsList.findIndex((a) => a.id === attempt.id);
     if (idx < 0 && attempt.status === "timed_out" && attempt.participant_email) {
-      idx = attempts.findIndex(
+      idx = attemptsList.findIndex(
         (a) => a.quiz_id === attempt.quiz_id && a.participant_email === attempt.participant_email && a.status === "in_progress"
       );
     }
-    if (idx >= 0) attempts[idx] = attempt;
-    else attempts.push(attempt);
-    writeServerAttempts(attempts);
+    if (idx >= 0) attemptsList[idx] = attempt;
+    else attemptsList.push(attempt);
+    writeServerAttempts(attemptsList);
 
     return NextResponse.json({ attempt });
   } catch (error) {

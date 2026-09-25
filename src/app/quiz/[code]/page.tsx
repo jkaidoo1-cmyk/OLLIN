@@ -202,7 +202,16 @@ export default function QuizPage() {
 
   useEffect(() => {
     if (joined && quiz?.time_limit_minutes && timeLeft === null) {
-      setTimeLeft(quiz.time_limit_minutes * 60);
+      // Resume-aware: if we hold a server attempt with a real start time
+      // (fresh join OR a resumed attempt), remaining time is measured from
+      // THAT moment — a refreshed page never gets fresh time back.
+      let remaining = quiz.time_limit_minutes * 60;
+      const startedIso = attempt?.started_at || joinedAtRef.current;
+      const startedMs = startedIso ? new Date(startedIso).getTime() : NaN;
+      if (!Number.isNaN(startedMs) && startedMs > 0) {
+        remaining = Math.max(0, Math.floor(remaining - (Date.now() - startedMs) / 1000));
+      }
+      setTimeLeft(remaining);
     }
   }, [joined, quiz, timeLeft]);
 

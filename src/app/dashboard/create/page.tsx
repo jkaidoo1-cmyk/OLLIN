@@ -48,6 +48,17 @@ export default function CreateQuizPage() {
   const [extracting, setExtracting] = useState(false);
   const [extractWarning, setExtractWarning] = useState("");
 
+  // Named fallback so no quiz is ever saved as the generic "Untitled Quiz" —
+  // derived from the first question's text (or the material/exam context).
+  const fallbackQuizTitle = () => {
+    const firstQ = questions.find((q) => q.question?.trim());
+    if (firstQ) {
+      const t = firstQ.question.trim().slice(0, 60);
+      return t.length < firstQ.question.trim().length ? `${t}…` : t;
+    }
+    return sourceMode === "exam" ? "Extracted exam" : "Practice quiz";
+  };
+
   // Quiz config
   const [quizTitle, setQuizTitle] = useState("");
   const [quizMode, setQuizMode] = useState<"self" | "host" | "both">("host");
@@ -273,8 +284,7 @@ export default function CreateQuizPage() {
       if (isLocalMode()) {
         const localQuiz: Quiz = {
           id: editId || `local-quiz-${Date.now()}`,
-          host_id: currentUserId,
-          title: quizTitle || materialTitle || "Untitled Quiz",
+          host_id: currentUserId,            title: quizTitle || materialTitle || fallbackQuizTitle(),
           description: null,
           share_code: shareCode || `SELF-${Date.now()}`,
           time_limit_minutes: timeLimit || null,
@@ -349,7 +359,7 @@ export default function CreateQuizPage() {
           .from("quizzes")
           .insert({
             host_id: userData.user.id,
-            title: quizTitle || materialTitle || "Untitled Quiz",
+            title: quizTitle || materialTitle || fallbackQuizTitle(),
             description: null,
             share_code: shareCode,
             time_limit_minutes: timeLimit || null,
