@@ -38,6 +38,11 @@ interface ReviewQuestion {
   explanation: string | null;
 }
 
+// Mirror of the server's grading comparison (submit route): case- and
+// whitespace-insensitive, so review badges always agree with the official
+// score even when answers were stored with stray formatting.
+const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+
 function scoreColor(score: number): string {
   if (score >= 70) return "text-green-600 bg-green-50";
   if (score >= 50) return "text-amber-600 bg-amber-50";
@@ -188,7 +193,7 @@ export default function MyAttemptsPage() {
                       <div className="space-y-3 pt-2">
                         {questions.map((q, idx) => {
                           const selected = a.answers?.[q.id] || null;
-                          const isCorrect = selected === q.correct_answer;
+                          const isCorrect = !!selected && norm(selected) === norm(q.correct_answer);
                           const optionLetter = (i: number) => String.fromCharCode(65 + i);
                           return (
                             <div key={q.id} className="border border-[#e0e0e0] rounded-lg p-3">
@@ -229,10 +234,12 @@ export default function MyAttemptsPage() {
                               {!q.options && selected && (
                                 <p className="text-xs pl-6 mt-1">
                                   <span className={isCorrect ? "text-green-700" : "text-red-600"}>
-                                    Your answer: {selected}
+                                    Your answer: {norm(selected) === "true" || norm(selected) === "false" ? (norm(selected) === "true" ? "True" : "False") : selected}
                                   </span>
                                   {!isCorrect && (
-                                    <span className="text-green-700"> · Correct: {q.correct_answer}</span>
+                                    <span className="text-green-700">
+                                      · Correct: {norm(q.correct_answer) === "true" ? "True" : norm(q.correct_answer) === "false" ? "False" : q.correct_answer}
+                                    </span>
                                   )}
                                 </p>
                               )}
