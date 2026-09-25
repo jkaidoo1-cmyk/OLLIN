@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, BookOpen, CheckCircle, BarChart3, LifeBuoy } from "lucide-react";
+import { Users, BookOpen, CheckCircle, BarChart3, LifeBuoy, Eraser } from "lucide-react";
+import { useConfirm, useToast } from "@/components/ui/toast";
 
 export default function AdminOverviewPage() {
+  const confirmDialog = useConfirm();
+  const toast = useToast();
   const [stats, setStats] = useState({ totalUsers: 0, totalQuizzes: 0, totalAttempts: 0, publishedQuizzes: 0 });
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
   const [recentQuizzes, setRecentQuizzes] = useState<any[]>([]);
@@ -168,6 +171,102 @@ export default function AdminOverviewPage() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Maintenance — abandoned attempts cleanup */}
+      <AttemptsCleanupCard onPurged={fetchOverview} />
+    </div>
+  );
+}
+
+/**
+ * Maintenance: abandoned quiz attempts.
+ * A student who opens a quiz and never submits leaves an in_progress row
+ * (0%, no answers) behind. After 24h it can never be submitted — the time
+ * limit is long gone — so admins can purge these phantoms in one click.
+ */
+function AttemptsCleanupCard({ onPurged }: { onPurged: () => void }) {
+  const confirmDialog = useConfirm();
+  const toast = useToast();
+  const [staleCount, setStaleCount] = useState<number | null>(null);
+  const [staleRows, setStaleRows] = useState<any[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => {
+    fetch("/api/admin/attempts/cleanup")
+      .then((r) => r.json())
+      .then((d) => {
+        setStaleCount(d.stale_count ?? 0);
+        setStaleRows(d.stale || []);
+      })
+      .catch(() => setStaleCount(null));
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const purge = async () => {
+    const ok = await confirmDialog({
+      title: `Remove ${staleCount} abandoned attempt${staleCount === 1 ? "" : "s"}?`,
+      body: "These are unfinished attempts with no answers that expired more than a day ago. Completed attempts are not touched.",
+      confirmLabel: "Remove",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/attempts/cleanup", { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Cleanup failed");
+      toast.success(`${data.removed} abandoned attempt${data.removed === 1 ? "" : "s"} removed`);
+      load();
+      onPurged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Cleanup failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (staleCount === null) return null; // still loading or endpoint unavailable
+  if (staleCount === 0) {
+    return (
+      <div className="bg-white border border-[#e0e0e0] rounded-lg mt-6 px-4 py-3 flex items-center gap-2">
+        <Eraser className="w-4 h-4 text-[#bbb]" />
+        <p className="text-xs text-[#999]">No abandoned attempts to clean up.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="bg-white border border-amber-200 rounded-lg mt-6">
+      <div className="px-4 py-3 border-b border-amber-100 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Eraser className="w-4 h-4 text-amber-600 flex-shrink-0" />
+          <h2 className="text-sm font-semibold text-[#333]">
+            Maintenance · {staleCount} abandoned attempt{staleCount === 1 ? "" : "s"}
+          </h2>
+        </div>
+        <button
+          onClick={purge}
+          disabled={busy}
+          className="text-xs px-3 py-2 border border-red-200 text-red-600 rounded hover:bg-red-50 flex-shrink-0 disabled:opacity-50"
+        >
+          {busy ? "Removing…" : "Clean up"}
+        </button>
+      </div>
+      <div className="divide-y divide-[#f0f0f0] max-h-52 overflow-y-auto">
+        {staleRows.map((a) => (
+          <div key={a.id} className="px-4 py-2 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm text-[#333] truncate">{a.participant_name || "Anonymous"}</p>
+              <p className="text-xs text-[#999]">
+                started {a.started_at ? new Date(a.started_at).toLocaleString() : "unknown"}
+              </p>
+            </div>
+            <span className="badge badge-warning flex-shrink-0">in progress</span>
+          </div>
+        ))}
       </div>
     </div>
   );
