@@ -61,11 +61,23 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
     const csv = typeof body.csv === "string" ? body.csv : "";
     if (!csv.trim()) {
       return NextResponse.json({ error: "CSV content is required" }, { status: 400 });
     }
+    // Hard input caps: the CSV is parsed line-by-line and each row hits the
+    // users file — bound the payload so one request can't wedge the store.
+    if (csv.length > 1_000_000) {
+      return NextResponse.json(
+        { error: "CSV is too large — split the import into batches (max ~1MB)." },
+        { status: 422 }
+      );
+    }
+    const MAX_ROWS = 2000;
 
     let rows = parseCsv(csv);
     if (rows.length === 0) {
@@ -75,6 +87,12 @@ export async function POST(request: NextRequest) {
     // Drop a header row if the first line mentions "email"
     if (rows[0].some((c) => c.toLowerCase().includes("email"))) {
       rows = rows.slice(1);
+    }
+    if (rows.length > MAX_ROWS) {
+      return NextResponse.json(
+        { error: `Too many rows (${rows.length}) — import at most ${MAX_ROWS} accounts per batch.` },
+        { status: 422 }
+      );
     }
 
     // Resolve program codes → ids once

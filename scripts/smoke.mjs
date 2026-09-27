@@ -143,9 +143,12 @@ async function run() {
       created_at: new Date().toISOString(),
     },
   ];
+  // Quiz creation is session-gated server-side (host attribution can't be
+  // spoofed), so create it as the logged-in admin.
   const created = await api("/api/quizzes", {
     method: "POST",
     body: { title: quiz.title, quiz, questions },
+    cookie: adminCookie,
   });
   ok("quiz saved via API", created.status === 200, JSON.stringify(created.json).slice(0, 120));
   const quizId = created.json?.quiz?.id || created.json?.quiz?.quiz?.id || quiz.share_code;
@@ -197,6 +200,7 @@ async function run() {
   const closedCreated = await api("/api/quizzes", {
     method: "POST",
     body: { title: closedQuiz.title, quiz: closedQuiz, questions: closedQ },
+    cookie: adminCookie,
   });
   const closedId = closedCreated.json?.quiz?.id || closedCreated.json?.quiz?.quiz?.id || closedQuiz.share_code;
   createdQuizIds.push(closedId);

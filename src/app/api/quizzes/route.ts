@@ -1,21 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createQuiz, getUserQuizzes, readServerQuizzes, writeServerQuizzes, readServerQuestions, writeServerQuestions } from "@/lib/data";
+import { getSessionUser } from "@/lib/session";
 import { Quiz, Question } from "@/lib/types";
 
-// GET — list all quizzes
+// GET — list all quizzes.
+// Field-minimized by default (correct answers/explanations never leave the
+// server here): the full quiz list is readable by any browser, so each row
+// ships only what participants need. Editors fetch the full row for ONE quiz
+// via /api/quizzes/[id]?include=answers, which is host/admin-gated.
 export async function GET(request: NextRequest) {
   try {
     const local = request.headers.get("x-local-mode") === "true";
+    let quizzes: Quiz[];
     try {
-      const quizzes = await getUserQuizzes(local);
-      return NextResponse.json({ quizzes });
+      quizzes = await getUserQuizzes(local);
     } catch (err) {
       // NO_BACKEND (Supabase unconfigured or unavailable) → file-backed storage
       if (err instanceof Error && err.message === "NO_BACKEND") {
-        return NextResponse.json({ quizzes: readServerQuizzes() });
+        quizzes = readServerQuizzes();
+      } else {
+        throw err;
       }
-      throw err;
     }
+    return NextResponse.json({ quizzes: quizzes.map(stripQuestionData) });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to fetch quizzes" },
@@ -27,10 +34,15 @@ export async function GET(request: NextRequest) {
 // POST — create a new quiz with questions.
 // In local mode, the client sends the fully-built quiz (`direct` mode) so it is
 // persisted to the server file and is visible from every browser / the admin panel.
+// host_id is always derived from the server-side session — a client-supplied
+// host_id is ignored, so one student can't claim another teacher's quizzes.
 export async function POST(request: NextRequest) {
   try {
     const local = request.headers.get("x-local-mode") === "true";
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
     const { title, description, time_limit_minutes, questions } = body;
 
     if (!title || !title.trim()) {
@@ -40,15 +52,25 @@ export async function POST(request: NextRequest) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
       return NextResponse.json({ error: "At least one question is required" }, { status: 400 });
     }
+    if (questions.length > 500) {
+      return NextResponse.json({ error: "A quiz can have at most 500 questions" }, { status: 422 });
+    }
 
     if (local && body.quiz) {
       // Direct-save path: normalize the client-built quiz before persisting,
       // so a malformed payload can never poison the server file.
       const raw = body.quiz as Partial<Quiz>;
+      const session = await getSessionUser(request).catch(() => null);
+      if (!session) {
+        return NextResponse.json(
+          { error: "Please log in to create a quiz." },
+          { status: 401 }
+        );
+      }
       const quizzesNow = readServerQuizzes();
       const quiz: Quiz = {
         id: raw.id || `local-quiz-${Date.now()}`,
-        host_id: raw.host_id || "anonymous",
+        host_id: session.id,
         title: String(raw.title || title).trim() || "Untitled Quiz",
         description: raw.description ?? null,
         share_code: raw.share_code || `OLLIN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
@@ -83,10 +105,24 @@ export async function POST(request: NextRequest) {
         })
       );
 
+      // Only the existing host (or an admin) may overwrite an existing quiz
+      // id via this upsert path.
       const quizzes = quizzesNow;
       const existingIdx = quizzes.findIndex((q) => q.id === quiz.id);
-      if (existingIdx >= 0) quizzes[existingIdx] = quiz;
-      else quizzes.unshift(quiz);
+      if (existingIdx >= 0) {
+        const existing = quizzes[existingIdx];
+        const mayOverwrite =
+          session.role === "admin" || existing.host_id === session.id || existing.host_id === "anonymous";
+        if (!mayOverwrite) {
+          return NextResponse.json(
+            { error: "A quiz with this id already belongs to another creator" },
+            { status: 409 }
+          );
+        }
+        quizzes[existingIdx] = quiz;
+      } else {
+        quizzes.unshift(quiz);
+      }
       writeServerQuizzes(quizzes);
 
       const allQuestions = readServerQuestions().filter((q) => q.quiz_id !== quiz.id);
@@ -120,4 +156,27 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/** Participant-safe shape: no correct answers or explanations. */
+export function stripQuestionData(q: Partial<Quiz>) {
+  return {
+    id: q.id,
+    host_id: q.host_id,
+    title: q.title,
+    description: q.description,
+    share_code: q.share_code,
+    time_limit_minutes: q.time_limit_minutes,
+    max_attempts: q.max_attempts,
+    show_answers_after: q.show_answers_after,
+    shuffle_questions: q.shuffle_questions,
+    shuffle_options: q.shuffle_options,
+    passing_score: q.passing_score,
+    starts_at: q.starts_at,
+    ends_at: q.ends_at,
+    status: q.status,
+    course_id: q.course_id,
+    created_at: q.created_at,
+    updated_at: q.updated_at,
+  };
 }

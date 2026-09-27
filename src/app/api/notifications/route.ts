@@ -100,12 +100,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   try {
-    const body = await request.json();
-    const title = String(body.title || "").trim();
-    const message = String(body.message || "").trim();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+    const title = String(body.title || "").slice(0, 200).trim();
+    const message = String(body.message || "").slice(0, 2000).trim();
     const type = ["quiz", "result", "system"].includes(body.type) ? body.type : "system";
+    // Fan-out cap: a single request may notify at most 100 recipients, so a
+    // forged user_ids array can't turn this endpoint into a mail bomb that
+    // writes thousands of rows per call.
+    const MAX_RECIPIENTS = 100;
     const userIds: string[] = Array.isArray(body.user_ids)
-      ? body.user_ids.map(String)
+      ? body.user_ids.map(String).slice(0, MAX_RECIPIENTS)
       : [String(body.user_id || session.id)];
 
     if (!title) {
