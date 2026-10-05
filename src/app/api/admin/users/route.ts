@@ -24,38 +24,23 @@ export async function GET(request: NextRequest) {
   try {
     const local = request.headers.get("x-local-mode") === "true";
 
-    // File mode when the header is set OR Supabase is not configured —
-    // so a valid admin session cookie works even in a fresh browser.
+    // Admin authority always comes from the app's signed session cookie
+    // (issued by /api/auth/login). Check it first in every mode.
+    const admin = await getSessionAdmin(request);
+    if (!admin) {
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    }
+
     const { createClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
 
     if (local || !supabase) {
-      // Server-side auth: the request must carry a valid admin session cookie.
-      if (!(await getSessionAdmin(request))) {
-        return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-      }
+      // File mode: list users from the local file.
       const users = readLocalUsers().map(publicUser);
       return NextResponse.json({ users });
     }
 
-    // Real Supabase — use service role to list all users
-
-    // Check current user is admin
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", userData.user.id)
-      .single();
-
-    if (profile?.role !== "admin") {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-    }
-
+    // Supabase mode: list profiles from the database (service role bypasses RLS).
     const { data: users, error } = await supabase
       .from("profiles")
       .select("*")
@@ -129,31 +114,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Real Supabase — use admin API to create user
-    if (!supabase) {
-      // Unreachable in practice (file mode handled above), kept as a guard.
-      return NextResponse.json(
-        { error: "No account backend configured. Use local mode." },
-        { status: 503 }
-      );
-    }
-
-    // Verify requester is admin
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", userData.user.id)
-      .single();
-
-    if (profile?.role !== "admin") {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-    }
-
-    // Create user with service role client
+    // Admin authority already verified above via getSessionAdmin(request).
     const { createAdminClient } = await import("@/lib/supabase/server");
     const adminSupabase = await createAdminClient();
 
@@ -265,20 +226,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ user: publicUser(user), message: "Account updated" });
     }
 
-    // Real Supabase
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", userData.user.id)
-      .single();
-    if (profile?.role !== "admin") {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-    }
-
+    // Admin authority already verified above via getSessionAdmin(request).
     const adminSupabase = await createAdminClient();
     const updates: Record<string, unknown> = {};
     if (body.full_name !== undefined) updates.full_name = body.full_name;

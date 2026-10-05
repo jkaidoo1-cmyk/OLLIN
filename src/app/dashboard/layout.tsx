@@ -60,22 +60,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
       }
 
+      // Use the app's session cookie (works in both local and Supabase mode).
+      try {
+        const meRes = await fetch("/api/auth/me");
+        const meData = await meRes.json();
+        if (meRes.ok && meData.user) {
+          // Admins go to the admin console (except on the quiz edit page).
+          if (meData.user.role === "admin" && !isEditPage) {
+            router.replace("/admin");
+            return;
+          }
+          setUser({ email: meData.user.email || "", name: meData.user.full_name || meData.user.email?.split("@")[0] || "User" });
+          return;
+        }
+      } catch { /* fall through */ }
       if (!supabase) { router.push("/login"); return; }
       const { data } = await supabase.auth.getUser();
       if (!data.user) {
         router.push("/login");
         return;
       }
-      // Supabase admins also belong in the admin console
-      // (except on the quiz edit page).
-      try {
-        const meRes = await fetch("/api/auth/me");
-        const meData = await meRes.json();
-        if (meRes.ok && meData.user?.role === "admin" && !isEditPage) {
-          router.replace("/admin");
-          return;
-        }
-      } catch { /* fall through to student view */ }
       setUser({
         email: data.user.email || "",
         name: data.user.user_metadata?.full_name || data.user.email?.split("@")[0] || "User",
