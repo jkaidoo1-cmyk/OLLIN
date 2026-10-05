@@ -57,7 +57,7 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `if ('serviceWorker' in navigator) window.addEventListener('load', function() {
-              navigator.serviceWorker.register('/sw.js').catch(function(){});
+              navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(function(){});
               var refreshing = false;
               if (navigator.serviceWorker.controller) {
                 navigator.serviceWorker.addEventListener('controllerchange', function() {

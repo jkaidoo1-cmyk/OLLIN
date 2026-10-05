@@ -12,7 +12,7 @@
  * vanish. Offline users see the offline page instead of a broken quiz.
  */
 
-const CACHE = "ollin-v2";
+const CACHE = "ollin-v3";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
@@ -42,8 +42,7 @@ self.addEventListener("fetch", (event) => {
   if (
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/icon-") ||
-    url.pathname === "/logo.png" ||
-    url.pathname === "/manifest.json"
+    url.pathname === "/logo.png"
   ) {
     event.respondWith(
       caches.match(request).then(
