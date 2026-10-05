@@ -140,7 +140,7 @@ async function run() {
 
   // 3. Write path: audit_log round-trip
   console.log("\nWrite paths:");
-  const auditId = `verify-${Date.now()}`;
+  const auditId = `verify-${Date.now()}`; // audit_log.id is text — keep the human-readable tag
   const ins = await rest("/audit_log", {
     method: "POST",
     body: JSON.stringify({
@@ -190,7 +190,14 @@ async function run() {
 
   // 5. Notifications + api_keys round-trips
   console.log("\nOther tables:");
-  const nid = `verify-${Date.now()}`;
+  // notifications.id and api_keys.id are uuid columns — generate real UUIDs for the test rows.
+  function uuid() {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+    });
+  }
+  const nid = uuid();
   const nIns = await rest("/notifications", {
     method: "POST",
     body: JSON.stringify({
@@ -210,7 +217,7 @@ async function run() {
     await rest(`/notifications?id=eq.${nid}`, { method: "DELETE" });
   }
 
-  const kId = `verify-${Date.now()}`;
+  const kId = uuid();
   const kIns = await rest("/api_keys", {
     method: "POST",
     body: JSON.stringify({
