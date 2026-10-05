@@ -1,10 +1,27 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
+import { isLocalMode, getLocalUser } from "@/lib/local";
 
 
 export default function Home() {
+  const [authed, setAuthed] = useState(false);
+
+  // Reflect an existing session so the header doesn't read as logged-out.
+  useEffect(() => {
+    (async () => {
+      if (isLocalMode() && getLocalUser()) {
+        setAuthed(true);
+        return;
+      }
+      try {
+        const res = await fetch("/api/auth/me");
+        setAuthed(res.ok);
+      } catch { /* show logged-out header */ }
+    })();
+  }, []);
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
@@ -23,16 +40,22 @@ export default function Home() {
             <Link href="/join" className="px-4 py-1 text-sm font-medium text-white/70 hover:text-white transition-colors no-underline">
               Join a quiz
             </Link>
-            <Link href="/login" className="hidden sm:inline-block px-4 py-1 text-sm font-medium text-white/70 hover:text-white transition-colors no-underline">
+            <Link href={authed ? "/dashboard" : "/login"} className="hidden sm:inline-block px-4 py-1 text-sm font-medium text-white/70 hover:text-white transition-colors no-underline">
               Dashboard
             </Link>
           </nav>
 
           {/* Right side */}
           <div className="flex items-center gap-3 shrink-0">
-            <Link href="/login" className="text-sm font-medium text-white bg-white/15 hover:bg-white/25 px-4 py-1.5 rounded-full transition-colors no-underline">
-              Log in
-            </Link>
+            {authed ? (
+              <Link href="/dashboard" className="text-sm font-medium text-white bg-white/15 hover:bg-white/25 px-4 py-1.5 rounded-full transition-colors no-underline">
+                Dashboard
+              </Link>
+            ) : (
+              <Link href="/login" className="text-sm font-medium text-white bg-white/15 hover:bg-white/25 px-4 py-1.5 rounded-full transition-colors no-underline">
+                Log in
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -90,7 +113,7 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="relative border-t border-white/10 backdrop-blur-md" style={{ background: "rgba(15, 118, 110, 0.95)" }}>
+      <footer className="relative border-t border-white/10 backdrop-blur-md" style={{ background: "rgba(46, 125, 50, 0.95)" }}>
         <div className="absolute -top-24 right-0 w-64 h-64 bg-primary/06 rounded-full blur-3xl pointer-events-none" />
         <div className="relative max-w-6xl mx-auto px-6 py-8">
           <div className="flex flex-col sm:grid sm:grid-cols-3 gap-6">

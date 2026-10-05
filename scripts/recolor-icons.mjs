@@ -1,34 +1,37 @@
-/* Recolor PWA icons to the current teal brand (#0d9488).
+/* Recolor PWA icons to the current brand green (leaf green #4CAF50).
+ *
+ * Run from the quizai/ directory after restoring pristine icons if needed:
+ *   git show <pre-theme-commit>:public/icon-192.png > public/icon-192.png
  *
  * - icon-192.png / icon-512.png: white logo on transparency (invisible on
- *   light launcher backgrounds) → composite over a solid teal background.
+ *   light launcher backgrounds) → composite over a solid brand background.
  *   Idempotent: once opaque, compositing is a no-op.
- * - icon-maskable.png: was painted with the legacy brand green #006633 →
- *   remap to teal. The artwork is lerp(#006633, white, t) per pixel, and
- *   since the green's red channel is 0 and white's is 255, t = r/255, so we
- *   rebuild the pixel as lerp(#0d9488, white, t) — preserving the white logo
- *   and the antialiased edge blends exactly. Skipped when already teal.
- * - src/app/favicon.ico: regenerate as a PNG-in-ICO wrapper of icon-192.png
- *   (the old one was a near-blank grey square).
+ * - icon-maskable.png: painted with the legacy brand green #006633 →
+ *   remap to the brand color. The artwork is lerp(#006633, white, t) per
+ *   pixel, and since the green's red channel is 0 and white's is 255,
+ *   t = r/255, so we rebuild the pixel as lerp(brand, white, t) —
+ *   preserving the white logo and the antialiased edge blends exactly.
+ *   Skipped when the corner is no longer the legacy green.
+ * - src/app/favicon.ico: regenerate as a PNG-in-ICO wrapper of icon-192.png.
  *
  * Requires: npm install --no-save pngjs
  */
 import { PNG } from "pngjs";
 import fs from "node:fs";
 
-const TEAL = [13, 148, 136]; // #0d9488
+const BRAND = [76, 175, 80]; // #4CAF50 — leaf green
 
 for (const file of ["public/icon-192.png", "public/icon-512.png"]) {
   const png = PNG.sync.read(fs.readFileSync(file));
   for (let i = 0; i < png.data.length; i += 4) {
     const a = png.data[i + 3] / 255;
-    png.data[i] = Math.round(TEAL[0] * (1 - a) + png.data[i] * a);
-    png.data[i + 1] = Math.round(TEAL[1] * (1 - a) + png.data[i + 1] * a);
-    png.data[i + 2] = Math.round(TEAL[2] * (1 - a) + png.data[i + 2] * a);
+    png.data[i] = Math.round(BRAND[0] * (1 - a) + png.data[i] * a);
+    png.data[i + 1] = Math.round(BRAND[1] * (1 - a) + png.data[i + 1] * a);
+    png.data[i + 2] = Math.round(BRAND[2] * (1 - a) + png.data[i + 2] * a);
     png.data[i + 3] = 255;
   }
   fs.writeFileSync(file, PNG.sync.write(png));
-  console.log("teal background + white logo:", file);
+  console.log("brand background + white logo:", file);
 }
 
 {
@@ -37,7 +40,7 @@ for (const file of ["public/icon-192.png", "public/icon-512.png"]) {
   const corner = [png.data[0], png.data[1], png.data[2]];
   const isLegacyGreen = Math.abs(corner[0] - 0) <= 3 && Math.abs(corner[1] - 102) <= 3 && Math.abs(corner[2] - 51) <= 3;
   if (!isLegacyGreen) {
-    console.log("already teal, skipped:", file);
+    console.log("not legacy green, skipped:", file);
   } else {
     let inconsistent = 0;
     for (let i = 0; i < png.data.length; i += 4) {
@@ -46,17 +49,17 @@ for (const file of ["public/icon-192.png", "public/icon-512.png"]) {
       if (Math.abs(png.data[i + 1] - (102 + 153 * t)) > 6 || Math.abs(png.data[i + 2] - (51 + 204 * t)) > 6) {
         inconsistent++;
       }
-      png.data[i] = Math.round(TEAL[0] + (255 - TEAL[0]) * t);
-      png.data[i + 1] = Math.round(TEAL[1] + (255 - TEAL[1]) * t);
-      png.data[i + 2] = Math.round(TEAL[2] + (255 - TEAL[2]) * t);
+      png.data[i] = Math.round(BRAND[0] + (255 - BRAND[0]) * t);
+      png.data[i + 1] = Math.round(BRAND[1] + (255 - BRAND[1]) * t);
+      png.data[i + 2] = Math.round(BRAND[2] + (255 - BRAND[2]) * t);
     }
     fs.writeFileSync(file, PNG.sync.write(png));
-    console.log("old-green → teal:", file, `(${inconsistent} off-line pixels of ${png.data.length / 4})`);
+    console.log("legacy green → brand:", file, `(${inconsistent} off-line pixels of ${png.data.length / 4})`);
   }
 }
 
 {
-  // favicon.ico = PNG-in-ICO wrapper of the teal icon (widely supported).
+  // favicon.ico = PNG-in-ICO wrapper of the brand icon (widely supported).
   const png = PNG.sync.read(fs.readFileSync("public/icon-192.png"));
   const raw = PNG.sync.write(png);
   const ico = Buffer.alloc(22 + raw.length);
@@ -73,5 +76,5 @@ for (const file of ["public/icon-192.png", "public/icon-512.png"]) {
   ico.writeUInt32LE(22, 18); // PNG data offset
   raw.copy(ico, 22);
   fs.writeFileSync("src/app/favicon.ico", ico);
-  console.log("teal favicon:", `src/app/favicon.ico (${ico.length} bytes)`);
+  console.log("brand favicon:", `src/app/favicon.ico (${ico.length} bytes)`);
 }

@@ -6,14 +6,14 @@
   --background: #f4f6f9;
   --foreground: #1f2937;
 
-  /* Primary brand — deep teal-green, glass-friendly */
-  --primary: #0d9488;
-  --primary-hover: #0b8378;
-  --primary-light: rgba(13, 148, 136, 0.10);
-  --primary-strong: #0f766e;
+  /* Primary brand — fresh leaf green, glass-friendly */
+  --primary: #4CAF50;
+  --primary-hover: #43A047;
+  --primary-light: rgba(76, 175, 80, 0.10);
+  --primary-strong: #2E7D32;
 
   /* Header */
-  --header-bg: rgba(13, 148, 136, 0.96);
+  --header-bg: rgba(76, 175, 80, 0.96);
   --header-text: #ffffff;
 
   /* Glass surfaces */
@@ -29,7 +29,7 @@
   --card-border: rgba(226, 232, 240, 0.8);
 
   /* Gradient accent */
-  --gradient-primary: linear-gradient(135deg, #0d9488 0%, #11a196 100%);
+  --gradient-primary: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
   --gradient-warm: linear-gradient(135deg, #f5f7fa 0%, #e8edf4 100%);
 
   /* Radius */
@@ -268,12 +268,12 @@ a:hover { text-decoration: underline; }
 }
 
 .glass-strong {
-  /* Header glass — bright teal, near-opaque so content can't show through */
-  background: rgba(13, 148, 136, 0.96);
+  /* Header glass — bright leaf green, near-opaque so content can't show through */
+  background: rgba(76, 175, 80, 0.96);
   backdrop-filter: var(--blur-md);
   -webkit-backdrop-filter: var(--blur-md);
   border-bottom: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 4px 24px rgba(13, 148, 136, 0.28);
+  box-shadow: 0 4px 24px rgba(76, 175, 80, 0.28);
 }
 
 .glass-card {
@@ -305,7 +305,7 @@ a:hover { text-decoration: underline; }
 
 .glass-input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.15);
 }
 
 .glass-input::placeholder { color: #94a3b8; }
@@ -325,12 +325,12 @@ a:hover { text-decoration: underline; }
   cursor: pointer;
   transition: transform 150ms ease, box-shadow 150ms ease;
   line-height: 1.5;
-  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.25);
+  box-shadow: 0 4px 14px rgba(76, 175, 80, 0.25);
 }
 
 .glass-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(13, 148, 136, 0.35);
+  box-shadow: 0 6px 20px rgba(76, 175, 80, 0.35);
 }
 
 .glass-btn:active:not(:disabled) { transform: translateY(0); }
@@ -349,7 +349,7 @@ a:hover { text-decoration: underline; }
   border: 1px solid rgba(226, 232, 240, 0.8);
   color: var(--foreground);
 }
-.badge-primary { background: rgba(13, 148, 136, 0.12); color: var(--primary-strong); border-color: rgba(13, 148, 136, 0.2); }
+.badge-primary { background: rgba(76, 175, 80, 0.12); color: var(--primary-strong); border-color: rgba(76, 175, 80, 0.2); }
 .badge-success { background: rgba(22, 163, 74, 0.10); color: #15803d; border-color: rgba(22, 163, 74, 0.2); }
 .badge-warning { background: rgba(217, 119, 6, 0.10); color: #b45309; border-color: rgba(217, 119, 6, 0.2); }
 .badge-danger  { background: rgba(220, 38, 38, 0.10); color: #b91c1c; border-color: rgba(220, 38, 38, 0.2); }
@@ -413,23 +413,23 @@ nextjs-portal { display: none !important; }
 
 /* Old brand green → teal */
 .text-\[\#006633\],
-.hover\:text-\[\#006633\]:hover { color: #0d9488; }
+.hover\:text-\[\#006633\]:hover { color: #2E7D32; }
 .text-\[\#005528\],
 .hover\:text-\[\#005528\]:hover,
-.text-\[\#004d26\] { color: #0f766e; }
+.text-\[\#004d26\] { color: #1B5E20; }
 .bg-\[\#006633\],
-.hover\:bg-\[\#006633\]:hover { background-color: #0d9488; }
+.hover\:bg-\[\#006633\]:hover { background-color: #4CAF50; }
 .bg-\[\#005528\],
-.hover\:bg-\[\#005528\]:hover { background-color: #0f766e; }
+.hover\:bg-\[\#005528\]:hover { background-color: #2E7D32; }
 .border-\[\#006633\],
 .hover\:border-\[\#006633\]:hover,
-.focus\:border-\[\#006633\]:focus { border-color: #0d9488; }
+.focus\:border-\[\#006633\]:focus { border-color: #2E7D32; }
 .hover\:bg-\[\#006633\]\/5:hover,
-.hover\:bg-\[\#006633\]\/10:hover { background-color: rgba(13, 148, 136, 0.08); }
-.focus\:shadow-\[0_0_0_1px_\#006633\]:focus { box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.18); }
+.hover\:bg-\[\#006633\]\/10:hover { background-color: rgba(76, 175, 80, 0.08); }
+.focus\:shadow-\[0_0_0_1px_\#006633\]:focus { box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.18); }
 .bg-\[\#e6f0e8\],
 .bg-\[\#f0f8f2\],
-.bg-\[\#f8fdf8\] { background: rgba(13, 148, 136, 0.10); }
+.bg-\[\#f8fdf8\] { background: rgba(76, 175, 80, 0.10); }
 
 /* Larger radii for a modern feel */
 .rounded-md { border-radius: 10px; }

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AtSign, ChevronDown, ChevronRight, Download, Eye, EyeOff, GraduationCap, KeyRound, LifeBuoy, Loader2, LogOut, UserRound } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { useRouter } from "next/navigation";
-import { isLocalMode, disableLocalMode } from "@/lib/local";
+import { isLocalMode, disableLocalMode, getLocalUser } from "@/lib/local";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -77,6 +77,24 @@ export default function ProfilePage() {
         if (res.ok) {
           const data = await res.json();
           setMe(data.user);
+          return;
+        }
+        // Local mode keeps the signed-in user in localStorage, which never
+        // expires, while the session cookie has a 7-day TTL. Fall back to the
+        // local user so the profile matches the rest of the dashboard.
+        if (isLocalMode()) {
+          const local = getLocalUser();
+          if (local) {
+            setMe({
+              id: local.id,
+              email: local.email,
+              full_name: local.full_name,
+              role: local.role || "student",
+              program_id: null,
+              current_year: local.current_year ?? 1,
+            });
+            return;
+          }
         }
       } catch { /* page shows signed-out state */ }
       finally { setLoading(false); }

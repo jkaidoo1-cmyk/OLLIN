@@ -171,7 +171,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen">
       {local && (
-        <div className="bg-[#0f766e] text-white/90 text-center py-1 text-xs font-medium backdrop-blur-sm">
+        <div className="bg-[#2E7D32] text-white/90 text-center py-1 text-xs font-medium backdrop-blur-sm">
           Limited storage — data is saved on this server only and may not persist
         </div>
       )}
@@ -179,7 +179,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <header className="sticky top-0 z-50 glass-strong">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center">
           {/* Logo + current page — left side */}
-          <Link href="/" className="flex items-center gap-1.5 no-underline shrink-0">
+          <Link href="/dashboard" className="flex items-center gap-1.5 no-underline shrink-0">
             <Logo onDark />
             <span className="text-base font-bold text-white">OLLIN</span>
           </Link>
