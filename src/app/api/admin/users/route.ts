@@ -40,8 +40,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ users });
     }
 
-    // Supabase mode: list profiles from the database (service role bypasses RLS).
-    const { data: users, error } = await supabase
+    // Supabase mode: list profiles via the service role client (bypasses RLS).
+    // The anon key's RLS policy requires a Supabase auth session, which the
+    // app's custom session cookie doesn't provide — so createClient() would
+    // return zero rows even for an admin.
+    const { createAdminClient } = await import("@/lib/supabase/server");
+    const adminClient = await createAdminClient();
+    if (!adminClient) {
+      return NextResponse.json({ users: [] });
+    }
+    const { data: users, error } = await adminClient
       .from("profiles")
       .select("*")
       .order("created_at", { ascending: false });
