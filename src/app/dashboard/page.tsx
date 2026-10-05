@@ -8,12 +8,10 @@ import { isLocalMode, getLocalQuizzes, getLocalAttempts, getLocalUser } from "@/
 import { SkeletonText, SkeletonStats } from "@/components/Skeleton";
 import { warmResource } from "@/lib/prefetch";
 import { Quiz, QuizAttempt } from "@/lib/types";
-import { formatRelativeDate } from "@/lib/utils";
 import {
   Plus,
   Copy,
   CheckCircle,
-  Clock,
   Users,
   ArrowRight,
   FileText,
@@ -154,11 +152,6 @@ export default function DashboardPage() {
       : 0;
     return { quiz, attempts: completed.length, avgScore: avg };
   });
-
-  // Recent attempts
-  const recentAttempts = [...allAttempts]
-    .sort((a, b) => new Date(b.completed_at || b.created_at).getTime() - new Date(a.completed_at || a.created_at).getTime())
-    .slice(0, 5);
 
   if (loading) {
     return (
@@ -391,40 +384,6 @@ export default function DashboardPage() {
               )}
             </div>
           )}
-
-          {/* Recent Activity */}
-          <div className="bg-white border border-[#e0e0e0] rounded-lg p-4">
-            <h2 className="text-sm font-semibold text-[#333] mb-3 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-[#006633]" />
-              Recent Activity
-            </h2>
-            {recentAttempts.length === 0 ? (
-              <p className="text-xs text-[#999] text-center py-4">No activity yet</p>
-            ) : (
-              <div className="space-y-2.5">
-                {recentAttempts.map((att) => {
-                  const quiz = quizzes.find((q) => q.id === att.quiz_id);
-                  const passed = att.score_percentage >= 60;
-                  return (
-                    <div key={att.id} className="flex items-start gap-2.5">
-                      <div className={`w-7 h-7 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5 ${passed ? "bg-green-50 text-green-600" : "bg-red-50 text-red-500"}`}>
-                        {Math.round(att.score_percentage)}%
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium text-[#333] truncate">
-                          {att.participant_name || "Anonymous"}
-                        </p>
-                        <p className="text-[10px] text-[#999] truncate">
-                          {quiz?.title || "Quiz"}
-                          {att.time_taken_seconds ? ` · ${Math.floor(att.time_taken_seconds / 60)}m` : ""}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
 
           {/* Quick Links */}
           <div className="bg-white border border-[#e0e0e0] rounded-lg p-4">
