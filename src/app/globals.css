@@ -2,25 +2,46 @@
 
 /* ─── Design Tokens ───────────────────────────────────────── */
 :root {
-  --background: #f0f0f0;
-  --foreground: #333333;
-  --primary: #006633;
-  --primary-hover: #005528;
-  --primary-light: #e6f0e8;
+  /* Base surface — warm off-white, not pure white */
+  --background: #f4f6f9;
+  --foreground: #1f2937;
 
-  --header-bg: #006633;
+  /* Primary brand — deep teal-green, glass-friendly */
+  --primary: #0f766e;
+  --primary-hover: #0d6b64;
+  --primary-light: rgba(15, 118, 110, 0.10);
+  --primary-strong: #0b5e57;
+
+  /* Header */
+  --header-bg: rgba(15, 118, 110, 0.85);
   --header-text: #ffffff;
 
-  --card-bg: #ffffff;
-  --card-border: #e0e0e0;
+  /* Glass surfaces */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-bg-strong: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --glass-border-strong: rgba(255, 255, 255, 0.85);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
+  --glass-shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.09), 0 2px 8px rgba(0, 0, 0, 0.05);
 
-  --sidebar-bg: #ffffff;
+  /* Card (opaque variant for dense tables) */
+  --card-bg: rgba(255, 255, 255, 0.92);
+  --card-border: rgba(226, 232, 240, 0.8);
 
-  --gradient-primary: #006633;
+  /* Gradient accent */
+  --gradient-primary: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
+  --gradient-warm: linear-gradient(135deg, #f5f7fa 0%, #e8edf4 100%);
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Blur */
+  --blur-light: blur(8px);
+  --blur-md: blur(16px);
 }
 
 @theme inline {
@@ -29,7 +50,7 @@
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);
   --color-primary-light: var(--primary-light);
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 /* ─── Base ───────────────────────────────────────── */
@@ -37,57 +58,41 @@
 
 html {
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
   margin: 0;
-  /* Prevent iOS zoom-on-focus (needs 16px inputs) and overscroll bounce */
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-/*
- * Guard against accidental pull-to-refresh on mobile.
- *
- * `overscroll-behavior-y: none` on body stops the bounce INSIDE the page,
- * but Chrome still lets the browser-level pull-to-refresh trigger when the
- * user drags down while already at the top (the gesture starts on html).
- * Setting it on both html and body, with touch-action pan-x pan-y as a
- * second line of defense, stops the page reloading mid-scroll — which on
- * the quiz page would otherwise discard a student's answers.
- */
-html {
-  overscroll-behavior-y: none;
+/* subtle grain over the background for depth */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
 }
+
+/* pull-to-refresh guard */
+html { overscroll-behavior-y: none; }
 
 @media (max-width: 639px) {
-  html {
-    touch-action: pan-x pan-y;
-  }
+  html { touch-action: pan-x pan-y; }
+  input, select, textarea { font-size: 16px !important; }
+  .input-field { font-size: 16px; padding: 0.625rem 0.75rem; }
+  .btn-primary { padding: 0.625rem 1rem; }
 }
 
-/* Inputs need 16px on mobile or iOS zooms the page when focusing them. */
-@media (max-width: 639px) {
-  .input-field {
-    font-size: 16px;
-    padding: 0.625rem 0.75rem;
-  }
-  .btn-primary {
-    padding: 0.625rem 1rem; /* comfortable 44px-ish touch target */
-  }
-}
-
-/* Tap targets: make small interactive elements at least ~40px tall on phones */
-@media (max-width: 639px) {
-  a, button { touch-action: manipulation; }
-}
-
-/* Smooth scrolling for long quiz pages */
+a, button { touch-action: manipulation; }
 html { scroll-behavior: smooth; }
 
 /* ─── Toast & dialog animations ───────────────────── */
@@ -252,6 +257,130 @@ a:hover { text-decoration: underline; }
 /* ─── Spinner ───────────────────────────────────────── */
 @keyframes spin { to { transform: rotate(360deg); } }
 .animate-spin { animation: spin 1s linear infinite; }
+
+/* ─── Glass utilities ────────────────────────────────────────── */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+glass-strong {
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
+  border: 1px solid var(--glass-border-strong);
+  box-shadow: var(--glass-shadow);
+}
+
+glass-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+  transition: box-shadow 200ms ease, transform 200ms ease;
+}
+
+glass-card:hover {
+  box-shadow: var(--glass-shadow-hover);
+}
+
+glass-input {
+  width: 100%;
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+
+glass-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+}
+
+glass-input::placeholder { color: #94a3b8; }
+
+glass-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  background: var(--gradient-primary);
+  color: white;
+  font-weight: 500;
+  font-size: 0.875rem;
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+  line-height: 1.5;
+  box-shadow: 0 4px 14px rgba(15, 118, 110, 0.25);
+}
+
+glass-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(15, 118, 110, 0.35);
+}
+
+glass-btn:active:not(:disabled) { transform: translateY(0); }
+glass-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ─── Badge (glass variants) ────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  color: var(--foreground);
+}
+.badge-primary { background: rgba(15, 118, 110, 0.12); color: var(--primary-strong); border-color: rgba(15, 118, 110, 0.2); }
+.badge-success { background: rgba(22, 163, 74, 0.10); color: #15803d; border-color: rgba(22, 163, 74, 0.2); }
+.badge-warning { background: rgba(217, 119, 6, 0.10); color: #b45309; border-color: rgba(217, 119, 6, 0.2); }
+.badge-danger  { background: rgba(220, 38, 38, 0.10); color: #b91c1c; border-color: rgba(220, 38, 38, 0.2); }
+.badge-slate   { background: rgba(100, 116, 139, 0.10); color: #475569; border-color: rgba(100, 116, 139, 0.2); }
+
+/* ─── Progress Bar ─────────────────────────────────────────── */
+.progress-bar {
+  height: 4px;
+  background: rgba(226, 232, 240, 0.8);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--gradient-primary);
+  border-radius: 99px;
+  transition: width 300ms ease;
+}
+
+/* ─── Skeleton ─────────────────────────────────────────────── */
+@keyframes skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.skeleton {
+  border-radius: var(--radius-lg);
+  background: linear-gradient(90deg,
+    rgba(226, 232, 240, 0.6) 25%,
+    rgba(241, 245, 249, 0.9) 40%,
+    rgba(226, 232, 240, 0.6) 55%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
 
 /* ─── Hide Next.js dev tools button ───────────────────── */
 nextjs-portal { display: none !important; }

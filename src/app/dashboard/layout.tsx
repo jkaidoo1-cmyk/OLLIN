@@ -171,29 +171,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen">
       {local && (
-        <div className="bg-[#005528] text-white text-center py-1 text-xs font-medium">
+        <div className="bg-[#0b5e57] text-white/90 text-center py-1 text-xs font-medium backdrop-blur-sm">
           Limited storage — data is saved on this server only and may not persist
         </div>
       )}
 
-      <header className="bg-[#006633] text-white sticky top-0 z-50">
+      <header className="sticky top-0 z-50 glass-strong">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center">
           {/* Logo + current page — left side */}
-          <Link href="/" className="flex items-center gap-1 no-underline shrink-0">
+          <Link href="/" className="flex items-center gap-1.5 no-underline shrink-0">
             <Logo onDark />
             <span className="text-base font-bold text-white">OLLIN</span>
           </Link>
-          <span className="text-white/70 text-sm font-medium ml-2 sm:ml-3 truncate">/ {currentPage}</span>
+          <span className="text-white/60 text-xs font-medium ml-2 sm:ml-3 truncate">/ {currentPage}</span>
 
           {/* Spacer */}
           <nav className="flex-1" />
 
           {/* Right side */}
           <div className="flex items-center gap-3 shrink-0">
-            <Link href="/dashboard/notifications" replace className="text-white/60 hover:text-white transition-colors relative">
+            <Link href="/dashboard/notifications" replace className="relative text-white/60 hover:text-white transition-colors">
               <Bell className="w-5 h-5" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#ef4444] text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm">
                   {unreadCount}
                 </span>
               )}
@@ -204,22 +204,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div ref={profileRef} className="relative">
                 <button
                   onClick={() => setProfileOpen(!profileOpen)}
-                  className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-sm font-bold text-[#006633] hover:opacity-90 transition-opacity"
+                  className="w-8 h-8 rounded-full bg-white border border-[var(--glass-border-strong)] flex items-center justify-center text-xs font-bold text-primary shadow-sm hover:shadow-md transition-shadow"
                 >
                   {userInitial}
                 </button>
 
                 {profileOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-[#e0e0e0] rounded-lg shadow-lg py-1 z-50">
-                    <div className="px-4 py-3 border-b border-[#e0e0e0]">
-                      <p className="text-sm font-medium text-[#333] truncate">{user.name}</p>
-                      <p className="text-xs text-[#999] truncate">{user.email}</p>
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white/95 backdrop-blur-md border border-[var(--glass-border-strong)] rounded-xl shadow-lg py-1 z-50">
+                    <div className="px-4 py-3 border-b border-[var(--glass-border)]">
+                      <p className="text-sm font-medium text-[#1f2937] truncate">{user.name}</p>
+                      <p className="text-[11px] text-[#64748b] truncate">{user.email}</p>
                     </div>
                     <Link
                       href="/dashboard"
                       replace
                       onClick={() => setProfileOpen(false)}
-                      className="block px-4 py-2 text-sm text-[#333] hover:bg-[#f8f8f8] no-underline"
+                      className="block px-4 py-2 text-sm text-[#475569] hover:bg-white/70 rounded-b-lg no-underline"
                     >
                       Dashboard
                     </Link>
@@ -227,7 +227,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       href="/dashboard/quizzes"
                       replace
                       onClick={() => setProfileOpen(false)}
-                      className="block px-4 py-2 text-sm text-[#333] hover:bg-[#f8f8f8] no-underline"
+                      className="block px-4 py-2 text-sm text-[#475569] hover:bg-white/70 rounded-b-lg no-underline"
                     >
                       My quizzes
                     </Link>
@@ -235,7 +235,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       href="/dashboard/test-quizzes"
                       replace
                       onClick={() => setProfileOpen(false)}
-                      className="block px-4 py-2 text-sm text-[#333] hover:bg-[#f8f8f8] no-underline"
+                      className="block px-4 py-2 text-sm text-[#475569] hover:bg-white/70 rounded-b-lg no-underline"
                     >
                       Test quizzes
                     </Link>
@@ -243,16 +243,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       href="/dashboard/attempts"
                       replace
                       onClick={() => setProfileOpen(false)}
-                      className="block px-4 py-2 text-sm text-[#333] hover:bg-[#f8f8f8] no-underline"
+                      className="block px-4 py-2 text-sm text-[#475569] hover:bg-white/70 rounded-b-lg no-underline"
                     >
                       My attempts
                     </Link>
                     <Link
                       href="/dashboard/profile"
                       onClick={() => setProfileOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-[#333] hover:bg-[#f8f8f8] no-underline"
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-[#475569] hover:bg-white/70 rounded-b-lg no-underline"
                     >
-                      <UserRound className="w-4 h-4 text-[#006633]" />
+                      <UserRound className="w-4 h-4 text-primary" />
                       My profile
                     </Link>
                   </div>

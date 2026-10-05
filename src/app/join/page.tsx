@@ -71,19 +71,19 @@ export default function JoinQuizPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="bg-[#006633] text-white sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center">
+      <header className="sticky top-0 z-50 glass-strong">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center">
           <Link href="/" className="flex items-center gap-2 no-underline shrink-0">
             <Logo onDark />
             <span className="text-base font-bold text-white">OLLIN</span>
           </Link>
           <div className="flex-1" />
           {isLoggedIn ? (
-            <Link href="/dashboard" className="text-white/70 hover:text-white text-sm font-medium no-underline">
+            <Link href="/dashboard" className="text-white/70 hover:text-white text-xs font-medium no-underline">
               Dashboard
             </Link>
           ) : (
-            <Link href="/login" className="text-white/70 hover:text-white text-sm font-medium no-underline">
+            <Link href="/login" className="text-white/70 hover:text-white text-xs font-medium no-underline">
               Log in
             </Link>
           )}
@@ -92,9 +92,9 @@ export default function JoinQuizPage() {
 
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-sm">
-          <div className="bg-white border border-[#e0e0e0] rounded-lg p-6">
-            <h1 className="text-lg font-semibold text-[#333] text-center mb-2">Join a quiz</h1>
-            <p className="text-sm text-[#666] text-center mb-6">
+          <div className="glass-card p-6">
+            <h1 className="text-sm font-semibold text-[#1f2937] text-center mb-1">Join a quiz</h1>
+            <p className="text-xs text-[#64748b] text-center mb-5">
               {isLoggedIn
                 ? "Enter the quiz code shared by your classmates"
                 : "Enter the quiz code — no account needed"}
@@ -104,28 +104,28 @@ export default function JoinQuizPage() {
               {/* Guest name field — only shown when not logged in */}
               {!isLoggedIn && (
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-[#333] mb-1.5">Your name</label>
+                  <label className="block text-xs font-medium text-[#475569] mb-1.5">Your name</label>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#999] pointer-events-none" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94a3b8] pointer-events-none" />
                     <input
                       type="text"
                       value={userName}
                       onChange={(e) => setUserName(e.target.value)}
                       placeholder="Enter your name"
-                      className="w-full border border-[#ccc] rounded py-2.5 pl-10 pr-3 text-sm outline-none focus:border-[#006633] focus:shadow-[0_0_0_1px_#006633] transition-colors"
+                      className="glass-input py-2.5 pl-10 text-sm"
                     />
                   </div>
-                  <p className="text-xs text-[#999] mt-1">Your name will only be visible for this quiz</p>
+                  <p className="text-[10px] text-[#94a3b8] mt-1.5">Your name will only be visible for this quiz</p>
                 </div>
               )}
 
               {isLoggedIn && (
-                <p className="text-xs text-[#999] mb-4">
-                  Joining as <span className="font-medium text-[#333]">{userName}</span>
+                <p className="text-[10px] text-[#94a3b8] mb-3">
+                  Joining as <span className="font-medium text-[#1f2937]">{userName}</span>
                 </p>
               )}
 
-              <label className="block text-sm font-medium text-[#333] mb-1.5">Quiz code</label>
+              <label className="block text-xs font-medium text-[#475569] mb-1.5">Quiz code</label>
               <input
                 id="quiz-code-input"
                 type="text"
@@ -134,10 +134,10 @@ export default function JoinQuizPage() {
                 required
                 placeholder="e.g. 9RX-DHJ"
                 maxLength={7}
-                className="w-full text-center text-2xl font-mono font-bold tracking-[0.2em] uppercase border border-[#ccc] rounded py-4 px-3 outline-none focus:border-[#006633] focus:shadow-[0_0_0_1px #006633] transition-colors"
+                className="w-full text-center text-2xl font-mono font-bold tracking-[0.2em] uppercase glass-input py-3.5 px-3"
               />
 
-              <button id="join-quiz-btn" type="submit" disabled={loading || !isValid} className="btn-primary w-full py-2.5 mt-4">
+              <button id="join-quiz-btn" type="submit" disabled={loading || !isValid} className="glass-btn w-full py-2.5 mt-4">
                 {loading ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Joining...</>
                 ) : "Join quiz"}
@@ -146,8 +146,8 @@ export default function JoinQuizPage() {
           </div>
 
           {!isLoggedIn && (
-            <p className="text-center text-xs text-[#999] mt-4">
-              <Link href="/login" className="text-[#006633] hover:underline">Log in</Link> to create quizzes and track your results
+            <p className="text-center text-[10px] text-[#94a3b8] mt-4">
+              <Link href="/login" className="text-primary hover:underline">Log in</Link> to create quizzes and track your results
             </p>
           )}
         </div>
