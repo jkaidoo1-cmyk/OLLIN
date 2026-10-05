@@ -90,7 +90,7 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="relative border-t border-white/10 backdrop-blur-md" style={{ background: "rgba(11, 94, 87, 0.88)" }}>
+      <footer className="relative border-t border-white/10 backdrop-blur-md" style={{ background: "rgba(15, 118, 110, 0.95)" }}>
         <div className="absolute -top-24 right-0 w-64 h-64 bg-primary/06 rounded-full blur-3xl pointer-events-none" />
         <div className="relative max-w-6xl mx-auto px-6 py-8">
           <div className="flex flex-col sm:grid sm:grid-cols-3 gap-6">

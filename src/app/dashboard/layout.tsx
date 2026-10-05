@@ -171,7 +171,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen">
       {local && (
-        <div className="bg-[#0b5e57] text-white/90 text-center py-1 text-xs font-medium backdrop-blur-sm">
+        <div className="bg-[#0f766e] text-white/90 text-center py-1 text-xs font-medium backdrop-blur-sm">
           Limited storage — data is saved on this server only and may not persist
         </div>
       )}
