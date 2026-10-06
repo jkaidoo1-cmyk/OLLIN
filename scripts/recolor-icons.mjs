@@ -1,4 +1,4 @@
-/* Recolor PWA icons to the current brand green (#43A047).
+/* Recolor PWA icons to the current brand green (#388E3C).
  *
  * Run from the quizai/ directory after restoring pristine icons if needed:
  *   git show <pre-theme-commit>:public/icon-192.png > public/icon-192.png
@@ -19,7 +19,7 @@
 import { PNG } from "pngjs";
 import fs from "node:fs";
 
-const BRAND = [67, 160, 71]; // #43A047 — leaf green (slightly darkened)
+const BRAND = [56, 142, 60]; // #388E3C — darkened green
 
 for (const file of ["public/icon-192.png", "public/icon-512.png"]) {
   const png = PNG.sync.read(fs.readFileSync(file));
