@@ -27,19 +27,108 @@ export async function GET(
     const norm = rawId.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
     const id = norm || rawId;
 
-    const local = request.headers.get("x-local-mode") === "true" || !request.headers.get("authorization");
+    const local = request.headers.get("x-local-mode") === "true";
 
-    // Try by ID first (deep links), then by normalized share code
-    let quiz = await getQuizById(rawId, local);
+    // Try file first (fast path for local-mode data), then Supabase.
+    // Public quiz lookups must check Supabase even without auth — guests join
+    // by code and the quiz may live in Supabase, not the file store.
+    let quiz = null;
+
+    // File store (local mode, or fallback when Supabase is down)
+    if (!local) {
+      try {
+        const { readServerQuizzes } = await import("@/lib/data");
+        const fileQuizzes = readServerQuizzes();
+        quiz = fileQuizzes.find((q) => q.id === rawId) || fileQuizzes.find((q) => {
+          const n = (q.share_code || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+          return n === norm;
+        }) || null;
+      } catch { /* file read optional */ }
+    } else {
+      quiz = await getQuizById(rawId, true);
+      if (!quiz) quiz = await getQuizByCode(norm, true);
+    }
+
+    // Fallback: check built-in server-local quizzes (e.g. TST-101)
+    // that live in server-local.ts, not the file store or Supabase.
     if (!quiz) {
-      quiz = await getQuizByCode(norm, local);
+      const { serverGetLocalQuizById, serverGetLocalQuizByCode } = await import("@/lib/server-local");
+      quiz = serverGetLocalQuizById(rawId) || serverGetLocalQuizByCode(norm) || null;
+    }
+
+    // Also check Supabase (the quiz may live there even in "local" mode
+    // if it was created before the fallback path was added)
+    if (!quiz) {
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/server");
+        const admin = await createAdminClient();
+        if (admin) {
+          let sbQuiz = null;
+          if (rawId.length === 36 && rawId.includes("-")) {
+            // Looks like a UUID — try direct ID lookup
+            const { data, error } = await admin
+              .from("quizzes")
+              .select("*")
+              .eq("id", rawId)
+              .single();
+            if (!error && data) sbQuiz = data;
+          }
+          if (!sbQuiz) {
+            // Try share code lookup
+            const { data, error } = await admin
+              .from("quizzes")
+              .select("*")
+              .eq("share_code", norm)
+              .single();
+            if (!error && data) sbQuiz = data;
+          }
+          if (!sbQuiz && norm) {
+            // Normalized code lookup
+            const { data: all, error } = await admin.from("quizzes").select("*");
+            if (!error) {
+              sbQuiz = (all || []).find((q: any) => {
+                const n = (q.share_code || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+                return n === norm;
+              }) || null;
+            }
+          }
+          if (sbQuiz) {
+            quiz = sbQuiz as any;
+          }
+        }
+      } catch { /* Supabase optional */ }
     }
 
     if (!quiz) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
     }
 
-    const questions = await getQuizQuestions(quiz.id, local);
+    // Load questions: try Supabase first (admin client), then file
+    let questions: any[] = [];
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const admin = await createAdminClient();
+      if (admin) {
+        const { data, error } = await admin
+          .from("questions")
+          .select("*")
+          .eq("quiz_id", quiz.id)
+          .order("order_index", { ascending: true });
+        if (!error && data) questions = data;
+      }
+    } catch { /* Supabase optional */ }
+    if (questions.length === 0 && !local) {
+      try {
+        const { readServerQuestions } = await import("@/lib/data");
+        questions = readServerQuestions().filter((q) => q.quiz_id === quiz.id);
+      } catch { /* file optional */ }
+    }
+    if (questions.length === 0) {
+      try {
+        const { serverGetLocalQuestions } = await import("@/lib/server-local");
+        questions = serverGetLocalQuestions(quiz.id);
+      } catch { /* optional */ }
+    }
 
     // Editor mode: the quiz's host (or an admin) may fetch the full question
     // bank including answers, to edit the quiz. Everyone else gets the

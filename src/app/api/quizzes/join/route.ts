@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getQuizByCode, getQuizQuestions } from "@/lib/data";
+import { getQuizByCode, getQuizQuestions, readServerQuizzes } from "@/lib/data";
+import { serverGetLocalQuizByCode } from "@/lib/server-local";
 
 // POST — join a quiz by share code
 export async function POST(request: NextRequest) {
@@ -15,7 +16,55 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const quiz = await getQuizByCode(code.trim().toUpperCase(), local);
+    const norm = code.trim().toUpperCase().replace(/[^A-Za-z0-9]/g, "");
+    let quiz: any = null;
+
+    // 1. Check Supabase via admin client (handles published quizzes in Supabase)
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const admin = await createAdminClient();
+      if (admin) {
+        let sbQuiz = null;
+        const { data, error } = await admin
+          .from("quizzes")
+          .select("*")
+          .eq("share_code", norm)
+          .single();
+        if (!error && data) sbQuiz = data;
+        if (!sbQuiz && norm) {
+          // Normalized lookup
+          const { data: all, error: allError } = await admin.from("quizzes").select("*");
+          if (!allError && all) {
+            sbQuiz = (all || []).find((q: any) =>
+              (q.share_code || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase() === norm
+            ) || null;
+          }
+        }
+        if (sbQuiz) quiz = sbQuiz;
+      }
+    } catch { /* Supabase optional */ }
+
+    // 2. Check local file store
+    if (!quiz) {
+      try {
+        const fileQuizzes = readServerQuizzes();
+        quiz = fileQuizzes.find((q) =>
+          (q.share_code || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase() === norm
+        ) || null;
+      } catch { /* file optional */ }
+    }
+
+    // 3. Check hardcoded built-in test quiz (TST-101 etc.)
+    if (!quiz) {
+      quiz = serverGetLocalQuizByCode(code.trim()) || null;
+    }
+
+    // 4. Last resort: legacy getQuizByCode (covers edge cases)
+    if (!quiz) {
+      try {
+        quiz = await getQuizByCode(code, local);
+      } catch { /* ignore */ }
+    }
 
     if (!quiz) {
       return NextResponse.json(
@@ -31,8 +80,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get questions without correct answers
-    const allQuestions = await getQuizQuestions(quiz.id, local);
+    // Get questions: try Supabase first, then file/hardcoded
+    let allQuestions: any[] = [];
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const admin = await createAdminClient();
+      if (admin) {
+        const { data, error } = await admin
+          .from("questions")
+          .select("*")
+          .eq("quiz_id", quiz.id)
+          .order("order_index", { ascending: true });
+        if (!error && data) allQuestions = data;
+      }
+    } catch { /* Supabase optional */ }
+    if (allQuestions.length === 0) {
+      try {
+        allQuestions = (await import("@/lib/data")).readServerQuestions()
+          .filter((q) => q.quiz_id === quiz.id);
+      } catch { /* file optional */ }
+    }
+    if (allQuestions.length === 0) {
+      const { serverGetLocalQuestions } = await import("@/lib/server-local");
+      allQuestions = serverGetLocalQuestions(quiz.id);
+    }
+
     const questions = allQuestions.map((q) => ({
       id: q.id,
       question_text: q.question_text,

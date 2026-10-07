@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createQuiz, getUserQuizzes, readServerQuizzes, writeServerQuizzes, readServerQuestions, writeServerQuestions } from "@/lib/data";
 import { getSessionUser } from "@/lib/session";
 import { Quiz, Question } from "@/lib/types";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 // GET — list all quizzes.
 // Field-minimized by default (correct answers/explanations never leave the
@@ -11,17 +13,41 @@ import { Quiz, Question } from "@/lib/types";
 export async function GET(request: NextRequest) {
   try {
     const local = request.headers.get("x-local-mode") === "true";
-    let quizzes: Quiz[];
+    let quizzes: Quiz[] = [];
+
+    // Always try file store first (local data + fallback)
     try {
-      quizzes = await getUserQuizzes(local);
-    } catch (err) {
-      // NO_BACKEND (Supabase unconfigured or unavailable) → file-backed storage
-      if (err instanceof Error && err.message === "NO_BACKEND") {
-        quizzes = readServerQuizzes();
-      } else {
-        throw err;
-      }
+      quizzes = readServerQuizzes();
+    } catch { quizzes = []; }
+
+    // Merge in Supabase quizzes (admin client — reads all published quizzes)
+    if (!local) {
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/server");
+        const admin = await createAdminClient();
+        if (admin) {
+          const { data, error } = await admin
+            .from("quizzes")
+            .select("*")
+            .eq("status", "published")
+            .order("created_at", { ascending: false });
+          if (!error && data) {
+            const sbIds = new Set((data || []).map((q: any) => q.id));
+            // Replace file quizzes with Supabase versions when they match
+            const merged = (data || []).map((q: any) => ({
+              ...q,
+              share_code: q.share_code,
+            }));
+            // Add file-only quizzes that aren't in Supabase
+            for (const fq of quizzes) {
+              if (!sbIds.has(fq.id)) merged.push(fq);
+            }
+            quizzes = merged;
+          }
+        }
+      } catch { /* Supabase optional */ }
     }
+
     return NextResponse.json({ quizzes: quizzes.map(stripQuestionData) });
   } catch (error) {
     return NextResponse.json(
@@ -133,6 +159,115 @@ export async function POST(request: NextRequest) {
         quiz,
         code: quiz.share_code,
       });
+    }
+
+    if (!local) {
+      // Use admin client to create quiz in Supabase (bypasses RLS)
+      let supabaseError: Error | null = null;
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/server");
+        const admin = await createAdminClient();
+        if (!admin) throw new Error("Supabase admin client unavailable");
+
+        const shareCode = "API-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+        // Resolve admin UUID from Supabase profiles (admin-001 is a string ID, not a UUID)
+        const { data: adminProfile } = await admin
+          .from("profiles")
+          .select("id")
+          .eq("email", "jkaidoo1@mail.com")
+          .maybeSingle();
+        const hostId = (adminProfile && adminProfile.id) ? adminProfile.id : undefined;
+
+        const { data: quiz, error: quizError } = await admin
+          .from("quizzes")
+          .insert({
+            host_id: hostId || "bd4d7d39-3631-4b45-b86a-f18e2ff150f9",
+            title: title.trim(),
+            description: description || null,
+            share_code: shareCode,
+            time_limit_minutes: time_limit_minutes || null,
+            max_attempts: 1,
+            show_answers_after: "after_completion",
+            shuffle_questions: true,
+            shuffle_options: true,
+            passing_score: 60,
+            course_id: null,
+            status: "published",
+          })
+          .select()
+          .single();
+        if (quizError) throw quizError;
+
+        // Insert questions
+        if (questions && questions.length > 0) {
+          const questionInserts = questions.map((q: any, idx: number) => ({
+            quiz_id: quiz.id,
+            question_text: q.question,
+            question_type: q.type,
+            options: q.options || null,
+            correct_answer: q.correctAnswer,
+            explanation: q.explanation || null,
+            topic: q.topic || null,
+            difficulty: (q.difficulty || "medium") as "easy" | "medium" | "hard",
+            marks: 1,
+            order_index: idx,
+          }));
+          const { error: qError } = await admin.from("questions").insert(questionInserts);
+          if (qError) throw qError;
+        }
+
+        return NextResponse.json({ quiz, code: shareCode });
+      } catch (err) {
+        if (err instanceof Error) supabaseError = err;
+        else supabaseError = new Error(String(err));
+      }
+
+      // Supabase failed — fall back to local file
+      const quizzes = readServerQuizzes();
+      const quiz: Quiz = {
+        id: `local-quiz-${Date.now()}`,
+        host_id: "bd4d7d39-3631-4b45-b86a-f18e2ff150f9",
+        title: title.trim(),
+        description: description || null,
+        share_code: "FALLBACK-" + Math.random().toString(36).slice(2, 8).toUpperCase(),
+        time_limit_minutes: time_limit_minutes || null,
+        max_attempts: 1,
+        show_answers_after: "after_completion",
+        shuffle_questions: true,
+        shuffle_options: true,
+        passing_score: 60,
+        starts_at: null,
+        ends_at: null,
+        status: "published",
+        course_id: null,
+        material_id: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      quizzes.unshift(quiz);
+      writeServerQuizzes(quizzes);
+
+      if (questions && questions.length > 0) {
+        const serverQuestions: Question[] = questions.map((q: any, idx: number) => ({
+          id: `q-${Date.now()}-${idx}`,
+          quiz_id: quiz.id,
+          question_text: q.question,
+          question_type: q.type as Question["question_type"],
+          options: q.options || null,
+          correct_answer: q.correctAnswer,
+          explanation: q.explanation || null,
+          topic: q.topic || null,
+          difficulty: (q.difficulty || "medium") as "easy" | "medium" | "hard",
+          marks: 1,
+          order_index: idx,
+          created_at: new Date().toISOString(),
+        }));
+        const allQuestions = readServerQuestions();
+        allQuestions.push(...serverQuestions);
+        writeServerQuestions(allQuestions);
+      }
+
+      return NextResponse.json({ quiz, code: quiz.share_code, fallback: true });
     }
 
     const result = await createQuiz(

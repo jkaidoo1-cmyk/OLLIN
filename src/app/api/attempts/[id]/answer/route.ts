@@ -68,7 +68,7 @@ export async function POST(
     const questions = (await getQuizQuestions(attempt.quiz_id, true)) as any[];
     const q = questions.find((qq) => qq.id === questionId);
     const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
-    const isCorrect = !!q && norm(selected) === norm(q.correct_answer);
+    const isCorrect = !!(q && norm(selected) === norm(q.correct_answer));
     const marks = isCorrect ? (q?.marks ?? 1) : 0;
 
     // File mode keeps the autosave on the attempt row itself; the row-level

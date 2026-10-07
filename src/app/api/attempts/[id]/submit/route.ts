@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { submitAttempt, getQuizById, getAttemptQuizId, getQuizQuestions } from "@/lib/data";
+import { getQuizQuestions, readServerAttempts, writeServerAttempts } from "@/lib/data";
+import type { QuizAttempt } from "@/lib/types";
+import type { Question } from "@/lib/types";
 
 // POST — submit an attempt; the SERVER grades it and returns the result
 // plus the answer key (safe now — grading already happened).
@@ -23,8 +25,9 @@ export async function POST(
     // ── Server-side time-window enforcement ──────────────────
     // The UI hides the quiz outside its window; the server must also refuse
     // submissions outside it (clients can be manipulated).
-    const quizId = body.quiz_id || (await getAttemptQuizId(id, local));
-    if (quizId) {
+    const { getAttemptQuizId } = await import("@/lib/data");
+    const quizId = body.quiz_id || (await getAttemptQuizId(id, local)) || "";        if (quizId) {
+      const { getQuizById } = await import("@/lib/data");
       const quiz = await getQuizById(quizId, local);
       if (quiz) {
         const now = Date.now();
@@ -56,10 +59,10 @@ export async function POST(
           let serverStartMs: number | null = null;
           try {
             const { getSessionUser } = await import("@/lib/session");
-            const { readServerAttempts } = await import("@/lib/data");
+            const { readServerAttempts: _rs } = await import("@/lib/data");
             const sess = await getSessionUser(request).catch(() => null);
             const email = sess?.email || body.participant_email || null;
-            const rows = readServerAttempts().filter(
+            const rows = _rs().filter(
               (a: any) =>
                 a.quiz_id === quizId &&
                 a.status !== "abandoned" &&
@@ -107,13 +110,18 @@ export async function POST(
         const claimedEmail = body.participant_email || null;
         const guardEmail = session?.email || claimedEmail;
         if (guardEmail) {
-          const { readServerAttempts } = await import("@/lib/data");
-          const already = readServerAttempts().find(
-            (a: any) =>
-              a.quiz_id === quizId &&
-              a.participant_email === guardEmail &&
-              a.status === "completed"
-          );
+          const arr = readServerAttempts();
+          let already: any = null;
+          const asArr = arr as any[];
+          for (let i = 0; i < asArr.length; i++) {
+            const a = asArr[i];
+            if (a.quiz_id === quizId
+              && a.participant_email === guardEmail
+              && a.status === "completed") {
+              already = a;
+              break;
+            }
+          }
           if (already) {
             return NextResponse.json(
               { error: "You have already taken this quiz.", attempt_id: already.id, duplicate: true },
@@ -124,40 +132,131 @@ export async function POST(
       }
     }
 
-    // Pass the quiz id so grading can find the questions even when the
-    // attempt record doesn't exist yet (e.g. client-only attempt IDs).
-    const attempt = await submitAttempt(id, answers, local, quizId || body.quiz_id, {
-      participant_name: participant_name ?? null,
-      participant_email: participant_email ?? null,
-      time_taken_seconds: time_taken_seconds ?? null,
-    });
-
-    // Answer key + explanations are released ONLY in the graded response,
-    // matching what was just submitted — never before via the public GET.
-    const questions = await getQuizQuestions(quizId || body.quiz_id || id, local);
-    const answer_key: Record<string, string> = {};
-    const explanations: Record<string, string | null> = {};
-    for (const q of questions as any[]) {
-      answer_key[q.id] = q.correct_answer;
-      explanations[q.id] = q.explanation ?? null;
-    }
-
-    // Per-question correctness is computed here (authoritative). In local
-    // mode getAttemptAnswers returns [], so we always build it from the
-    // same server-side grading that produced the score.
+    // ── Grade and persist the submission ─────────────────────
+    const attemptId = id;
     const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
-    const gradedAnswers = (answers as Array<{ question_id: string; selected_answer: string }>).map((a) => {
-      const q = (questions as any[]).find((qq) => qq.id === a.question_id);
-      const isCorrect = !!q && norm(a.selected_answer) === norm(q.correct_answer);
-      return {
+    const rawQuizId = quizId || body.quiz_id || "";
+    let resolvedQuizId = rawQuizId;
+    if (rawQuizId) {
+      // Resolve share codes / IDs to internal quiz IDs. Check all sources:
+      // server-local (built-in defaults), file store, then Supabase.
+      let foundId: string | null = null;
+      const { serverGetLocalQuizByCode, serverGetLocalQuizById } = await import("@/lib/server-local");
+      const slQuiz = serverGetLocalQuizByCode(rawQuizId) || serverGetLocalQuizById(rawQuizId);
+      if (slQuiz) foundId = slQuiz.id;
+      if (!foundId) {
+        const { readServerQuizzes } = await import("@/lib/data");
+        const fileQ = readServerQuizzes().find((q: any) => q.id === rawQuizId
+          || (q.share_code || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase() === rawQuizId.replace(/[^A-Za-z0-9]/g, "").toUpperCase());
+        if (fileQ) foundId = fileQ.id;
+      }
+      if (!foundId) {
+        const { getQuizByCode } = await import("@/lib/data");
+        const sbQuiz = await getQuizByCode(rawQuizId, local);
+        if (sbQuiz) foundId = sbQuiz.id;
+      }
+      resolvedQuizId = foundId || rawQuizId;
+    }    const questions = await getQuizQuestions(resolvedQuizId, true); // always check file + server-local for grading
+    const questionMap = new Map<string, any>();
+    for (const q of questions) questionMap.set(q.id, q);
+
+    const graded: Array<{ question_id: string; selected_answer: string; is_correct: boolean; marks_awarded: number }> = (
+      answers as Array<{ question_id: string; selected_answer: string }>
+    ).map((a) => {
+      const q = questionMap.get(a.question_id);
+      if (!q) return { question_id: a.question_id, selected_answer: a.selected_answer, is_correct: false, marks_awarded: 0 };
+      const selected = String(a.selected_answer ?? "").trim().toLowerCase();
+      const correct = String(q.correct_answer ?? "").trim().toLowerCase();
+      const isCorrect = selected === correct;
+      const result = {
         question_id: a.question_id,
         selected_answer: a.selected_answer,
         is_correct: isCorrect,
-        marks_awarded: isCorrect ? (q?.marks ?? 1) : 0,
+        marks_awarded: isCorrect ? (q.marks ?? 1) : 0,
       };
+      return result;
     });
 
-    return NextResponse.json({ attempt, answers: gradedAnswers, answer_key, explanations });
+    const correct = graded.filter((g) => g.is_correct).length;
+    const total = graded.length;
+    const marksEarned = graded.reduce((s, g) => s + g.marks_awarded, 0);
+    const answer_key: Record<string, string> = {};
+    const explanations: Record<string, string | null> = {};
+    for (const q of questions) {
+      answer_key[q.id] = q.correct_answer;
+      explanations[q.id] = q.explanation ?? null;
+    }
+    const now = new Date().toISOString();
+    const attempt: QuizAttempt = {
+      id: attemptId,
+      quiz_id: resolvedQuizId,
+      participant_id: null,
+      participant_email: participant_email ?? null,
+      participant_name: participant_name ?? "Anonymous",
+      started_at: now,
+      completed_at: now,
+      time_taken_seconds: time_taken_seconds ?? 600,
+      total_questions: total,
+      correct_answers: correct,
+      score_percentage: total > 0 ? Math.round((correct / total) * 100) : 0,
+      marks_earned: marksEarned,
+      marks_total: total,
+      status: "completed",
+      created_at: now,
+    };
+
+    if (local) {
+      // File-mode: persist the completed attempt
+      const attempts = readServerAttempts();
+      const idx = attempts.findIndex((a) => a.id === attemptId);
+      if (idx >= 0) attempts[idx] = attempt as any;
+      else attempts.push(attempt as any);
+      writeServerAttempts(attempts);
+    } else {
+      // Supabase: use admin client to update + insert answers
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/server");
+        const admin = await createAdminClient();
+        if (!admin) throw new Error("Supabase unavailable");
+
+        if (graded.length > 0) {
+          const inserts = graded.map((g) => ({
+            attempt_id: attemptId,
+            question_id: g.question_id,
+            selected_answer: g.selected_answer,
+            is_correct: g.is_correct,
+            marks_awarded: g.marks_awarded,
+          }));
+          await admin.from("attempt_answers").upsert(inserts, {
+            onConflict: "attempt_id,question_id",
+          });
+        }
+
+        await admin
+          .from("quiz_attempts")
+          .update({
+            completed_at: now,
+            time_taken_seconds: time_taken_seconds ?? 600,
+            correct_answers: correct,
+            score_percentage: total > 0 ? Math.round((correct / total) * 100) : 0,
+            marks_earned: marksEarned,
+            marks_total: total,
+            status: "completed",
+          })
+          .eq("id", attemptId)
+          .select()
+          .single();
+      } catch (err) {
+        // Supabase failed — persist to file as fallback
+        const attempts = readServerAttempts();
+        const idx = attempts.findIndex((a) => a.id === attemptId);
+        if (idx >= 0) attempts[idx] = attempt as any;
+        else attempts.push(attempt as any);
+        writeServerAttempts(attempts);
+      }
+    }
+
+    return NextResponse.json({ attempt, answers: graded, answer_key, explanations });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to submit attempt" },

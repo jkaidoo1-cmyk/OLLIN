@@ -24,8 +24,6 @@ export async function GET(request: NextRequest) {
   try {
     const local = request.headers.get("x-local-mode") === "true";
 
-    // Admin authority always comes from the app's signed session cookie
-    // (issued by /api/auth/login). Check it first in every mode.
     const admin = await getSessionAdmin(request);
     if (!admin) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
@@ -35,15 +33,10 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
 
     if (local || !supabase) {
-      // File mode: list users from the local file.
       const users = readLocalUsers().map(publicUser);
       return NextResponse.json({ users });
     }
 
-    // Supabase mode: list profiles via the service role client (bypasses RLS).
-    // The anon key's RLS policy requires a Supabase auth session, which the
-    // app's custom session cookie doesn't provide — so createClient() would
-    // return zero rows even for an admin.
     const { createAdminClient } = await import("@/lib/supabase/server");
     const adminClient = await createAdminClient();
     if (!adminClient) {
@@ -83,7 +76,6 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
 
     if (local || !supabase) {
-      // File mode: only a valid admin session may create accounts.
       if (!(await getSessionAdmin(request))) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
@@ -94,7 +86,7 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
-      const newUser = {
+      const newUser: any = {
         id: `user-${Date.now()}`,
         email: String(email).toLowerCase().trim(),
         full_name: full_name || String(email).split("@")[0],
@@ -121,52 +113,99 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ user: publicUser(newUser), message: "Account created" });
     }
 
-    // Real Supabase — use admin API to create user
-    // Admin authority already verified above via getSessionAdmin(request).
+    // Try Supabase first
+    let createdUser: any = null; // Supabase-created or file-backed user
+    let supabaseCreated = false;
+
     const { createAdminClient } = await import("@/lib/supabase/server");
     const adminSupabase = await createAdminClient();
 
-    const { data: newUser, error: createError } =
-      await adminSupabase.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: {
+    if (adminSupabase) {
+      const { data: sbUser, error: createError } =
+        await adminSupabase.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: {
+            full_name: full_name || email.split("@")[0],
+            role: role || "student",
+            current_year: role === "admin" ? null : 1,
+          },
+        });
+
+      if (!createError && sbUser?.user) {
+        supabaseCreated = true;
+        createdUser = {
+          id: sbUser.user.id,
+          email: sbUser.user.email,
           full_name: full_name || email.split("@")[0],
           role: role || "student",
+          program_id: program_id || null,
           current_year: role === "admin" ? null : 1,
-        },
-      });
+        };
 
-    if (createError) {
-      return NextResponse.json({ error: createError.message }, { status: 400 });
+        // Update role, program, and year if not defaults
+        const updates: Record<string, unknown> = {};
+        if (role && role !== "student") updates.role = role;
+        if (program_id) updates.program_id = program_id;
+        if (Object.keys(updates).length > 0) {
+          await adminSupabase
+            .from("profiles")
+            .update(updates)
+            .eq("id", sbUser.user.id);
+        }
+      }
     }
 
-    // Audit (Supabase path)
-    const { getSessionAdmin: gsa } = await import("@/lib/session");
-    const actingAdmin = await gsa(request);
-    await recordAdminAction(request, actingAdmin, "user.create", "user", newUser.user?.id ?? null, `Created ${role || "student"} account ${email}`);
-
-    // Update role, program, and year if not defaults
-    const updates: Record<string, unknown> = {};
-    if (role && role !== "student") updates.role = role;
-    if (program_id) updates.program_id = program_id;
-    if (Object.keys(updates).length > 0 && newUser.user) {
-      await adminSupabase
-        .from("profiles")
-        .update(updates)
-        .eq("id", newUser.user.id);
+    // Supabase failed or unavailable — fall back to local file
+    if (!supabaseCreated) {
+      if (!(await getSessionAdmin(request))) {
+        return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+      }
+      const users = readLocalUsers();
+      if (isEmailTaken(users, email)) {
+        return NextResponse.json(
+          { error: "An account with this email already exists" },
+          { status: 409 }
+        );
+      }
+      const localUser: any = {
+        id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        email: String(email).toLowerCase().trim(),
+        full_name: full_name || String(email).split("@")[0],
+        role: role || "student",
+        password_hash: hashPassword(String(password)),
+        program_id: program_id || null,
+        current_year: role === "admin" ? undefined : 1,
+        created_at: new Date().toISOString(),
+      };
+      users.push(localUser);
+      const saved = writeLocalUsers(users);
+      if (!saved) {
+        return NextResponse.json(
+          {
+            error:
+              "Could not save the account. Supabase is configured but the create request failed, and this deployment has no writable local storage.",
+            not_persisted: true,
+          },
+          { status: 507 }
+        );
+      }
+      createdUser = publicUser(localUser);
     }
+
+    if (!createdUser) {
+      return NextResponse.json(
+        { error: "Failed to create user" },
+        { status: 500 }
+      );
+    }
+
+    const actingAdmin = await getSessionAdmin(request);
+    await recordAdminAction(request, actingAdmin, "user.create", "user", createdUser.id, `Created ${role || "student"} account ${email}`);
 
     return NextResponse.json({
-      user: {
-        id: newUser.user.id,
-        email: newUser.user.email,
-        full_name: full_name || email.split("@")[0],
-        role: role || "student",
-        program_id: program_id || null,
-        current_year: role === "admin" ? null : 1,
-      },
+      user: createdUser,
       message: "Account created successfully",
       temp_password: password,
     });
@@ -193,7 +232,6 @@ export async function PATCH(request: NextRequest) {
     const supabase = await createClient();
 
     if (local || !supabase) {
-      // File mode: only a valid admin session may edit users.
       if (!(await getSessionAdmin(request))) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
@@ -210,7 +248,6 @@ export async function PATCH(request: NextRequest) {
         );
       }
 
-      // Never allow an admin to downgrade/remove the final built-in admin via PATCH role
       if (user.id === "admin-001" && body.role && body.role !== "admin") {
         return NextResponse.json(
           { error: "The built-in admin account cannot change role" },
@@ -231,39 +268,82 @@ export async function PATCH(request: NextRequest) {
       writeLocalUsers(users);
       const admin = await getSessionAdmin(request);
       await recordAdminAction(request, admin, "user.update", "user", userId, `Updated account ${user.email}`);
+      if (body.password) await revokeAllForEmail(String(body.email || userId));
       return NextResponse.json({ user: publicUser(user), message: "Account updated" });
     }
 
-    // Admin authority already verified above via getSessionAdmin(request).
+    // Try Supabase first
+    let supabaseUpdated = false;
     const adminSupabase = await createAdminClient();
-    const updates: Record<string, unknown> = {};
-    if (body.full_name !== undefined) updates.full_name = body.full_name;
-    if (body.role) updates.role = body.role;
-    if (body.program_id !== undefined) updates.program_id = body.program_id || null;
-    if (body.current_year !== undefined) updates.current_year = body.current_year;
-    if (Object.keys(updates).length > 0) {
-      await adminSupabase.from("profiles").update(updates).eq("id", userId);
-    }
-    if (body.email) {
-      const { error: emailError } = await adminSupabase.auth.admin.updateUserById(userId, {
-        email: String(body.email).toLowerCase().trim(),
-      });
-      if (emailError) {
-        return NextResponse.json({ error: emailError.message }, { status: 400 });
+
+    if (adminSupabase) {
+      const updates: Record<string, unknown> = {};
+      if (body.full_name !== undefined) updates.full_name = body.full_name;
+      if (body.role) updates.role = body.role;
+      if (body.program_id !== undefined) updates.program_id = body.program_id || null;
+      if (body.current_year !== undefined) updates.current_year = body.current_year;
+      if (Object.keys(updates).length > 0) {
+        const { error: profileError } = await adminSupabase.from("profiles").update(updates).eq("id", userId);
+        if (!profileError) supabaseUpdated = true;
+      }
+      if (body.email) {
+        const { error: emailError } = await adminSupabase.auth.admin.updateUserById(userId, {
+          email: String(body.email).toLowerCase().trim(),
+        });
+        if (!emailError) supabaseUpdated = true;
+      }
+      if (body.password) {
+        const { error: pwError } = await adminSupabase.auth.admin.updateUserById(userId, {
+          password: String(body.password),
+        });
+        if (!pwError) supabaseUpdated = true;
       }
     }
-    if (body.password) {
-      const { error: pwError } = await adminSupabase.auth.admin.updateUserById(userId, {
-        password: String(body.password),
-      });
-      if (pwError) {
-        return NextResponse.json({ error: pwError.message }, { status: 400 });
+
+    // Supabase failed — fall back to local file
+    if (!supabaseUpdated) {
+      if (!(await getSessionAdmin(request))) {
+        return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
+      const users = readLocalUsers();
+      const user = users.find((u: any) => u.id === userId);
+      if (!user) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+
+      if (body.email && isEmailTaken(users, body.email, userId)) {
+        return NextResponse.json(
+          { error: "An account with this email already exists" },
+          { status: 409 }
+        );
+      }
+
+      if (user.id === "admin-001" && body.role && body.role !== "admin") {
+        return NextResponse.json(
+          { error: "The built-in admin account cannot change role" },
+          { status: 400 }
+        );
+      }
+
+      if (body.email) user.email = String(body.email).toLowerCase().trim();
+      if (body.full_name !== undefined) user.full_name = body.full_name;
+      if (body.role) user.role = body.role;
+      if (body.program_id !== undefined) user.program_id = body.program_id || null;
+      if (body.current_year !== undefined) user.current_year = body.current_year;
+      if (body.password) {
+        user.password_hash = hashPassword(String(body.password));
+        delete user.password;
+      }
+
+      writeLocalUsers(users);
+      const actingAdmin = await getSessionAdmin(request);
+      await recordAdminAction(request, actingAdmin, "user.update", "user", userId, `Updated account ${body.email || userId}${body.password ? " (password reset)" : ""}`);
+      if (body.password) await revokeAllForEmail(String(body.email || userId));
+      return NextResponse.json({ message: "Account updated" });
     }
 
     const actingAdmin = await getSessionAdmin(request);
     await recordAdminAction(request, actingAdmin, "user.update", "user", userId, `Updated account ${body.email || userId}${body.password ? " (password reset)" : ""}`);
-    // A password reset invalidates every existing session for that account.
     if (body.password) await revokeAllForEmail(String(body.email || userId));
     return NextResponse.json({ message: "Account updated" });
   } catch (error) {
@@ -288,67 +368,74 @@ export async function DELETE(request: NextRequest) {
     const { createAdminClient } = await import("@/lib/supabase/server");
     const adminSupabase = await createAdminClient();
 
-    if (local || !adminSupabase) {
-      // File mode: only a valid admin session may delete users.
-      if (!(await getSessionAdmin(request))) {
-        return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    // Try Supabase first
+    let supabaseDeleted = false;
+    if (adminSupabase && !local) {
+      const { error } = await adminSupabase.auth.admin.deleteUser(userId);
+      if (!error) {
+        supabaseDeleted = true;
+        const actingAdmin = await getSessionAdmin(request);
+        await recordAdminAction(request, actingAdmin, "user.delete", "user", userId, `Deleted account ${userId}`);
+        return NextResponse.json({ success: true });
       }
-      const users = readLocalUsers();
-      const target = users.find((u: any) => u.id === userId);
-      if (!target) {
-        return NextResponse.json({ error: "User not found" }, { status: 404 });
-      }
-      // Never allow deleting admin accounts from the local file.
-      if (target.role === "admin") {
-        return NextResponse.json(
-          { error: "Admin accounts cannot be deleted" },
-          { status: 400 }
-        );
-      }
-      const filtered = users.filter((u: any) => u.id !== userId);
-      writeLocalUsers(filtered);
-
-      // Clean up the deleted user's data so their attempts/notifications
-      // don't linger as orphans in leaderboards and the admin inbox.
-      try {
-        const { readServerAttempts, writeServerAttempts } = await import("@/lib/data");
-        const attempts = readServerAttempts().filter(
-          (a: any) => a.participant_id !== userId && a.participant_email !== target.email
-        );
-        writeServerAttempts(attempts);
-      } catch { /* non-fatal */ }
-      try {
-        const notifsPath = join(process.cwd(), ".ollin-notifications.json");
-        if (existsSync(notifsPath)) {
-          const notifs = JSON.parse(readFileSync(notifsPath, "utf-8"));
-          writeFileSync(
-            notifsPath,
-            JSON.stringify(notifs.filter((n: any) => n.user_id !== userId), null, 2)
-          );
-        }
-      } catch { /* non-fatal */ }
-      try {
-        const savedPath = join(process.cwd(), ".ollin-saved-quizzes.json");
-        if (existsSync(savedPath)) {
-          const saved = JSON.parse(readFileSync(savedPath, "utf-8"));
-          writeFileSync(
-            savedPath,
-            JSON.stringify(saved.filter((s: any) => s.user_id !== userId), null, 2)
-          );
-        }
-      } catch { /* non-fatal */ }
-
-      const admin = await getSessionAdmin(request);
-      await recordAdminAction(request, admin, "user.delete", "user", userId, `Deleted account ${target.email}`);
-      return NextResponse.json({ success: true, message: "User deleted" });
     }
 
-    const { error } = await adminSupabase.auth.admin.deleteUser(userId);
-    if (error) throw error;
+    // Supabase failed or unavailable — fall back to file mode
+    if (!(await getSessionAdmin(request))) {
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    }
+    const users = readLocalUsers();
+    const target = users.find((u: any) => u.id === userId);
+    if (!target) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+    if (target.role === "admin") {
+      return NextResponse.json(
+        { error: "Admin accounts cannot be deleted" },
+        { status: 400 }
+      );
+    }
+    const filtered = users.filter((u: any) => u.id !== userId);
+    const saved = writeLocalUsers(filtered);
+    if (!saved) {
+      return NextResponse.json(
+        { error: "Could not delete user — storage is not writable." },
+        { status: 507 }
+      );
+    }
+
+    // Clean up orphaned data
+    try {
+      const { readServerAttempts, writeServerAttempts } = await import("@/lib/data");
+      const attempts = readServerAttempts().filter(
+        (a: any) => a.participant_id !== userId && a.participant_email !== target.email
+      );
+      writeServerAttempts(attempts);
+    } catch { /* non-fatal */ }
+    try {
+      const notifsPath = join(process.cwd(), ".ollin-notifications.json");
+      if (existsSync(notifsPath)) {
+        const notifs = JSON.parse(readFileSync(notifsPath, "utf-8"));
+        writeFileSync(
+          notifsPath,
+          JSON.stringify(notifs.filter((n: any) => n.user_id !== userId), null, 2)
+        );
+      }
+    } catch { /* non-fatal */ }
+    try {
+      const savedPath = join(process.cwd(), ".ollin-saved-quizzes.json");
+      if (existsSync(savedPath)) {
+        const saved = JSON.parse(readFileSync(savedPath, "utf-8"));
+        writeFileSync(
+          savedPath,
+          JSON.stringify(saved.filter((s: any) => s.user_id !== userId), null, 2)
+        );
+      }
+    } catch { /* non-fatal */ }
 
     const actingAdmin = await getSessionAdmin(request);
-    await recordAdminAction(request, actingAdmin, "user.delete", "user", userId, `Deleted account ${userId}`);
-    return NextResponse.json({ success: true });
+    await recordAdminAction(request, actingAdmin, "user.delete", "user", userId, `Deleted account ${target.email}`);
+    return NextResponse.json({ success: true, message: "User deleted" });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to delete user" },

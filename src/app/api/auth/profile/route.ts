@@ -33,6 +33,34 @@ export async function PATCH(request: NextRequest) {
     if (newPassword.length < 6) {
       return NextResponse.json({ error: "New password must be at least 6 characters" }, { status: 400 });
     }
+
+    // Try Supabase first (user may be a Supabase-created account)
+    let supabaseOk = false;
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const admin = await createAdminClient();
+      if (admin) {
+        // Verify current password against Supabase auth
+        const { data: signInData, error: signInError } = await admin.auth.signInWithPassword({
+          email: session.email,
+          password: String(body.current_password),
+        });
+        if (signInError) {
+          // Supabase signIn error — fall through to local file check
+        } else {
+          // Current password verified — update to new password
+          const { error: updateError } = await admin.auth.admin.updateUserById(session.id, {
+            password: newPassword,
+          });
+          if (!updateError) {
+            supabaseOk = true;
+            return NextResponse.json({ message: "Password updated" });
+          }
+        }
+      }
+    } catch { /* fall through to local file */ }
+
+    // Fall back to local file store
     const { verifyPassword, hashPassword } = await import("@/lib/local-users-store");
     const users = readLocalUsers();
     const me = users.find((u) => u.id === session.id);
@@ -61,15 +89,22 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   }
 
+  // Local-file user ids (e.g. "demo-001") are not UUIDs — passing them to
+  // the profiles table throws a Postgres type error, so only hit Supabase
+  // when the session id actually looks like a UUID.
+  const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(session.id);
+
   try {
-    const { createAdminClient } = await import("@/lib/supabase/server");
-    const admin = await createAdminClient();
-    if (admin) {
-      const { error } = await admin.from("profiles").update(updates).eq("id", session.id);
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    if (looksLikeUuid) {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const admin = await createAdminClient();
+      if (admin) {
+        const { error } = await admin.from("profiles").update(updates).eq("id", session.id);
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+        return NextResponse.json({ message: "Profile updated" });
       }
-      return NextResponse.json({ message: "Profile updated" });
     }
 
     // File mode — the session cookie is the authority here.

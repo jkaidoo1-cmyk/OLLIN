@@ -75,16 +75,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Course name is required" }, { status: 400 });
     }
 
+    const coursePayload = {
+      code: code.trim(),
+      name: name.trim(),
+      description: description || null,
+      department: department || null,
+      program_id: program_id || null,
+      year: year || null,
+    };
+
     if (local) {
       const courses = readLocalCourses();
-      const newCourse = {
+      const newCourse: any = {
         id: `local-course-${Date.now()}`,
-        code: code.trim(),
-        name: name.trim(),
-        description: description || null,
-        department: department || null,
-        program_id: program_id || null,
-        year: year || null,
+        ...coursePayload,
         created_by: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -96,9 +100,59 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ course: newCourse });
     }
 
-    const { createCourse } = await import("@/lib/data");
-    const course = await createCourse({ code: code.trim(), name: name.trim(), description, department, program_id, year }, false);
-    return NextResponse.json({ course });
+    // Try Supabase first using admin client (bypasses RLS)
+    let supabaseError: Error | null = null;
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const admin = await createAdminClient();
+      if (admin) {
+        const { data, error } = await admin
+          .from("courses")
+          .insert({
+            code: coursePayload.code.toUpperCase(),
+            name: coursePayload.name,
+            description: coursePayload.description,
+            department: coursePayload.department,
+            program_id: coursePayload.program_id,
+            year: coursePayload.year,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        const course = data as any;
+        course.created_by = null;
+        course.created_at = course.created_at || new Date().toISOString();
+        course.updated_at = course.updated_at || new Date().toISOString();
+        return NextResponse.json({ course });
+      }
+    } catch (err) {
+      if (err instanceof Error) supabaseError = err;
+      else if (err && typeof err === "object" && "message" in err) supabaseError = new Error(String((err as any).message));
+      else supabaseError = new Error(JSON.stringify(err));
+    }
+
+    // Supabase failed — fall back to local file
+    const courses = readLocalCourses();
+    const newCourse: any = {
+      id: `local-course-${Date.now()}`,
+      ...coursePayload,
+      created_by: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    courses.push(newCourse);
+    // Local file write is best-effort; on read-only fs it silently fails.
+    // Check if the write actually persisted by reading back.
+    const checkPersisted = readLocalCourses().some((c: any) => c.id === newCourse.id);
+    if (!checkPersisted) {
+      return NextResponse.json(
+        { error: `Failed to create course: ${supabaseError?.message || "unknown error"}. Local storage is also not writable.` },
+        { status: 507 }
+      );
+    }
+    const admin = await getSessionAdmin(request);
+    await recordAdminAction(request, admin, "course.create", "course", newCourse.id, `Created course ${newCourse.code}`);
+    return NextResponse.json({ course: newCourse, fallback: true });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to create course" },
@@ -133,20 +187,48 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ course });
     }
 
-    const { updateCourse } = await import("@/lib/data");
-    const course = await updateCourse(
-      {
-        id,
-        code: body.code?.trim(),
-        name: body.name?.trim(),
-        description: body.description,
-        department: body.department,
-        program_id: body.program_id,
-        year: body.year,
-      },
-      false
-    );
-    return NextResponse.json({ course });
+    // Try Supabase first using admin client
+    let supabaseError: Error | null = null;
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const admin = await createAdminClient();
+      if (admin) {
+        const updates: Record<string, unknown> = {};
+        if (body.code) updates.code = String(body.code).trim().toUpperCase();
+        if (body.name) updates.name = String(body.name).trim();
+        if (body.description !== undefined) updates.description = body.description || null;
+        if (body.department !== undefined) updates.department = body.department || null;
+        if (body.program_id !== undefined) updates.program_id = body.program_id || null;
+        if (body.year !== undefined) updates.year = body.year || null;
+        if (Object.keys(updates).length > 0) {
+          const { error } = await admin.from("courses").update(updates).eq("id", id);
+          if (error) throw error;
+        }
+        const { data } = await admin.from("courses").select("*").eq("id", id).single();
+        return NextResponse.json({ course: data });
+      }
+    } catch (err) {
+      if (err instanceof Error) supabaseError = err;
+      else if (err && typeof err === "object" && "message" in err) supabaseError = new Error(String((err as any).message));
+      else supabaseError = new Error(JSON.stringify(err));
+    }
+
+    // Supabase failed — fall back to local file
+    const courses = readLocalCourses();
+    const idx = courses.findIndex((c: any) => c.id === id);
+    if (idx < 0) return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    const course = courses[idx];
+    if (body.code) course.code = String(body.code).trim();
+    if (body.name) course.name = String(body.name).trim();
+    if (body.description !== undefined) course.description = body.description || null;
+    if (body.department !== undefined) course.department = body.department || null;
+    if (body.program_id !== undefined) course.program_id = body.program_id || null;
+    if (body.year !== undefined) course.year = body.year || null;
+    course.updated_at = new Date().toISOString();
+    writeLocalCourses(courses);
+    const admin = await getSessionAdmin(request);
+    await recordAdminAction(request, admin, "course.update", "course", id, `Updated course ${course.code}`);
+    return NextResponse.json({ course, fallback: true });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to update course" },
@@ -173,9 +255,26 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    const { deleteCourse } = await import("@/lib/data");
-    await deleteCourse(id, false);
-    return NextResponse.json({ success: true });
+    // Try Supabase first using admin client
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const admin = await createAdminClient();
+      if (admin) {
+        const { error } = await admin.from("courses").delete().eq("id", id);
+        if (!error) return NextResponse.json({ success: true });
+      }
+    } catch {
+      // Supabase failed — fall back to local file
+    }
+
+    // Fall back to local file
+    const courses = readLocalCourses();
+    const target = courses.find((c: any) => c.id === id);
+    const remaining = courses.filter((c: any) => c.id !== id);
+    writeLocalCourses(remaining);
+    const admin = await getSessionAdmin(request);
+    await recordAdminAction(request, admin, "course.delete", "course", id, `Deleted course ${target?.code || id}`);
+    return NextResponse.json({ success: true, fallback: true });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to delete course" },

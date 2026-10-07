@@ -68,14 +68,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Program name is required" }, { status: 400 });
     }
 
+    const programPayload = {
+      code: code.trim(),
+      name: name.trim(),
+      department: department || null,
+      description: description || null,
+    };
+
     if (local) {
       const programs = readLocalPrograms();
-      const newProgram = {
+      const newProgram: any = {
         id: `local-program-${Date.now()}`,
-        code: code.trim(),
-        name: name.trim(),
-        department: department || null,
-        description: description || null,
+        ...programPayload,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -86,9 +90,51 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ program: newProgram });
     }
 
-    const { createProgram } = await import("@/lib/data");
-    const program = await createProgram({ code: code.trim(), name: name.trim(), department, description }, false);
-    return NextResponse.json({ program });
+    // Try Supabase first using admin client (bypasses RLS)
+    let supabaseError: Error | null = null;
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const admin = await createAdminClient();
+      if (admin) {
+        const { data, error } = await admin
+          .from("programs")
+          .insert({
+            code: programPayload.code.toUpperCase(),
+            name: programPayload.name,
+            department: programPayload.department,
+            description: programPayload.description,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return NextResponse.json({ program: data });
+      }
+    } catch (err) {
+      if (err instanceof Error) supabaseError = err;
+      else if (err && typeof err === "object" && "message" in err) supabaseError = new Error(String((err as any).message));
+      else supabaseError = new Error(JSON.stringify(err));
+    }
+
+    // Supabase failed — fall back to local file
+    const programs = readLocalPrograms();
+    const newProgram: any = {
+      id: `local-program-${Date.now()}`,
+      ...programPayload,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    programs.push(newProgram);
+    // Best-effort write: check if it persisted
+    const checkPersisted = readLocalPrograms().some((p: any) => p.id === newProgram.id);
+    if (!checkPersisted) {
+      return NextResponse.json(
+        { error: `Failed to create program: ${supabaseError?.message || "unknown error"}. Local storage is also not writable.` },
+        { status: 507 }
+      );
+    }
+    const admin = await getSessionAdmin(request);
+    await recordAdminAction(request, admin, "program.create", "program", newProgram.id, `Created program ${newProgram.code}`);
+    return NextResponse.json({ program: newProgram, fallback: true });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to create program" },
@@ -123,18 +169,44 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ program });
     }
 
-    const { updateProgram } = await import("@/lib/data");
-    const program = await updateProgram(
-      {
-        id,
-        code: body.code?.trim(),
-        name: body.name?.trim(),
-        department: body.department,
-        description: body.description,
-      },
-      false
-    );
-    return NextResponse.json({ program });
+    // Try Supabase first using admin client
+    let supabaseError: Error | null = null;
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const admin = await createAdminClient();
+      if (admin) {
+        const updates: Record<string, unknown> = {};
+        if (body.code) updates.code = String(body.code).trim().toUpperCase();
+        if (body.name) updates.name = String(body.name).trim();
+        if (body.department !== undefined) updates.department = body.department || null;
+        if (body.description !== undefined) updates.description = body.description || null;
+        if (Object.keys(updates).length > 0) {
+          const { error } = await admin.from("programs").update(updates).eq("id", id);
+          if (error) throw error;
+        }
+        const { data } = await admin.from("programs").select("*").eq("id", id).single();
+        return NextResponse.json({ program: data });
+      }
+    } catch (err) {
+      if (err instanceof Error) supabaseError = err;
+      else if (err && typeof err === "object" && "message" in err) supabaseError = new Error(String((err as any).message));
+      else supabaseError = new Error(JSON.stringify(err));
+    }
+
+    // Supabase failed — fall back to local file
+    const programs = readLocalPrograms();
+    const idx = programs.findIndex((p: any) => p.id === id);
+    if (idx < 0) return NextResponse.json({ error: "Program not found" }, { status: 404 });
+    const program = programs[idx];
+    if (body.code) program.code = String(body.code).trim();
+    if (body.name) program.name = String(body.name).trim();
+    if (body.department !== undefined) program.department = body.department || null;
+    if (body.description !== undefined) program.description = body.description || null;
+    program.updated_at = new Date().toISOString();
+    writeLocalPrograms(programs);
+    const admin = await getSessionAdmin(request);
+    await recordAdminAction(request, admin, "program.update", "program", id, `Updated program ${program.code}`);
+    return NextResponse.json({ program, fallback: true });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to update program" },
@@ -161,9 +233,26 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    const { deleteProgram } = await import("@/lib/data");
-    await deleteProgram(id, false);
-    return NextResponse.json({ success: true });
+    // Try Supabase first using admin client
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const admin = await createAdminClient();
+      if (admin) {
+        const { error } = await admin.from("programs").delete().eq("id", id);
+        if (!error) return NextResponse.json({ success: true });
+      }
+    } catch {
+      // Supabase failed — fall back to local file
+    }
+
+    // Fall back to local file
+    const programs = readLocalPrograms();
+    const target = programs.find((p: any) => p.id === id);
+    const remaining = programs.filter((p: any) => p.id !== id);
+    writeLocalPrograms(remaining);
+    const admin = await getSessionAdmin(request);
+    await recordAdminAction(request, admin, "program.delete", "program", id, `Deleted program ${target?.code || id}`);
+    return NextResponse.json({ success: true, fallback: true });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to delete program" },
