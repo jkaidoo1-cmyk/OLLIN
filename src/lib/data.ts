@@ -471,10 +471,11 @@ export async function getQuizQuestions(
     .eq("quiz_id", quizId)
     .order("order_index", { ascending: true });
 
-  if (error) return [];
-  if (data && data.length > 0) return data;
-  // Supabase had no questions for this quiz — fall back to the built-in
-  // server-local quiz bank (e.g. TST-101) and the server file store.
+  // On error, fall through to the fallbacks below instead of returning [] —
+  // an empty set would silently grade every answer wrong.
+  if (!error && data && data.length > 0) return data;
+  // Supabase errored or had no questions for this quiz — fall back to the
+  // built-in server-local quiz bank (e.g. TST-101) and the server file store.
   const fileQuestions = readServerQuestions().filter((q) => q.quiz_id === quizId);
   if (fileQuestions.length > 0) return fileQuestions;
   return serverGetLocalQuestions(quizId);
@@ -561,7 +562,12 @@ export async function saveAnswer(
 ): Promise<void> {
   if (checkLocal(local)) return;
 
-  const supabase = await getServerSupabase();
+  // This runs from API routes only: use the admin client so autosaves bypass
+  // RLS — the anon client has no auth session on the server and its writes
+  // are silently rejected. Admin key is server-only, so a browser caller
+  // simply gets null and falls back to the anon client.
+  const { createAdminClient } = await import("@/lib/supabase/server");
+  const supabase = (await createAdminClient()) || (await getServerSupabase());
   await supabase.from("attempt_answers").upsert(
     {
       attempt_id: attemptId,

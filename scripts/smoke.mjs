@@ -4,7 +4,8 @@
  *
  * Runs against a LIVE dev server and exercises the core flows:
  *   auth → permissions → quiz create → grading → time windows →
- *   leaderboard → attempts/review → bulk import → audit log.
+ *   leaderboard → attempts/review → bulk import → audit log →
+ *   student journey (join → attempt → submit → year/password change).
  *
  * Usage:
  *   node scripts/smoke.mjs [baseUrl]     # default http://localhost:63754
@@ -277,7 +278,120 @@ async function run() {
   });
   ok("re-login after logout works", reLogin.status === 200, `got ${reLogin.status}`);
 
-  // 14. Cleanup — delete everything this run created
+  // 14. Student journey — the user-side flow from the bug report:
+  //     login → profile year change → password change → join by code →
+  //     create attempt → submit (server grades 100%) → duplicate guards.
+  //     Runs against the throwaway bulk-import user (file-mode id, so it
+  //     also covers the non-UUID profile path) and the quiz from step 4.
+  console.log("\nStudent journey:");
+  const studentEmail = bulk.json?.created?.[0]?.email;
+  const tempPassword = bulk.json?.created?.[0]?.temp_password;
+  ok("throwaway student available", !!studentEmail && !!tempPassword, JSON.stringify(bulk.json?.created?.[0]));
+
+  const sLogin = await api("/api/auth/login", {
+    method: "POST",
+    body: { email: studentEmail, password: tempPassword },
+  });
+  ok("student login succeeds", sLogin.status === 200 && sLogin.json?.user, `got ${sLogin.status}`);
+  let studentJar = extractCookie(sLogin.setCookie);
+
+  const me0 = await api("/api/auth/me", { cookie: studentJar });
+  ok("student session resolves", me0.status === 200 && me0.json?.user?.email === studentEmail, JSON.stringify(me0.json));
+  const origYear = me0.json?.user?.current_year ?? 1;
+  const nextYear = origYear === 3 ? 2 : 3; // different, still 1..8
+  const yearPatch = await api("/api/auth/profile", {
+    method: "PATCH",
+    cookie: studentJar,
+    body: { current_year: nextYear },
+  });
+  ok("year change accepted", yearPatch.status === 200, JSON.stringify(yearPatch.json));
+  const me1 = await api("/api/auth/me", { cookie: studentJar });
+  ok("year change persisted", me1.json?.user?.current_year === nextYear, `got ${me1.json?.user?.current_year}, want ${nextYear}`);
+  const yearBack = await api("/api/auth/profile", {
+    method: "PATCH",
+    cookie: studentJar,
+    body: { current_year: origYear },
+  });
+  ok("year restored", yearBack.status === 200, JSON.stringify(yearBack.json));
+
+  const NEW_PW = "Journey123!";
+  const pwChange = await api("/api/auth/profile", {
+    method: "PATCH",
+    cookie: studentJar,
+    body: { current_password: tempPassword, new_password: NEW_PW },
+  });
+  ok("password change accepted", pwChange.status === 200, JSON.stringify(pwChange.json));
+  const pwLogin = await api("/api/auth/login", {
+    method: "POST",
+    body: { email: studentEmail, password: NEW_PW },
+  });
+  ok("login with new password", pwLogin.status === 200, `got ${pwLogin.status}`);
+  const pwRevert = await api("/api/auth/profile", {
+    method: "PATCH",
+    cookie: extractCookie(pwLogin.setCookie) || studentJar,
+    body: { current_password: NEW_PW, new_password: tempPassword },
+  });
+  ok("password reverted", pwRevert.status === 200, JSON.stringify(pwRevert.json));
+  const origLogin = await api("/api/auth/login", {
+    method: "POST",
+    body: { email: studentEmail, password: tempPassword },
+  });
+  ok("login with original password after revert", origLogin.status === 200, `got ${origLogin.status}`);
+  studentJar = extractCookie(origLogin.setCookie) || studentJar;
+
+  const joined = await api("/api/quizzes/join", {
+    method: "POST",
+    cookie: studentJar,
+    body: { code: quiz.share_code },
+  });
+  ok("join by share code", joined.status === 200 && joined.json?.quiz?.id === quizId,
+    `status ${joined.status}, id=${joined.json?.quiz?.id}, want ${quizId}`);
+
+  const journeyAttempt = await api("/api/attempts", {
+    method: "POST",
+    cookie: studentJar,
+    body: { quiz_id: quizId },
+  });
+  const jAttId = journeyAttempt.json?.id || journeyAttempt.json?.attempt?.id;
+  ok("attempt created", journeyAttempt.status === 200 && !!jAttId,
+    `status ${journeyAttempt.status} ${JSON.stringify(journeyAttempt.json).slice(0, 120)}`);
+
+  const journeySubmit = await api(`/api/attempts/${jAttId}/submit`, {
+    method: "POST",
+    cookie: studentJar,
+    body: {
+      quiz_id: quizId,
+      participant_email: studentEmail,
+      answers: questions.map((q) => ({ question_id: q.id, selected_answer: q.correct_answer })),
+    },
+  });
+  const jScore = journeySubmit.json?.attempt?.score_percentage;
+  const jCorrect = journeySubmit.json?.attempt?.correct_answers;
+  ok("submission accepted", journeySubmit.status === 200, JSON.stringify(journeySubmit.json).slice(0, 120));
+  ok("server grades the student's answers 100%", jScore === 100 && jCorrect === questions.length,
+    `score=${jScore}, correct=${jCorrect}/${questions.length}`);
+
+  const dupAttempt = await api("/api/attempts", {
+    method: "POST",
+    cookie: studentJar,
+    body: { quiz_id: quizId },
+  });
+  ok("second attempt refused (409)", dupAttempt.status === 409 && dupAttempt.json?.duplicate === true,
+    `got ${dupAttempt.status}`);
+
+  const dupSubmit = await api(`/api/attempts/${jAttId}/submit`, {
+    method: "POST",
+    cookie: studentJar,
+    body: {
+      quiz_id: quizId,
+      participant_email: studentEmail,
+      answers: questions.map((q) => ({ question_id: q.id, selected_answer: "wrong" })),
+    },
+  });
+  ok("resubmit of completed attempt refused (409)", dupSubmit.status === 409 && dupSubmit.json?.duplicate === true,
+    `got ${dupSubmit.status} ${JSON.stringify(dupSubmit.json).slice(0, 100)}`);
+
+  // 15. Cleanup — delete everything this run created
   console.log("\nCleanup:");
   const cleanupCookie = extractCookie(reLogin.setCookie) || adminCookie;
   let cleaned = 0;

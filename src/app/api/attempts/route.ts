@@ -200,6 +200,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // A caller that omits `status` is either an older client posting a finished
+    // attempt (it carries the score it computed) or a joiner that only knows
+    // the quiz. Defaulting every bare post to "completed" minted a 0% phantom
+    // row at join time, which then matched the duplicate guard and locked the
+    // student out of their own submission (409 "already taken this quiz").
+    const hasCompletionEvidence =
+      completed_at != null ||
+      score_percentage !== undefined ||
+      correct_answers !== undefined ||
+      total_questions !== undefined;
+    const attemptStatus = ["completed", "in_progress", "timed_out", "abandoned"].includes(status)
+      ? status
+      : hasCompletionEvidence
+        ? "completed"
+        : "in_progress";
+
     const attempt = {
       id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       quiz_id: safeQuizId,
@@ -214,9 +230,7 @@ export async function POST(request: NextRequest) {
       score_percentage: clampInt(score_percentage, 0, 100, 0),
       marks_earned: clampInt(correct_answers, 0, 1000, 0),
       marks_total: clampInt(total_questions, 0, 1000, 0),
-      status: ["completed", "in_progress", "timed_out", "abandoned"].includes(status)
-        ? status
-        : "completed",
+      status: attemptStatus,
       answers: answers || null, // question_id → selected answer, for review
       created_at: new Date().toISOString(),
     };
@@ -227,7 +241,7 @@ export async function POST(request: NextRequest) {
     // For timed-out markers (which mint a fresh client id) also retire any
     // leftover in_progress row for the same participant + quiz.
     let idx = attemptsList.findIndex((a) => a.id === attempt.id);
-    if (idx < 0 && attempt.status === "timed_out" && attempt.participant_email) {
+    if (idx < 0 && attemptStatus === "timed_out" && attempt.participant_email) {
       idx = attemptsList.findIndex(
         (a) => a.quiz_id === attempt.quiz_id && a.participant_email === attempt.participant_email && a.status === "in_progress"
       );

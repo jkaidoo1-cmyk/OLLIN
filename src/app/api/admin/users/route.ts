@@ -272,9 +272,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ user: publicUser(user), message: "Account updated" });
     }
 
-    // Try Supabase first
+    // Try Supabase first — but local-file ids (e.g. "user-1712…") are not
+    // UUIDs; passing them to auth/profiles throws a Postgres type error, so
+    // only contact Supabase for UUID ids and fall back to the file store.
+    const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(userId));
     let supabaseUpdated = false;
-    const adminSupabase = await createAdminClient();
+    const adminSupabase = looksLikeUuid ? await createAdminClient() : null;
 
     if (adminSupabase) {
       const updates: Record<string, unknown> = {};

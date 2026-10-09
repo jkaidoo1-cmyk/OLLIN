@@ -26,7 +26,16 @@ export async function POST(
     // The UI hides the quiz outside its window; the server must also refuse
     // submissions outside it (clients can be manipulated).
     const { getAttemptQuizId } = await import("@/lib/data");
-    const quizId = body.quiz_id || (await getAttemptQuizId(id, local)) || "";        if (quizId) {
+    // Resolve the quiz from the request, then from the stored attempt record.
+    // The attempt may live in the file store even when the request didn't carry
+    // x-local-mode, so check both stores — an unresolvable quiz here would
+    // silently skip the duplicate guard and time-window checks.
+    const quizId =
+      body.quiz_id ||
+      (await getAttemptQuizId(id, local)) ||
+      (await getAttemptQuizId(id, true)) ||
+      "";
+    if (quizId) {
       const { getQuizById } = await import("@/lib/data");
       const quiz = await getQuizById(quizId, local);
       if (quiz) {
@@ -156,7 +165,21 @@ export async function POST(
         if (sbQuiz) foundId = sbQuiz.id;
       }
       resolvedQuizId = foundId || rawQuizId;
-    }    const questions = await getQuizQuestions(resolvedQuizId, true); // always check file + server-local for grading
+    }    // Grade against file/server-local first (built-in TST-101 and file
+    // fallbacks), then Supabase — the quiz may have been resolved from any
+    // of the three stores.
+    let questions = await getQuizQuestions(resolvedQuizId, true);
+    if (questions.length === 0) {
+      questions = await getQuizQuestions(resolvedQuizId, false);
+    }
+    if (questions.length === 0) {
+      // Fail loudly — grading against an empty question set would silently
+      // mark every answer wrong and persist a fake 0 score.
+      return NextResponse.json(
+        { error: "Could not grade this submission: no questions found for this quiz." },
+        { status: 422 }
+      );
+    }
     const questionMap = new Map<string, any>();
     for (const q of questions) questionMap.set(q.id, q);
 
@@ -232,7 +255,7 @@ export async function POST(
           });
         }
 
-        await admin
+        const { data: updatedRows, error: updateError } = await admin
           .from("quiz_attempts")
           .update({
             completed_at: now,
@@ -244,10 +267,15 @@ export async function POST(
             status: "completed",
           })
           .eq("id", attemptId)
-          .select()
-          .single();
+          .select();
+        // An error or zero updated rows means nothing was persisted (e.g. the
+        // attempt lives in the file store) — fall through to the file write
+        // instead of reporting success with no stored record.
+        if (updateError || !updatedRows || updatedRows.length === 0) {
+          throw new Error(updateError?.message || "Attempt row not found in Supabase");
+        }
       } catch (err) {
-        // Supabase failed — persist to file as fallback
+        // Supabase failed or has no such row — persist to file as fallback
         const attempts = readServerAttempts();
         const idx = attempts.findIndex((a) => a.id === attemptId);
         if (idx >= 0) attempts[idx] = attempt as any;
