@@ -455,83 +455,79 @@ a:hover { text-decoration: none; }
   right: 0;
   bottom: 0;
   z-index: 50;
-  background: #ffffff;
-  border-top: 1px solid var(--border);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  box-shadow: 0 -6px 24px rgba(18, 33, 26, 0.05);
+  padding: 0 0.7rem calc(0.7rem + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
 }
 .bottom-nav-inner {
   position: relative;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   align-items: end;
-  max-width: 560px;
+  max-width: 540px;
   margin: 0 auto;
-  height: 62px;
-  padding: 0.35rem 0.4rem 0.45rem;
+  height: 74px;
+  padding: 0.5rem 0.35rem 0.55rem;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(18, 33, 26, 0.08);
+  pointer-events: auto;
 }
 .nav-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.28rem;
+  gap: 0.42rem;
   height: 100%;
-  padding-bottom: 0.15rem;
-  color: #9aa8a0;
-  font-size: 0.64rem;
+  padding-bottom: 0.1rem;
+  color: #9dada3;
+  font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   border: none;
   background: transparent;
   cursor: pointer;
+  transition: color 150ms ease;
 }
-.nav-item svg { width: 21px; height: 21px; }
-.nav-item .nav-dot {
-  width: 6px;
-  height: 6px;
+.nav-item:hover { color: var(--ink-soft); }
+.nav-item.active { color: var(--primary-strong); font-weight: 700; }
+
+/* Nav glyphs: a dot for Home, a rounded square for Quizzes and rings for
+   Join/Profile — the flat shape language from the reference. */
+.nav-shape {
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
-  background: transparent;
-  margin-bottom: 0.1rem;
+  border: 2px solid currentColor;
+  flex-shrink: 0;
+  transition: background 150ms ease, border-color 150ms ease;
 }
-.nav-item.active { color: var(--primary-strong); }
-.nav-item.active .nav-dot { background: var(--primary); }
-.nav-fab-slot { display: flex; align-items: flex-start; justify-content: center; position: relative; }
+.nav-shape.square { border-radius: 5px; }
+.nav-shape.dot { background: currentColor; border-color: currentColor; }
+
+.nav-fab-slot { display: flex; justify-content: center; position: relative; height: 100%; }
 .nav-fab {
   position: absolute;
-  top: -26px;
+  top: -20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 58px;
-  height: 58px;
+  width: 60px;
+  height: 60px;
   border-radius: 999px;
-  background: var(--primary);
+  background: #22934f;
   color: #fff;
   border: 4px solid #ffffff;
-  box-shadow: var(--shadow-fab);
+  box-shadow:
+    0 0 0 6px rgba(34, 147, 79, 0.1),
+    0 12px 22px rgba(15, 122, 69, 0.26);
   cursor: pointer;
   transition: transform 130ms ease, background 150ms ease;
 }
-.nav-fab:hover { background: var(--primary-hover); }
+.nav-fab:hover { background: #1d8446; }
 .nav-fab:active { transform: scale(0.96); }
-.nav-fab svg { width: 24px; height: 24px; }
-
-@media (min-width: 640px) {
-  .bottom-nav {
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
-    bottom: 1rem;
-    width: 100%;
-    max-width: 540px;
-    border: 1px solid var(--border);
-    border-radius: 22px;
-    box-shadow: 0 12px 32px rgba(18, 33, 26, 0.10);
-    overflow: visible;
-  }
-  .bottom-nav-inner { height: 66px; border-radius: 22px; }
-}
+.nav-fab svg { width: 26px; height: 26px; }
 
 /* ─── Inputs ───────────────────────────────────────── */
 .input-field,

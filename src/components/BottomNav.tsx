@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { House, LayoutGrid, LogIn, Plus, UserRound } from "lucide-react";
+import { Plus } from "lucide-react";
 
 const items = [
-  { href: "/dashboard", label: "Home", icon: House },
-  { href: "/dashboard/quizzes", label: "Quizzes", icon: LayoutGrid },
-  { href: "/dashboard/create", label: "", icon: Plus, fab: true },
-  { href: "/join", label: "Join", icon: LogIn },
-  { href: "/dashboard/profile", label: "Profile", icon: UserRound },
-];
+  { href: "/dashboard", label: "Home", shape: "dot" },
+  { href: "/dashboard/quizzes", label: "Quizzes", shape: "square" },
+  { href: "/dashboard/create", label: "", shape: "fab" },
+  { href: "/join", label: "Join", shape: "circle" },
+  { href: "/dashboard/profile", label: "Profile", shape: "circle" },
+] as const;
 
 /** App bottom navigation: four destinations plus the raised create button. */
 export function BottomNav() {
@@ -19,18 +19,17 @@ export function BottomNav() {
   return (
     <nav className="bottom-nav" aria-label="Main">
       <div className="bottom-nav-inner">
-        {items.map((item, i) => {
+        {items.map((item) => {
           const active =
             item.href === "/dashboard"
               ? pathname === "/dashboard"
               : pathname === item.href || pathname.startsWith(`${item.href}/`);
-          const Icon = item.icon;
 
-          if (item.fab) {
+          if (item.shape === "fab") {
             return (
-              <div key={item.href} className="nav-fab-slot" style={{ gridColumn: i + 1 }}>
+              <div key={item.href} className="nav-fab-slot">
                 <Link href={item.href} className="nav-fab" aria-label="Create a quiz">
-                  <Icon />
+                  <Plus strokeWidth={2.5} />
                 </Link>
               </div>
             );
@@ -43,8 +42,7 @@ export function BottomNav() {
               className={`nav-item${active ? " active" : ""}`}
               aria-current={active ? "page" : undefined}
             >
-              <span className="nav-dot" aria-hidden />
-              <Icon />
+              <span className={`nav-shape ${item.shape}`} aria-hidden />
               <span>{item.label}</span>
             </Link>
           );
