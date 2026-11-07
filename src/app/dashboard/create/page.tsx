@@ -566,20 +566,20 @@ export default function CreateQuizPage() {
 
           <div className="flex gap-2 p-1 bg-slate-100 rounded-lg mb-4 max-w-xs">
             <button
-              onClick={() => setMaterialType("paste")}
-              className={`flex-1 py-1.5 px-3 rounded text-xs font-medium transition-colors ${
-                materialType === "paste" ? "bg-white text-green-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              Paste text
-            </button>
-            <button
               onClick={() => setMaterialType("file")}
               className={`flex-1 py-1.5 px-3 rounded text-xs font-medium transition-colors ${
                 materialType === "file" ? "bg-white text-green-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
               }`}
             >
               Upload file
+            </button>
+            <button
+              onClick={() => setMaterialType("paste")}
+              className={`flex-1 py-1.5 px-3 rounded text-xs font-medium transition-colors ${
+                materialType === "paste" ? "bg-white text-green-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Paste text
             </button>
           </div>
 
