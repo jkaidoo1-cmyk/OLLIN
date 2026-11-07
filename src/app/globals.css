@@ -532,7 +532,7 @@ a:hover { text-decoration: none; }
 }
 .nav-fab:hover { background: var(--primary-hover); }
 .nav-fab:active { transform: scale(0.96); }
-.nav-fab svg { width: 26px; height: 26px; flex-shrink: 0; }
+.nav-fab svg { width: 22px; height: 22px; flex-shrink: 0; }
 
 @media (min-width: 640px) {
   .bottom-nav {
