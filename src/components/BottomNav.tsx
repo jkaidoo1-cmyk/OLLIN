@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plus } from "lucide-react";
+import { House, LayoutGrid, LogIn, Plus, UserRound } from "lucide-react";
 
 const items = [
-  { href: "/dashboard", label: "Home", shape: "dot" },
-  { href: "/dashboard/quizzes", label: "Quizzes", shape: "square" },
-  { href: "/dashboard/create", label: "", shape: "fab" },
-  { href: "/join", label: "Join", shape: "circle" },
-  { href: "/dashboard/profile", label: "Profile", shape: "circle" },
-] as const;
+  { href: "/dashboard", label: "Home", icon: House },
+  { href: "/dashboard/quizzes", label: "Quizzes", icon: LayoutGrid },
+  { href: "/dashboard/create", label: "", icon: Plus, fab: true },
+  { href: "/join", label: "Join", icon: LogIn },
+  { href: "/dashboard/profile", label: "Profile", icon: UserRound },
+];
 
 /** App bottom navigation: four destinations plus the raised create button. */
 export function BottomNav() {
@@ -24,12 +24,13 @@ export function BottomNav() {
             item.href === "/dashboard"
               ? pathname === "/dashboard"
               : pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const Icon = item.icon;
 
-          if (item.shape === "fab") {
+          if (item.fab) {
             return (
               <div key={item.href} className="nav-fab-slot">
                 <Link href={item.href} className="nav-fab" aria-label="Create a quiz">
-                  <Plus strokeWidth={2.5} />
+                  <Icon strokeWidth={2.5} />
                 </Link>
               </div>
             );
@@ -42,7 +43,8 @@ export function BottomNav() {
               className={`nav-item${active ? " active" : ""}`}
               aria-current={active ? "page" : undefined}
             >
-              <span className={`nav-shape ${item.shape}`} aria-hidden />
+              <span className="nav-dot" aria-hidden />
+              <Icon />
               <span>{item.label}</span>
             </Link>
           );
