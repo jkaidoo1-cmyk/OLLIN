@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Logo } from "@/components/Logo";
+import { ArrowRight, Bell, ClipboardList, Plus, Sparkles } from "lucide-react";
+import { BrandMark } from "@/components/Logo";
 import { isLocalMode, getLocalUser } from "@/lib/local";
-
 
 export default function Home() {
   const [authed, setAuthed] = useState(false);
@@ -22,128 +22,108 @@ export default function Home() {
       } catch { /* show logged-out header */ }
     })();
   }, []);
+
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-50 glass-strong">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center">
-          <Link href="/" className="flex items-center gap-1.5 no-underline shrink-0">
-            <Logo onDark />
-            <span className="text-base font-bold text-white">OLLIN</span>
+      <header className="app-topbar">
+        <div className="app-column h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2 no-underline">
+            <BrandMark />
+            <span className="brand-word">Ollin</span>
           </Link>
 
-          {/* Nav — centered, takes remaining space */}
-          <nav className="flex-1 flex items-center justify-center">
-            <Link href="/login" className="hidden sm:inline-block px-4 py-1 text-sm font-medium text-white/70 hover:text-white transition-colors no-underline">
-              Home
+          <div className="flex items-center gap-2.5">
+            <Link href={authed ? "/dashboard" : "/login"} className="btn-primary text-sm">
+              {authed ? "Dashboard" : "Log in"}
             </Link>
-            <Link href="/join" className="px-4 py-1 text-sm font-medium text-white/70 hover:text-white transition-colors no-underline">
-              Join a quiz
-            </Link>
-            <Link href={authed ? "/dashboard" : "/login"} className="hidden sm:inline-block px-4 py-1 text-sm font-medium text-white/70 hover:text-white transition-colors no-underline">
-              Dashboard
-            </Link>
-          </nav>
-
-          {/* Right side */}
-          <div className="flex items-center gap-3 shrink-0">
-            {authed ? (
-              <Link href="/dashboard" className="text-sm font-medium text-white bg-white/15 hover:bg-white/25 px-4 py-1.5 rounded-full transition-colors no-underline">
-                Dashboard
-              </Link>
-            ) : (
-              <Link href="/login" className="text-sm font-medium text-white bg-white/15 hover:bg-white/25 px-4 py-1.5 rounded-full transition-colors no-underline">
-                Log in
-              </Link>
-            )}
           </div>
         </div>
       </header>
 
-      {/* Content */}
-      <main className="flex-1">
-        {/* Hero */}
-        <section className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-b from-white via-white to-[var(--background)] pointer-events-none" />
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-64 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="relative max-w-4xl mx-auto px-6 pt-20 pb-16 text-center">
-            <span className="inline-block text-xs font-semibold tracking-widest uppercase text-primary bg-primary-light px-3 py-1 rounded-full mb-4">
-              Quiz Platform
-            </span>
-            <h1 className="text-3xl sm:text-4xl font-bold text-[#1f2937] mb-4">
-              OLLIN Quiz Platform
-            </h1>
-            <p className="text-sm text-[#64748b] max-w-lg mx-auto mb-8">
-              Upload your study material, generate quizzes, and share them with your classmates.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Link href="/login" className="glass-btn px-6 py-2.5 no-underline">
-                Log in
-              </Link>
-              <Link href="/join" className="text-sm font-medium text-primary border border-[var(--glass-border-strong)] hover:bg-white/60 px-5 py-2.5 rounded-full transition-colors no-underline">
-                Join a quiz
-              </Link>
-            </div>
-          </div>
-        </section>
+      <main className="app-column flex-1 pt-4 pb-16">
+        <h1 className="greeting">Turn your notes into a quiz.</h1>
+        <p className="greeting-sub">
+          Make a quiz, or jump into one with a code.
+        </p>
 
-        {/* How it works */}
-        <section className="relative py-16">
-          <div className="absolute top-0 left-0 w-72 h-72 bg-primary/06 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-primary/05 rounded-full blur-3xl pointer-events-none" />
-          <div className="relative max-w-6xl mx-auto px-6">
-            <h2 className="text-sm font-semibold tracking-widest uppercase text-[#64748b] mb-8">How it works</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {[
-                { num: "01", title: "Upload your material", desc: "Paste notes or upload a PDF/DOCX file. The platform reads through your content." },
-                { num: "02", title: "Generate questions", desc: "Get quiz questions built from your material. Review and edit before publishing." },
-                { num: "03", title: "Share with classmates", desc: "Get a quiz code. Your friends enter it, take the quiz, and see their results." },
-              ].map((item) => (
-                <div key={item.num} className="glass-card p-5">
-                  <div className="w-8 h-8 rounded-full bg-white/80 border border-[var(--glass-border-strong)] text-primary text-sm font-bold flex items-center justify-center mb-3 shadow-sm">
-                    {item.num}
-                  </div>
-                  <h3 className="text-sm font-semibold text-[#1f2937] mb-1">{item.title}</h3>
-                  <p className="text-xs text-[#64748b] leading-relaxed">{item.desc}</p>
-                </div>
-              ))}
+        <div className="join-pill mt-6">
+          <input placeholder="Enter quiz code" aria-label="Quiz code" readOnly />
+          <Link href="/join" className="join-pill-go">Join</Link>
+        </div>
+
+        <div className="hero-card mt-4">
+          <h2>Create a new quiz</h2>
+          <p>Add questions, set a pass mark and share it in seconds.</p>
+          <Link href={authed ? "/dashboard/create" : "/login"} className="hero-btn">
+            <Plus className="w-4 h-4" />
+            New quiz
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mt-4">
+          {[
+            { value: "3", label: "Steps to publish", dot: "#1f9d63" },
+            { value: "1", label: "Code to share", dot: "#3b6fd4" },
+            { value: "60s", label: "To set it up", dot: "#e9a13b" },
+            { value: "Free", label: "For students", dot: "#1f9d63" },
+          ].map((stat) => (
+            <div key={stat.label} className="stat-tile">
+              <span className="stat-dot" style={{ background: stat.dot }} />
+              <p className="stat-value">{stat.value}</p>
+              <p className="stat-label">{stat.label}</p>
             </div>
+          ))}
+        </div>
+
+        <div className="mt-7">
+          <div className="section-head">
+            <h2>How it works</h2>
           </div>
-        </section>
+          <div className="list-card">
+            {[
+              { num: "01", title: "Upload your material", desc: "Paste notes or upload a PDF/DOCX file.", icon: ClipboardList },
+              { num: "02", title: "Generate questions", desc: "Review and edit the questions before publishing.", icon: Sparkles },
+              { num: "03", title: "Share one code", desc: "Classmates join by code and see their results.", icon: Bell },
+            ].map((item) => (
+              <div key={item.num} className="list-row">
+                <span className="tile-icon">
+                  <item.icon className="w-5 h-5" />
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-bold text-[var(--ink)]">{item.title}</span>
+                  <span className="block text-xs text-[var(--ink-muted)]">{item.desc}</span>
+                </span>
+                <span className="text-[11px] font-bold text-[var(--ink-faint)]">{item.num}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-col gap-2">
+          <Link href={authed ? "/dashboard" : "/login"} className="btn-primary w-full">
+            {authed ? "Go to dashboard" : "Get started"}
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+          <Link href="/join" className="btn-ghost w-full">
+            Join a quiz instead
+          </Link>
+        </div>
       </main>
 
-      {/* Footer */}
-      <footer className="relative border-t border-white/10 backdrop-blur-md" style={{ background: "rgba(46, 125, 50, 0.95)" }}>
-        <div className="absolute -top-24 right-0 w-64 h-64 bg-primary/06 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative max-w-6xl mx-auto px-6 py-8">
-          <div className="flex flex-col sm:grid sm:grid-cols-3 gap-6">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Logo onDark />
-                <span className="text-base font-bold text-white">OLLIN</span>
-              </div>
-              <p className="text-xs text-white/60">Quiz platform for students</p>
-            </div>
-            <div className="grid grid-cols-2 gap-6 sm:contents">
-              <div>
-                <h4 className="text-xs font-semibold text-white/90 uppercase tracking-wide mb-2">Quick Links</h4>
-                <ul className="space-y-1.5 text-sm text-white/60">
-                  <li><Link href="/dashboard" className="hover:text-white transition-colors no-underline">Dashboard</Link></li>
-                  <li><Link href="/dashboard/create" className="hover:text-white transition-colors no-underline">Create quiz</Link></li>
-                  <li><Link href="/join" className="hover:text-white transition-colors no-underline">Join a quiz</Link></li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="text-xs font-semibold text-white/90 uppercase tracking-wide mb-2">Support</h4>
-                <ul className="space-y-1.5 text-sm text-white/60">
-                  <li><Link href="/support" className="hover:text-white transition-colors no-underline">Help &amp; support</Link></li>
-                </ul>
-              </div>
-            </div>
+      <footer className="border-t border-[var(--border)] bg-[var(--surface)]">
+        <div className="app-column py-6">
+          <div className="flex items-center gap-2 mb-3">
+            <BrandMark />
+            <span className="brand-word text-base">Ollin</span>
           </div>
-          <div className="border-t border-white/15 mt-5 pt-3 text-[10px] text-white/40">
-            &copy; {new Date().getFullYear()} OLLIN. All rights reserved.
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[var(--ink-muted)]">
+            <Link href="/dashboard" className="hover:text-[var(--ink)] no-underline">Dashboard</Link>
+            <Link href="/join" className="hover:text-[var(--ink)] no-underline">Join a quiz</Link>
+            <Link href="/support" className="hover:text-[var(--ink)] no-underline">Help &amp; support</Link>
           </div>
+          <p className="text-[11px] text-[var(--ink-faint)] mt-4">
+            &copy; {new Date().getFullYear()} Ollin. All rights reserved.
+          </p>
         </div>
       </footer>
     </div>

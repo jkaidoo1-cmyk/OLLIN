@@ -81,25 +81,25 @@ export default function SupportPage() {
   const canSend = form.message.trim().length >= 2 && !sending;
 
   return (
-    <div className="min-h-screen bg-[#f7f7f5]">
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        <Link href={back.href} className="inline-flex items-center gap-1.5 text-sm text-[#666] hover:text-[#333] mb-6 no-underline">
+    <div className="min-h-screen bg-[var(--background)]">
+      <div className="app-column py-6">
+        <Link href={back.href} className="inline-flex items-center gap-1.5 text-sm text-[var(--ink-muted)] hover:text-[var(--ink)] mb-6 no-underline">
           <ArrowLeft className="w-4 h-4" /> {back.label}
         </Link>
 
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-6 mb-5">
-          <div className="w-10 h-10 rounded bg-green-50 text-green-600 flex items-center justify-center mb-3">
+        <div className="mb-5">
+          <span className="tile-icon mb-3">
             <LifeBuoy className="w-5 h-5" />
-          </div>
-          <h1 className="text-lg font-bold text-[#333] mb-1">Help desk</h1>
-          <p className="text-sm text-[#666]">
+          </span>
+          <h1 className="greeting">Help desk</h1>
+          <p className="greeting-sub mt-1">
             Stuck with a quiz code, your account, or anything else in OLLIN?
             Send a message and the admin will get back to you.
           </p>
         </div>
 
         {sent ? (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+          <div className="app-card text-center" style={{ background: "#e7f5ec", borderColor: "#cbe8d6" }}>
             <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-3">
               <Check className="w-5 h-5" />
             </div>
@@ -122,9 +122,9 @@ export default function SupportPage() {
             </div>
           </div>
         ) : (
-          <form onSubmit={submit} className="bg-white border border-[#e0e0e0] rounded-lg p-6">
+          <form onSubmit={submit} className="app-card space-y-4">
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-700 mb-4">
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
                 {error}
               </div>
             )}
@@ -183,11 +183,7 @@ export default function SupportPage() {
                     key={t}
                     type="button"
                     onClick={() => setForm((f) => ({ ...f, subject: t }))}
-                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                      form.subject === t
-                        ? "bg-green-600 text-white border-green-600"
-                        : "bg-white text-[#666] border-[#e0e0e0] hover:border-green-500 hover:text-green-700"
-                    }`}
+                    className={`chip${form.subject === t ? " active" : ""}`}
                   >
                     {t}
                   </button>
@@ -223,7 +219,7 @@ export default function SupportPage() {
             <button
               type="submit"
               disabled={!canSend}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#006633] hover:bg-[#00552b] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-5 py-2.5 rounded"
+              className="btn-primary w-full sm:w-auto"
             >
               {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               {sending ? "Sending…" : "Send message"}

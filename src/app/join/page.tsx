@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, User } from "lucide-react";
-import { Logo } from "@/components/Logo";
+import { ArrowLeft, Loader2, User, Ticket } from "lucide-react";
+import { BrandMark } from "@/components/Logo";
 import { isLocalMode, getLocalUser } from "@/lib/local";
 import { createClient } from "@/lib/supabase/client";
 
@@ -28,11 +28,11 @@ export default function JoinQuizPage() {
         return;
       }
       if (supabase) {
-      const { data } = await supabase.auth.getUser();
-      if (data.user) {
-        setUserName(data.user.user_metadata?.full_name || data.user.email?.split("@")[0] || "User");
-        setIsLoggedIn(true);
-      }
+        const { data } = await supabase.auth.getUser();
+        if (data.user) {
+          setUserName(data.user.user_metadata?.full_name || data.user.email?.split("@")[0] || "User");
+          setIsLoggedIn(true);
+        }
       }
     };
     check();
@@ -67,90 +67,101 @@ export default function JoinQuizPage() {
   };
 
   const isValid = code.length === 7;
-  const canJoin = isLoggedIn || (isGuest && userName.trim()) || (!isLoggedIn && !isGuest);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-50 glass-strong">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center">
-          <Link href="/" className="flex items-center gap-2 no-underline shrink-0">
-            <Logo onDark />
-            <span className="text-base font-bold text-white">OLLIN</span>
+    <div className="min-h-screen">
+      <header className="app-topbar">
+        <div className="app-column h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2 no-underline">
+            <BrandMark />
+            <span className="brand-word">Ollin</span>
           </Link>
-          <div className="flex-1" />
           {isLoggedIn ? (
-            <Link href="/dashboard" className="text-white/70 hover:text-white text-xs font-medium no-underline">
-              Dashboard
-            </Link>
+            <Link href="/dashboard" className="section-link">Home</Link>
           ) : (
-            <Link href="/login" className="text-white/70 hover:text-white text-xs font-medium no-underline">
-              Log in
-            </Link>
+            <Link href="/login" className="section-link">Log in</Link>
           )}
         </div>
       </header>
 
-      <main className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-sm">
-          <div className="glass-card p-6">
-            <h1 className="text-sm font-semibold text-[#1f2937] text-center mb-1">Join a quiz</h1>
-            <p className="text-xs text-[#64748b] text-center mb-5">
-              {isLoggedIn
-                ? "Enter the quiz code shared by your classmates"
-                : "Enter the quiz code — no account needed"}
+      <main className="app-column py-6">
+        <Link
+          href={isLoggedIn ? "/dashboard" : "/"}
+          className="inline-flex items-center gap-1.5 text-sm text-[var(--ink-muted)] hover:text-[var(--ink)] mb-6 no-underline"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back
+        </Link>
+
+        <h1 className="greeting">Join a quiz</h1>
+        <p className="greeting-sub mb-6">
+          {isLoggedIn
+            ? "Enter the code shared by your classmates."
+            : "Enter the quiz code — no account needed."}
+        </p>
+
+        <form onSubmit={handleJoin} className="app-card space-y-5">
+          {!isLoggedIn ? (
+            <div>
+              <label htmlFor="guest-name" className="block text-xs font-semibold text-[var(--ink-soft)] mb-1.5">
+                Your name
+              </label>
+              <div className="relative">
+                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)] pointer-events-none" />
+                <input
+                  id="guest-name"
+                  type="text"
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  placeholder="Enter your name"
+                  className="input-field pl-10"
+                />
+              </div>
+              <p className="text-[11px] text-[var(--ink-faint)] mt-1.5">
+                Your name is only shown for this quiz
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-[var(--ink-muted)]">
+              Joining as <span className="font-semibold text-[var(--ink)]">{userName}</span>
             </p>
+          )}
 
-            <form onSubmit={handleJoin}>
-              {/* Guest name field — only shown when not logged in */}
-              {!isLoggedIn && (
-                <div className="mb-4">
-                  <label className="block text-xs font-medium text-[#475569] mb-1.5">Your name</label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94a3b8] pointer-events-none" />
-                    <input
-                      type="text"
-                      value={userName}
-                      onChange={(e) => setUserName(e.target.value)}
-                      placeholder="Enter your name"
-                      className="glass-input py-2.5 pl-10 text-sm"
-                    />
-                  </div>
-                  <p className="text-[10px] text-[#94a3b8] mt-1.5">Your name will only be visible for this quiz</p>
-                </div>
-              )}
-
-              {isLoggedIn && (
-                <p className="text-[10px] text-[#94a3b8] mb-3">
-                  Joining as <span className="font-medium text-[#1f2937]">{userName}</span>
-                </p>
-              )}
-
-              <label className="block text-xs font-medium text-[#475569] mb-1.5">Quiz code</label>
+          <div>
+            <label htmlFor="quiz-code-input" className="block text-xs font-semibold text-[var(--ink-soft)] mb-1.5">
+              Quiz code
+            </label>
+            <div className="relative">
+              <Ticket className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)] pointer-events-none" />
               <input
                 id="quiz-code-input"
                 type="text"
                 value={code}
                 onChange={(e) => handleCodeInput(e.target.value)}
                 required
-                placeholder="e.g. 9RX-DHJ"
+                placeholder="9RX-DHJ"
                 maxLength={7}
-                className="w-full text-center text-2xl font-mono font-bold tracking-[0.2em] uppercase glass-input py-3.5 px-3"
+                className="input-field pl-10 text-center text-xl font-bold tracking-[0.22em] uppercase"
               />
-
-              <button id="join-quiz-btn" type="submit" disabled={loading || !isValid} className="glass-btn w-full py-2.5 mt-4">
-                {loading ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Joining...</>
-                ) : "Join quiz"}
-              </button>
-            </form>
+            </div>
           </div>
 
-          {!isLoggedIn && (
-            <p className="text-center text-[10px] text-[#94a3b8] mt-4">
-              <Link href="/login" className="text-primary hover:underline">Log in</Link> to create quizzes and track your results
-            </p>
-          )}
-        </div>
+          <button
+            id="join-quiz-btn"
+            type="submit"
+            disabled={loading || !isValid}
+            className="btn-primary w-full"
+          >
+            {loading ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Joining…</>
+            ) : "Join quiz"}
+          </button>
+        </form>
+
+        {!isLoggedIn && (
+          <p className="text-center text-xs text-[var(--ink-faint)] mt-5">
+            <Link href="/login" className="text-[var(--primary)] font-semibold">Log in</Link> to create quizzes and track your results
+          </p>
+        )}
       </main>
     </div>
   );

@@ -454,23 +454,23 @@ export default function CreateQuizPage() {
   if (generatedCode) {
     const isSelfStudy = generatedCode.startsWith("SELF-");
     return (
-      <div className="max-w-md mx-auto text-center py-8">
-        <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+      <div className="text-center py-8">
+        <div className="w-16 h-16 bg-[var(--primary-soft)] text-[var(--primary)] rounded-full flex items-center justify-center mx-auto mb-4">
           <CheckCircle className="w-8 h-8" />
         </div>
-        <h1 className="text-2xl font-bold text-[#333]">
-          {isSelfStudy ? "Quiz Ready" : "Quiz Published"}
+        <h1 className="greeting">
+          {isSelfStudy ? "Quiz ready" : "Quiz published"}
         </h1>
-        <p className="text-[#666] text-sm mt-1 mb-6">
+        <p className="greeting-sub mb-6">
           {isSelfStudy
             ? "Your quiz is ready. Start whenever you want."
             : "Share this code with your classmates."}
         </p>
 
         {!isSelfStudy && (
-          <div className="bg-white border border-[#e0e0e0] rounded-lg p-6 mb-6">
-            <p className="text-xs font-semibold text-[#999] uppercase tracking-wider mb-2">Share Code</p>
-            <div className="text-4xl font-bold font-mono tracking-widest text-green-600 mb-4">
+          <div className="app-card mb-6">
+            <p className="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wider mb-2">Share code</p>
+            <div className="text-4xl font-bold font-mono tracking-widest text-[var(--primary)] mb-4">
               {generatedCode}
             </div>
             <button onClick={copyShareLink} className="btn-primary w-full py-2.5 text-xs">
@@ -508,16 +508,16 @@ export default function CreateQuizPage() {
 
   // ── Main form ──────────────────────
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-[#333]">Create quiz</h1>
-        <p className="text-xs text-[#999] mt-0.5">Upload material, configure, and publish</p>
+    <div className="pt-2">
+      <div className="mb-5">
+        <h1 className="greeting">Create quiz</h1>
+        <p className="greeting-sub">Upload material, configure, and publish.</p>
       </div>
 
-      <div className="space-y-5">
+      <div className="space-y-4">
         {/* Course */}
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-5">
-          <label className="block text-sm font-semibold mb-2 text-[#333]">Course</label>
+        <div className="app-card">
+          <label className="block text-sm font-bold mb-2 text-[var(--ink)]">Course</label>
           <select
             value={selectedCourseId}
             onChange={(e) => setSelectedCourseId(e.target.value)}
@@ -534,8 +534,8 @@ export default function CreateQuizPage() {
         </div>
 
         {/* Material */}
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-5">
-          <label className="block text-sm font-semibold mb-3 text-[#333]">Study material</label>
+        <div className="app-card">
+          <label className="block text-sm font-bold mb-3 text-[var(--ink)]">Study material</label>
 
           {/* Source mode: build questions from material, or extract from an existing exam */}
           <div className="flex gap-2 p-1 bg-slate-100 rounded-lg mb-4 max-w-md">
@@ -654,7 +654,7 @@ export default function CreateQuizPage() {
         </div>
 
         {/* Quiz config */}
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-5">
+        <div className="app-card">
           <label className="block text-sm font-semibold mb-3 text-[#333]">Quiz settings</label>
 
           <div className="space-y-3">
@@ -859,12 +859,12 @@ export default function CreateQuizPage() {
         {questions.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-[#333]">{questions.length} questions generated</h2>
+              <h2 className="text-sm font-bold text-[var(--ink)]">{questions.length} questions generated</h2>
               <span className="text-xs text-[#999]">Edit or delete as needed</span>
             </div>
 
             {questions.map((q, idx) => (
-              <div key={idx} className="bg-white border border-[#e0e0e0] rounded-lg p-4">
+              <div key={idx} className="app-card">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">

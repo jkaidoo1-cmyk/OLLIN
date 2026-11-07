@@ -9,7 +9,7 @@ import { SkeletonText, SkeletonList } from "@/components/Skeleton";
 import { warmResource } from "@/lib/prefetch";
 import { Quiz, Course } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
-import { Plus, Copy, CheckCircle, ExternalLink, Pencil } from "lucide-react";
+import { Plus, Copy, CheckCircle, ExternalLink, Pencil, ClipboardList } from "lucide-react";
 
 export default function MyQuizzesPage() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -58,7 +58,6 @@ export default function MyQuizzesPage() {
         .order("created_at", { ascending: false });
 
       if (data) setQuizzes(data);
-      // Fetch courses for display
       try {
         const { data: courseData } = await supabase.from("courses").select("*");
         if (courseData) setCourses(courseData);
@@ -86,73 +85,75 @@ export default function MyQuizzesPage() {
 
   if (loading) {
     return (
-      <div className="py-6" aria-busy="true">
-        <SkeletonText className="h-6 w-32 mb-6" />
-        <SkeletonList rows={3} rowClass="h-16" />
+      <div className="pt-3" aria-busy="true">
+        <SkeletonText className="h-9 w-40 mb-6" />
+        <SkeletonList rows={3} rowClass="h-24" />
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-[#333]">My quizzes</h1>
-        <Link href="/dashboard/create" className="btn-primary text-sm">
-          <Plus className="w-4 h-4" /> New quiz
+    <div className="pt-2">
+      <div className="flex items-start justify-between gap-3 mb-5">
+        <div>
+          <h1 className="greeting">My quizzes</h1>
+          <p className="greeting-sub">Everything you have created.</p>
+        </div>
+        <Link href="/dashboard/create" className="btn-primary text-sm shrink-0">
+          <Plus className="w-4 h-4" /> New
         </Link>
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-2 mb-4 overflow-x-auto">
+      <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1">
         {(["all", "draft", "published", "completed"] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 text-xs font-medium rounded border transition-colors whitespace-nowrap ${
-              filter === f
-                ? "bg-[#006633] text-white border-[#006633]"
-                : "bg-white text-[#666] border-[#e0e0e0] hover:bg-[#f8f8f8]"
-            }`}
+            className={`chip${filter === f ? " active" : ""}`}
           >
             {f.charAt(0).toUpperCase() + f.slice(1)}
           </button>
         ))}
       </div>
 
-      {/* Quiz list */}
       {filtered.length === 0 ? (
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
-          <p className="text-sm text-[#666] mb-4">
-            {filter === "all" ? "No quizzes yet." : `No ${filter} quizzes.`}
-          </p>
-          <Link href="/dashboard/create" className="btn-primary text-sm">
-            <Plus className="w-4 h-4" /> Create a quiz
-          </Link>
-        </div>
+        <Link href="/dashboard/create" className="list-row app-card no-underline">
+          <span className="tile-icon">
+            <ClipboardList className="w-5 h-5" />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-bold text-[var(--ink)]">
+              {filter === "all" ? "No quizzes yet" : `No ${filter} quizzes`}
+            </span>
+            <span className="block text-xs text-[var(--ink-muted)]">Tap + to create your first one</span>
+          </span>
+        </Link>
       ) : (
         <div className="space-y-3">
           {filtered.map((quiz) => (
-            <div key={quiz.id} className="bg-white border border-[#e0e0e0] rounded-lg p-4">
-              <div className="flex items-start justify-between gap-3">
+            <div key={quiz.id} className="app-card">
+              <div className="flex items-start gap-3">
+                <span className="tile-icon">
+                  <ClipboardList className="w-5 h-5" />
+                </span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Link href={`/dashboard/quizzes/${quiz.id}`} className="font-medium text-sm text-[#333] hover:text-[#006633] no-underline">
+                    <Link
+                      href={`/dashboard/quizzes/${quiz.id}`}
+                      className="font-bold text-sm text-[var(--ink)] hover:text-[var(--primary)] no-underline"
+                    >
                       {quiz.title}
                     </Link>
                     <span className={statusStyles[quiz.status] || "badge badge-slate"}>
                       {quiz.status}
                     </span>
                   </div>
-                  {quiz.course_id && (
-                    <p className="text-[10px] text-green-700 bg-green-50 px-2 py-0.5 rounded inline-block mt-1 border border-green-100">
-                      {courses.find((c) => c.id === quiz.course_id)?.code || "Course"}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-3 mt-1.5 text-xs text-[#999]">
+                  <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1.5 text-xs text-[var(--ink-faint)]">
                     <span>{formatRelativeDate(quiz.created_at)}</span>
                     <button
                       onClick={() => copyShareLink(quiz.share_code, quiz.id)}
-                      className="flex items-center gap-1 font-mono text-[#006633]"
+                      className="flex items-center gap-1 font-mono text-[var(--primary)] font-semibold"
                     >
                       {copiedId === quiz.id ? (
                         <><CheckCircle className="w-3 h-3" /> Copied</>
@@ -160,25 +161,41 @@ export default function MyQuizzesPage() {
                         <><Copy className="w-3 h-3" /> {quiz.share_code}</>
                       )}
                     </button>
+                    {quiz.course_id && (
+                      <span className="text-[var(--primary-strong)] bg-[var(--primary-soft)] px-2 py-0.5 rounded-full">
+                        {courses.find((c) => c.id === quiz.course_id)?.code || "Course"}
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <Link href={`/dashboard/quizzes/${quiz.id}`} className="text-xs text-[#006633] font-medium">
-                    Results
-                  </Link>
-                  {quiz.status === "published" && (
-                    <Link href={`/quiz/${quiz.share_code}`} target="_blank" className="text-xs text-[#999]">
-                      <ExternalLink className="w-3.5 h-3.5" />
+              </div>
+
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-[var(--border)]">
+                <Link
+                  href={`/dashboard/quizzes/${quiz.id}`}
+                  className="text-xs font-semibold text-[var(--primary)]"
+                >
+                  Results
+                </Link>
+                <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
+                <Link
+                  href={`/dashboard/create?edit=${quiz.id}`}
+                  className="text-xs font-semibold text-[var(--ink-muted)] inline-flex items-center gap-1"
+                >
+                  <Pencil className="w-3 h-3" /> Edit
+                </Link>
+                {quiz.status === "published" && (
+                  <>
+                    <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
+                    <Link
+                      href={`/quiz/${quiz.share_code}`}
+                      target="_blank"
+                      className="text-xs font-semibold text-[var(--ink-muted)] inline-flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3" /> Open
                     </Link>
-                  )}
-                  <Link
-                    href={`/dashboard/create?edit=${quiz.id}`}
-                    className="text-xs text-[#006633]"
-                    title="Edit quiz"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
+                  </>
+                )}
               </div>
             </div>
           ))}

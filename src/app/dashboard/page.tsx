@@ -8,29 +8,16 @@ import { isLocalMode, getLocalQuizzes, getLocalAttempts, getLocalUser } from "@/
 import { SkeletonText, SkeletonStats } from "@/components/Skeleton";
 import { warmResource } from "@/lib/prefetch";
 import { Quiz, QuizAttempt } from "@/lib/types";
-import {
-  Plus,
-  Copy,
-  CheckCircle,
-  Users,
-  ArrowRight,
-  FileText,
-  BookOpen,
-  Trophy,
-  TrendingUp,
-  BarChart3,
-} from "lucide-react";
+import { Plus, ArrowRight, ArrowUpRight, ClipboardList } from "lucide-react";
+
+const statDot = ["#1f9d63", "#3b6fd4", "#e9a13b", "#1f9d63"];
 
 export default function DashboardPage() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [allAttempts, setAllAttempts] = useState<QuizAttempt[]>([]);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("");
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  // Score distribution for the selected quiz (from the stats endpoint)
-  const [distribution, setDistribution] = useState<{ bucket: string; count: number }[]>([]);
-  const [distQuizId, setDistQuizId] = useState<string>("");
-  const [statsLoading, setStatsLoading] = useState(false);
+  const [code, setCode] = useState("");
   const router = useRouter();
   const supabase = createClient();
 
@@ -99,40 +86,13 @@ export default function DashboardPage() {
     fetchData();
   }, [supabase, router]);
 
-  const copyCode = (code: string, id: string) => {
-    navigator.clipboard.writeText(code);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+  const joinQuiz = (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = code.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+    if (!clean) return;
+    setCode("");
+    router.push(`/quiz/${clean}`);
   };
-
-  // Load the score distribution for one quiz via the stats endpoint.
-  const loadDistribution = async (quizId: string) => {
-    if (!quizId) return;
-    setStatsLoading(true);
-    try {
-      const res = await fetch(`/api/attempts/stats?quiz_id=${encodeURIComponent(quizId)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setDistribution(data.distribution || []);
-      } else {
-        setDistribution([]);
-      }
-    } catch {
-      setDistribution([]);
-    } finally {
-      setStatsLoading(false);
-    }
-  };
-
-  // Auto-select the first quiz that has attempts once the dashboard data lands.
-  const firstQuizWithAttempts = quizzes.find((q) => allAttempts.some((a) => a.quiz_id === q.id));
-  useEffect(() => {
-    if (!loading && !distQuizId && firstQuizWithAttempts) {
-      setDistQuizId(firstQuizWithAttempts.id);
-      loadDistribution(firstQuizWithAttempts.id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, firstQuizWithAttempts?.id]);
 
   // Derived stats
   const publishedCount = quizzes.filter((q) => q.status === "published").length;
@@ -145,8 +105,7 @@ export default function DashboardPage() {
 
   // Per-quiz stats
   const quizStats = quizzes.map((quiz) => {
-    const quizAttempts = allAttempts.filter((a) => a.quiz_id === quiz.id);
-    const completed = quizAttempts.filter((a) => a.status === "completed");
+    const completed = allAttempts.filter((a) => a.quiz_id === quiz.id && a.status === "completed");
     const avg = completed.length > 0
       ? Math.round(completed.reduce((s, a) => s + a.score_percentage, 0) / completed.length)
       : 0;
@@ -155,261 +114,146 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="py-6 space-y-4" aria-busy="true">
-        <SkeletonText className="h-8 w-48" />
+      <div className="pt-3 space-y-4" aria-busy="true">
+        <SkeletonText className="h-9 w-40" />
+        <SkeletonText className="h-14 w-full" />
+        <SkeletonText className="h-40 w-full" />
         <SkeletonStats />
-        <div className="skeleton h-48" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Welcome + Quick Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-[#333]">
-            Welcome back{userName ? `, ${userName}` : ""}
-          </h1>
-          <p className="text-sm text-[#999] mt-0.5">
-            {quizzes.length} quiz{quizzes.length !== 1 ? "zes" : ""} · {totalParticipants} total attempt{totalParticipants !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href="/dashboard/create" className="btn-primary text-sm">
-            <Plus className="w-4 h-4" />
-            New quiz
-          </Link>
-          <Link
-            href="/join"
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#006633] bg-white border border-[#006633] rounded-md hover:bg-[#f0f8f2] transition-colors no-underline"
-          >
-            Join quiz
-          </Link>
-        </div>
+    <div className="space-y-6 pt-2">
+      {/* Greeting */}
+      <div>
+        <h1 className="greeting">Hi{userName ? `, ${userName}` : " there"}</h1>
+        <p className="greeting-sub">Make a quiz, or jump into one with a code.</p>
       </div>
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* Join by code */}
+      <form onSubmit={joinQuiz} className="join-pill">
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          placeholder="Enter quiz code"
+          aria-label="Quiz code"
+          maxLength={9}
+        />
+        <button type="submit" disabled={!code.trim()}>Join</button>
+      </form>
+
+      {/* Create */}
+      <Link href="/dashboard/create" className="hero-card block no-underline">
+        <h2>Create a new quiz</h2>
+        <p>Add questions, set a pass mark and share it in seconds.</p>
+        <span className="hero-btn">
+          <Plus className="w-4 h-4" />
+          New quiz
+        </span>
+      </Link>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-3">
         {[
-          { label: "Quizzes", value: quizzes.length, sub: `${publishedCount} published`, color: "text-[#006633]", bg: "bg-[#e6f0e8]" },
-          { label: "Attempts", value: totalParticipants, sub: "total submissions", color: "text-blue-600", bg: "bg-blue-50" },
-          { label: "Avg Score", value: totalParticipants > 0 ? `${avgScore}%` : "—", sub: "across all quizzes", color: "text-amber-600", bg: "bg-amber-50" },
-          { label: "Pass Rate", value: totalParticipants > 0 ? `${passRate}%` : "—", sub: `${passCount} passed`, color: "text-green-600", bg: "bg-green-50" },
+          { label: "Quizzes published", value: publishedCount, dot: statDot[0] },
+          { label: "Total attempts", value: totalParticipants, dot: statDot[1] },
+          { label: "Avg score", value: totalParticipants > 0 ? `${avgScore}%` : "—", dot: statDot[2] },
+          { label: "Pass rate", value: totalParticipants > 0 ? `${passRate}%` : "—", dot: statDot[3] },
         ].map((stat) => (
-          <div key={stat.label} className="bg-white border border-[#e0e0e0] rounded-lg p-4">
-            <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
-            <p className="text-sm font-medium text-[#333] mt-0.5">{stat.label}</p>
-            <p className="text-xs text-[#999] mt-0.5">{stat.sub}</p>
+          <div key={stat.label} className="stat-tile">
+            <span className="stat-dot" style={{ background: stat.dot }} />
+            <p className="stat-value">{stat.value}</p>
+            <p className="stat-label">{stat.label}</p>
           </div>
         ))}
       </div>
 
-      {/* Two Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: My Quizzes (takes 2 cols) */}
-        <div className="lg:col-span-2 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-[#333] uppercase tracking-wide">My Quizzes</h2>
-            <Link href="/dashboard/quizzes" className="text-xs text-[#006633] hover:text-[#005528] font-medium no-underline">
-              View all →
-            </Link>
-          </div>
-
-          {quizzes.length === 0 ? (
-            <div className="bg-white border border-[#e0e0e0] rounded-lg p-10 text-center">
-              <FileText className="w-10 h-10 text-[#ccc] mx-auto mb-3" />
-              <p className="text-sm text-[#666] mb-3">No quizzes yet</p>
-              <Link href="/dashboard/create" className="btn-primary text-sm">
-                <Plus className="w-4 h-4" />
-                Create your first quiz
-              </Link>
-            </div>
-          ) : (
-            <div className="bg-white border border-[#e0e0e0] rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-[#f8f8f8] border-b border-[#e0e0e0]">
-                    <th className="text-left px-4 py-2.5 font-medium text-[#666]">Quiz</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-[#666] hidden sm:table-cell">Code</th>
-                    <th className="text-center px-4 py-2.5 font-medium text-[#666]">Attempts</th>
-                    <th className="text-center px-4 py-2.5 font-medium text-[#666] hidden sm:table-cell">Avg</th>
-                    <th className="text-right px-4 py-2.5 font-medium text-[#666]">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#f0f0f0]">
-                  {quizzes.slice(0, 5).map((quiz) => {
-                    const qAttempts = allAttempts.filter((a) => a.quiz_id === quiz.id);
-                    const completed = qAttempts.filter((a) => a.status === "completed");
-                    const avg = completed.length > 0
-                      ? Math.round(completed.reduce((s, a) => s + a.score_percentage, 0) / completed.length)
-                      : 0;
-                    const statusColor: Record<string, string> = {
-                      published: "text-green-600 bg-green-50",
-                      draft: "text-amber-600 bg-amber-50",
-                      completed: "text-blue-600 bg-blue-50",
-                      active: "text-blue-600 bg-blue-50",
-                    };
-                    return (
-                      <tr key={quiz.id} className="hover:bg-[#fafafa] transition-colors">
-                        <td className="px-4 py-3">
-                          <Link href={`/dashboard/quizzes/${quiz.id}`} className="text-[#333] hover:text-[#006633] font-medium no-underline">
-                            {quiz.title}
-                          </Link>
-                          <p className="text-xs text-[#999] mt-0.5 sm:hidden">{quiz.share_code}</p>
-                        </td>
-                        <td className="px-4 py-3 hidden sm:table-cell">
-                          <button
-                            onClick={() => copyCode(quiz.share_code, quiz.id)}
-                            className="text-xs font-mono text-[#006633] hover:text-[#005528] bg-transparent border-none cursor-pointer p-0"
-                          >
-                            {copiedId === quiz.id ? (
-                              <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Copied</span>
-                            ) : (
-                              <span className="flex items-center gap-1"><Copy className="w-3 h-3" /> {quiz.share_code}</span>
-                            )}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3 text-center text-[#666]">{completed.length}</td>
-                        <td className="px-4 py-3 text-center hidden sm:table-cell">
-                          {completed.length > 0 ? (
-                            <span className={`font-semibold ${avg >= 60 ? "text-green-600" : "text-red-500"}`}>
-                              {avg}%
-                            </span>
-                          ) : (
-                            <span className="text-[#ccc]">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded ${statusColor[quiz.status] || "text-[#666] bg-[#f0f0f0]"}`}>
-                            {quiz.status}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+      {/* My quizzes */}
+      <div>
+        <div className="section-head">
+          <h2>My quizzes</h2>
+          <Link href="/dashboard/quizzes" className="section-link">
+            View all <ArrowRight className="w-4 h-4" />
+          </Link>
         </div>
 
-        {/* Right: Sidebar */}
-        <div className="space-y-4">
-          {/* Quiz Performance */}
-          {quizStats.some((s) => s.attempts > 0) && (
-            <div className="bg-white border border-[#e0e0e0] rounded-lg p-4">
-              <h2 className="text-sm font-semibold text-[#333] mb-3 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-[#006633]" />
-                Performance
-              </h2>
-              <div className="space-y-3">
-                {quizStats
-                  .filter((s) => s.attempts > 0)
-                  .map((s) => (
-                    <div key={s.quiz.id}>
-                      <div className="flex items-center justify-between mb-1">
-                        <Link
-                          href={`/dashboard/quizzes/${s.quiz.id}`}
-                          className="text-xs font-medium text-[#333] hover:text-[#006633] no-underline truncate max-w-[70%]"
-                        >
-                          {s.quiz.title}
-                        </Link>
-                        <span className={`text-xs font-bold ${s.avgScore >= 60 ? "text-green-600" : "text-red-500"}`}>
-                          {s.avgScore}%
-                        </span>
-                      </div>
-                      <div className="w-full h-1.5 bg-[#f0f0f0] rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${s.avgScore >= 70 ? "bg-green-500" : s.avgScore >= 50 ? "bg-amber-500" : "bg-red-500"}`}
-                          style={{ width: `${s.avgScore}%` }}
-                        />
-                      </div>
-                      <p className="text-[10px] text-[#999] mt-0.5">{s.attempts} attempt{s.attempts !== 1 ? "s" : ""}</p>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
-
-          {/* Score Distribution */}
-          {quizzes.some((q) => allAttempts.some((a) => a.quiz_id === q.id)) && (
-            <div className="bg-white border border-[#e0e0e0] rounded-lg p-4">
-              <h2 className="text-sm font-semibold text-[#333] mb-3 flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-[#006633]" />
-                Score Distribution
-              </h2>
-              {quizzes.some((q) => allAttempts.some((a) => a.quiz_id === q.id)) && (
-                <select
-                  className="w-full text-xs border border-[#e0e0e0] rounded-md px-2 py-1.5 bg-white text-[#333] mb-3"
-                  value={distQuizId || ""}
-                  onChange={(e) => {
-                    setDistQuizId(e.target.value);
-                    loadDistribution(e.target.value);
-                  }}
-                >
-                  {quizzes
-                    .filter((q) => allAttempts.some((a) => a.quiz_id === q.id))
-                    .map((q) => (
-                      <option key={q.id} value={q.id}>{q.title}</option>
-                    ))}
-                </select>
-              )}
-              {statsLoading ? (
-                <p className="text-xs text-[#999] text-center py-4">Loading…</p>
-              ) : distribution.length === 0 ? (
-                <p className="text-xs text-[#999] text-center py-4">Select a quiz to see results</p>
-              ) : (
-                <div className="flex items-end gap-1 h-24">
-                  {distribution.map((d) => {
-                    const max = Math.max(...distribution.map((x) => x.count), 1);
-                    return (
-                      <div key={d.bucket} className="flex-1 flex flex-col items-center gap-1 group relative">
-                        <div
-                          className={`w-full rounded-t ${d.count > 0 ? "bg-[#006633]" : "bg-[#f0f0f0]"}`}
-                          style={{ height: `${(d.count / max) * 80}px`, minHeight: d.count > 0 ? "4px" : "2px" }}
-                        />
-                        <span className="text-[8px] text-[#999] whitespace-nowrap">
-                          {d.bucket === "90-100" ? "90+" : d.bucket.split("-")[0]}
-                        </span>
-                        {d.count > 0 && (
-                          <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#333] text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                            {d.count} student{d.count !== 1 ? "s" : ""}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Quick Links */}
-          <div className="bg-white border border-[#e0e0e0] rounded-lg p-4">
-            <h2 className="text-sm font-semibold text-[#333] mb-3 flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-[#006633]" />
-              Quick Links
-            </h2>
-            <div className="space-y-1">
-              {[
-                { href: "/dashboard/create", label: "Create a quiz", icon: Plus },
-                { href: "/dashboard/test-quizzes", label: "Test quizzes", icon: Trophy },
-                { href: "/join", label: "Join by code", icon: ArrowRight },
-              ].map((link) => (
+        {quizzes.length === 0 ? (
+          <Link href="/dashboard/create" className="list-row app-card no-underline">
+            <span className="tile-icon">
+              <ClipboardList className="w-5 h-5" />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-bold text-[var(--ink)]">No quizzes yet</span>
+              <span className="block text-xs text-[var(--ink-muted)]">Tap + to create your first one</span>
+            </span>
+            <ArrowRight className="w-4 h-4 text-[var(--ink-muted)] shrink-0" />
+          </Link>
+        ) : (
+          <div className="list-card">
+            {quizzes.slice(0, 4).map((quiz) => {
+              const stats = quizStats.find((s) => s.quiz.id === quiz.id);
+              return (
                 <Link
-                  key={link.href}
-                  href={link.href}
-                  className="flex items-center gap-2.5 px-3 py-2 text-xs text-[#333] hover:bg-[#f8f8f8] rounded-md transition-colors no-underline"
+                  key={quiz.id}
+                  href={`/dashboard/quizzes/${quiz.id}`}
+                  className="list-row no-underline"
                 >
-                  <link.icon className="w-3.5 h-3.5 text-[#006633]" />
-                  {link.label}
+                  <span className="tile-icon">
+                    <ClipboardList className="w-5 h-5" />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-bold text-[var(--ink)] truncate">{quiz.title}</span>
+                    <span className="block text-xs text-[var(--ink-muted)]">
+                      {stats?.attempts || 0} attempt{stats?.attempts === 1 ? "" : "s"} · {quiz.share_code}
+                    </span>
+                  </span>
+                  <ArrowUpRight className="w-4 h-4 text-[var(--ink-faint)] shrink-0" />
                 </Link>
+              );
+            })}
+            {quizzes.length > 4 && (
+              <Link href="/dashboard/quizzes" className="list-row justify-center no-underline">
+                <span className="text-xs font-semibold text-[var(--primary)]">
+                  View all {quizzes.length} quizzes
+                </span>
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Performance */}
+      {quizStats.some((s) => s.attempts > 0) && (
+        <div>
+          <div className="section-head">
+            <h2>Performance</h2>
+          </div>
+          <div className="app-card space-y-4">
+            {quizStats
+              .filter((s) => s.attempts > 0)
+              .map((s) => (
+                <div key={s.quiz.id}>
+                  <div className="flex items-center justify-between mb-1.5 gap-3">
+                    <Link
+                      href={`/dashboard/quizzes/${s.quiz.id}`}
+                      className="text-xs font-semibold text-[var(--ink)] hover:text-[var(--primary)] no-underline truncate"
+                    >
+                      {s.quiz.title}
+                    </Link>
+                    <span className="text-xs font-bold text-[var(--ink)]">{s.avgScore}%</span>
+                  </div>
+                  <div className="progress-bar">
+                    <div className="progress-bar-fill" style={{ width: `${s.avgScore}%` }} />
+                  </div>
+                  <p className="text-[11px] text-[var(--ink-faint)] mt-1">
+                    {s.attempts} attempt{s.attempts !== 1 ? "s" : ""}
+                  </p>
+                </div>
               ))}
-            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -175,9 +175,9 @@ export default function QuizDetailPage() {
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto space-y-6">
+      <div className="space-y-4 pt-2">
         <div className="h-8 w-48 bg-[#e0e0e0] rounded rounded-lg" />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-24 bg-[#e0e0e0] rounded rounded-xl" />
           ))}
@@ -199,9 +199,9 @@ export default function QuizDetailPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="pt-2">
       {/* Top Breadcrumb & Header */}
-      <div className="mb-8 ">
+      <div className="mb-5">
         <Link
           href="/dashboard/quizzes"
           className="inline-flex items-center gap-1 text-xs font-semibold text-green-600 hover:underline mb-3"
@@ -211,8 +211,8 @@ export default function QuizDetailPage() {
 
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-[#333]">{quiz.title}</h1>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="greeting">{quiz.title}</h1>
               <span className={`badge capitalize ${quiz.status === "published" ? "badge-success" : "badge-slate"}`}>
                 {quiz.status}
               </span>
@@ -225,7 +225,7 @@ export default function QuizDetailPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={copyCode}
-              className="flex items-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-mono font-bold text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 border border-[var(--border-strong)] rounded-full text-xs font-mono font-bold text-[var(--ink-soft)] bg-white hover:bg-[var(--surface-2)] transition-colors"
               
             >
               {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
@@ -243,27 +243,24 @@ export default function QuizDetailPage() {
       </div>
 
       {/* Analytics Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 gap-3 mb-5">
         {[
           { label: "Total Attempts", value: attempts.length, icon: Users, color: "from-green-400 to-violet-500" },
           { label: "Average Score", value: `${avgScore}%`, icon: TrendingUp, color: "from-emerald-400 to-teal-500" },
           { label: "Avg Time", value: avgTime > 0 ? `${Math.floor(avgTime / 60)}m ${avgTime % 60}s` : "N/A", icon: Clock, color: "from-amber-400 to-orange-500" },
           { label: "Pass Rate", value: completedAttempts.length > 0 ? `${Math.round((passCount / completedAttempts.length) * 100)}%` : "N/A", icon: Award, color: "from-cyan-400 to-blue-500" },
         ].map((stat, i) => (
-          <div key={stat.label} className="card p-4 " style={{ animationDelay: `${i * 60}ms` }}>
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-2 bg-gradient-to-br ${stat.color}`}>
-              <stat.icon className="w-4 h-4 text-white" />
-            </div>
-            <p className="text-xl font-bold text-[#333]">{stat.value}</p>
-            <p className="text-[11px] text-slate-400 font-medium">{stat.label}</p>
+          <div key={stat.label} className="stat-tile" style={{ animationDelay: `${i * 60}ms` }}>
+            <p className="stat-value">{stat.value}</p>
+            <p className="stat-label">{stat.label}</p>
           </div>
         ))}
       </div>
 
       {/* Score Distribution Chart */}
       {completedAttempts.length > 0 && (
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-6 mb-8 " >
-          <h2 className="font-bold text-sm mb-4 text-[#333]">Score Distribution</h2>
+        <div className="app-card mb-4" >
+          <h2 className="font-bold text-sm mb-4 text-[var(--ink)]">Score distribution</h2>
           <div className="flex items-end gap-1.5 h-32 pt-4">
             {Array.from({ length: 10 }, (_, i) => {
               const bucketMin = i * 10;
@@ -286,7 +283,7 @@ export default function QuizDetailPage() {
                     style={{
                       height: `${heightPct}%`,
                       minHeight: count > 0 ? "6px" : "2px",
-                      background: count > 0 ? "#006633" : "rgba(148,163,184,0.15)",
+                      background: count > 0 ? "var(--primary)" : "#eef1ef",
                     }}
                   />
                   <span className="text-[9px] text-slate-400 font-semibold">{bucketMin}%</span>
@@ -299,8 +296,8 @@ export default function QuizDetailPage() {
 
       {/* Question Performance Breakdown */}
       {questionStats.length > 0 && (
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-6 mb-8 " >
-          <h2 className="font-bold text-sm mb-4 flex items-center gap-2 text-[#333]">
+        <div className="app-card mb-4" >
+          <h2 className="font-bold text-sm mb-4 flex items-center gap-2 text-[var(--ink)]">
             <BarChart3 className="w-4 h-4 text-green-600" />
             Question Success Rates
           </h2>
@@ -336,9 +333,9 @@ export default function QuizDetailPage() {
       )}
 
       {/* Participant Results Table */}
-      <div className="bg-white border border-[#e0e0e0] rounded-lg " >
-        <div className="px-6 py-4 border-b flex items-center justify-between" >
-          <h2 className="font-bold text-sm flex items-center gap-2 text-[#333]">
+      <div className="list-card" >
+        <div className="px-5 py-4 border-b border-[var(--border)] flex items-center justify-between" >
+          <h2 className="font-bold text-sm flex items-center gap-2 text-[var(--ink)]">
             <Users className="w-4 h-4 text-green-600" />
             Participants ({attempts.length})
           </h2>

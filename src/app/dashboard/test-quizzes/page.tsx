@@ -179,21 +179,23 @@ export default function TestQuizzesPage() {
     );
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-[#333]">Test Quizzes</h1>
-        <p className="text-xs text-[#999] mt-0.5">
-          Take quizzes available in your courses
+    <div className="pt-2">
+      <div className="mb-5">
+        <h1 className="greeting">Test quizzes</h1>
+        <p className="greeting-sub">
+          Take quizzes available in your courses.
         </p>
       </div>
 
       {loading ? (
         <SkeletonList rows={3} rowClass="h-24" />
       ) : builtInFirst.length === 0 ? (
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
-          <BookOpen className="w-8 h-8 text-[#ccc] mx-auto mb-3" />
-          <p className="text-sm text-[#666]">No quizzes available yet</p>
-          <p className="text-xs text-[#999] mt-1">
+        <div className="app-card py-12 text-center">
+          <span className="tile-icon mx-auto mb-3">
+            <BookOpen className="w-5 h-5" />
+          </span>
+          <p className="text-sm font-bold text-[var(--ink)]">No quizzes available yet</p>
+          <p className="text-xs text-[var(--ink-muted)] mt-1 max-w-xs mx-auto">
             Check back later — quizzes will appear here when published for your courses.
           </p>
         </div>
@@ -203,11 +205,7 @@ export default function TestQuizzesPage() {
           <div className="flex gap-2 overflow-x-auto pb-2">
             <button
               onClick={() => setSelectedCourseId(null)}
-              className={`px-3 py-1.5 rounded text-xs font-medium whitespace-nowrap transition-colors ${
-                selectedCourseId === null
-                  ? "bg-green-600 text-white"
-                  : "bg-white border border-[#e0e0e0] text-[#666] hover:border-green-400"
-              }`}
+              className={`chip${selectedCourseId === null ? " active" : ""}`}
             >
               All courses
             </button>
@@ -215,11 +213,7 @@ export default function TestQuizzesPage() {
               <button
                 key={course.id}
                 onClick={() => setSelectedCourseId(course.id)}
-                className={`px-3 py-1.5 rounded text-xs font-medium whitespace-nowrap transition-colors ${
-                  selectedCourseId === course.id
-                    ? "bg-green-600 text-white"
-                    : "bg-white border border-[#e0e0e0] text-[#666] hover:border-green-400"
-                }`}
+                className={`chip${selectedCourseId === course.id ? " active" : ""}`}
               >
                 {course.code} ({quizzes.length})
               </button>
@@ -241,8 +235,8 @@ export default function TestQuizzesPage() {
           {/* Quiz list */}
           <div className="space-y-2">
             {filteredQuizzes.length === 0 ? (
-              <div className="bg-white border border-[#e0e0e0] rounded-lg p-8 text-center">
-                <p className="text-sm text-[#666]">No quizzes found</p>
+              <div className="app-card py-10 text-center">
+                <p className="text-sm font-semibold text-[var(--ink)]">No quizzes found</p>
               </div>
             ) : (
               filteredQuizzes.map((quiz) => {
@@ -253,9 +247,9 @@ export default function TestQuizzesPage() {
                 return (
                   <div
                     key={quiz.id}
-                    className="bg-white border border-[#e0e0e0] rounded-lg p-4 flex flex-wrap items-center gap-3 sm:gap-4 hover:border-green-300 transition-colors"
+                    className="app-card flex flex-wrap items-center gap-3 sm:gap-4"
                   >
-                    <div className="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center flex-shrink-0">
+                    <div className="tile-icon">
                       <BookOpen className="w-5 h-5" />
                     </div>
                     <div className="flex-1 min-w-[140px]">
@@ -281,10 +275,10 @@ export default function TestQuizzesPage() {
                     <button
                       onClick={() => shareQuiz(quiz)}
                       title={`Share link: /quiz/${quiz.share_code}`}
-                      className={`px-3 py-2 border text-xs font-medium rounded transition-colors flex items-center gap-1.5 flex-shrink-0 ${
+                      className={`text-xs font-semibold px-3 py-2 rounded-[var(--radius-pill)] border flex items-center gap-1.5 flex-shrink-0 transition-colors ${
                         sharedId === quiz.id
-                          ? "border-green-300 bg-green-50 text-green-700"
-                          : "border-[#e0e0e0] text-[#333] hover:border-green-400"
+                          ? "border-[#cbe8d6] bg-[#e7f5ec] text-[#116b3c]"
+                          : "border-[var(--border-strong)] text-[var(--ink-soft)] hover:border-[var(--primary)]"
                       }`}
                     >
                       {sharedId === quiz.id ? (
@@ -295,7 +289,7 @@ export default function TestQuizzesPage() {
                     </button>
                     <Link
                       href={`/quiz/${quiz.share_code}`}
-                      className="px-4 py-2 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors flex items-center gap-1.5 flex-shrink-0"
+                      className="btn-primary text-xs px-4 py-2 flex-shrink-0"
                     >
                       <Play className="w-3.5 h-3.5" /> Take quiz
                     </Link>

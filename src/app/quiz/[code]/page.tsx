@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizByCode, getLocalQuestions, getLocalUser } from "@/lib/local";
 import { Quiz, Question, QuizAttempt } from "@/lib/types";
 import { Clock, Send, CheckCircle, AlertCircle, User } from "lucide-react";
-import { Logo } from "@/components/Logo";
+import { BrandMark } from "@/components/Logo";
 import { useToast } from "@/components/ui/toast";
 import { formatTime } from "@/lib/utils";
 
@@ -460,8 +460,11 @@ export default function QuizPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col">
-        <header className="bg-[#006633] text-white h-14 flex items-center px-6">
-          <Logo onDark />
+        <header className="app-topbar">
+          <div className="app-column h-16 flex items-center gap-2">
+            <BrandMark />
+            <span className="brand-word">Ollin</span>
+          </div>
         </header>
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-[#006633] border-t-transparent rounded-full animate-spin" />
@@ -473,11 +476,14 @@ export default function QuizPage() {
   if (error) {
     return (
       <div className="min-h-screen flex flex-col">
-        <header className="bg-[#006633] text-white h-14 flex items-center px-6">
-          <Logo onDark />
+        <header className="app-topbar">
+          <div className="app-column h-16 flex items-center gap-2">
+            <BrandMark />
+            <span className="brand-word">Ollin</span>
+          </div>
         </header>
         <div className="flex-1 flex items-center justify-center px-4">
-          <div className="bg-white border border-[#e0e0e0] rounded-lg p-8 max-w-md text-center">
+          <div className="app-card p-8 max-w-md text-center">
             <AlertCircle className="w-10 h-10 text-red-500 mx-auto mb-3" />
             <h1 className="text-lg font-semibold text-[#333] mb-2">Quiz unavailable</h1>
             <p className="text-sm text-[#666] mb-4">{error}</p>
@@ -493,8 +499,11 @@ export default function QuizPage() {
   if (currentUser && !currentUser.isGuest && !attemptResolved && !joined) {
     return (
       <div className="min-h-screen flex flex-col">
-        <header className="bg-[#006633] text-white h-14 flex items-center px-6">
-          <Logo onDark />
+        <header className="app-topbar">
+          <div className="app-column h-16 flex items-center gap-2">
+            <BrandMark />
+            <span className="brand-word">Ollin</span>
+          </div>
         </header>
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-[#006633] border-t-transparent rounded-full animate-spin" />
@@ -508,11 +517,14 @@ export default function QuizPage() {
   if (rejection) {
     return (
       <div className="min-h-screen flex flex-col">
-        <header className="bg-[#006633] text-white h-14 flex items-center px-6">
-          <Logo onDark />
+        <header className="app-topbar">
+          <div className="app-column h-16 flex items-center gap-2">
+            <BrandMark />
+            <span className="brand-word">Ollin</span>
+          </div>
         </header>
         <div className="flex-1 flex items-center justify-center px-4">
-          <div className="bg-white border border-[#e0e0e0] rounded-lg p-8 max-w-md text-center">
+          <div className="app-card p-8 max-w-md text-center">
             <Clock className="w-12 h-12 text-amber-500 mx-auto mb-3" />
             <h1 className="text-lg font-semibold text-[#333] mb-2">Submission not accepted</h1>
             <p className="text-sm text-[#666] mb-5">{rejection.message}</p>
@@ -534,11 +546,14 @@ export default function QuizPage() {
     const passed = alreadyTaken.score_percentage >= (quiz?.passing_score || 50);
     return (
       <div className="min-h-screen flex flex-col">
-        <header className="bg-[#006633] text-white h-14 flex items-center px-6">
-          <Logo onDark />
+        <header className="app-topbar">
+          <div className="app-column h-16 flex items-center gap-2">
+            <BrandMark />
+            <span className="brand-word">Ollin</span>
+          </div>
         </header>
         <div className="flex-1 flex items-center justify-center px-4">
-          <div className="bg-white border border-[#e0e0e0] rounded-lg p-8 max-w-md text-center">
+          <div className="app-card p-8 max-w-md text-center">
             <CheckCircle className={`w-12 h-12 mx-auto mb-3 ${passed ? "text-green-600" : "text-amber-500"}`} />
             <h1 className="text-lg font-semibold text-[#333] mb-1">You have already taken this quiz</h1>
             <p className="text-sm text-[#666] mb-4">
@@ -559,20 +574,22 @@ export default function QuizPage() {
   if (!joined) {
     return (
       <div className="min-h-screen flex flex-col">
-        <header className="bg-[#006633] text-white h-14 flex items-center px-6">
-          <Link href="/" className="flex items-center gap-2 no-underline">
-            <Logo onDark />
-            <span className="text-base font-bold text-white">OLLIN</span>
-          </Link>
+        <header className="app-topbar">
+          <div className="app-column h-16 flex items-center">
+            <Link href="/" className="flex items-center gap-2 no-underline">
+              <BrandMark />
+              <span className="brand-word">Ollin</span>
+            </Link>
+          </div>
         </header>
         <div className="flex-1 flex items-center justify-center px-4 py-8">
           <div className="w-full max-w-md">
-            <div className="bg-white border border-[#e0e0e0] rounded-lg p-6">
-              <h1 className="text-lg font-semibold text-[#333] mb-1">{quiz!.title}</h1>
+            <div className="app-card p-5">
+              <h1 className="text-xl font-extrabold text-[var(--ink)] mb-0.5">{quiz!.title}</h1>
 
-              <div className="bg-[#f8f8f8] border border-[#e0e0e0] rounded p-4 mb-5 text-sm space-y-2">
+              <div className="bg-[var(--surface-2)] rounded-2xl p-4 my-4 text-sm space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-[#666]">Questions</span>
+                  <span className="text-[var(--ink-muted)]">Questions</span>
                   <span className="font-medium text-[#333]">{questions.length}</span>
                 </div>
                 {quiz!.time_limit_minutes && (
@@ -648,13 +665,16 @@ export default function QuizPage() {
   if (submitted && results) {
     return (
       <div className="min-h-screen flex flex-col">
-        <header className="bg-[#006633] text-white h-14 flex items-center px-6">
-          <Logo onDark />
-          <span className="text-base font-bold text-white ml-2">Quiz Complete</span>
+        <header className="app-topbar">
+          <div className="app-column h-16 flex items-center gap-2">
+            <BrandMark />
+            <span className="brand-word">Ollin</span>
+            <span className="text-xs font-semibold text-[var(--ink-muted)] ml-1">Quiz complete</span>
+          </div>
         </header>
         <main className="flex-1 px-4 py-6">
-          <div className="max-w-2xl mx-auto">
-            <div className="bg-white border border-[#e0e0e0] rounded-lg p-6 mb-6 text-center">
+          <div className="max-w-md mx-auto">
+            <div className="app-card p-6 mb-5 text-center">
               <div className={`w-20 h-20 rounded-full mx-auto mb-3 flex items-center justify-center text-2xl font-bold ${
                 results.score >= quiz!.passing_score
                   ? "bg-green-50 text-green-700 border-2 border-green-200"
@@ -662,10 +682,10 @@ export default function QuizPage() {
               }`}>
                 {results.score}%
               </div>
-              <h2 className="text-lg font-semibold text-[#333] mb-1">
+              <h2 className="text-lg font-bold text-[var(--ink)] mb-1">
                 {results.score >= quiz!.passing_score ? "Passed!" : "Not passed"}
               </h2>
-              <p className="text-sm text-[#666]">
+              <p className="text-sm text-[var(--ink-muted)]">
                 {results.correct} out of {results.total} correct
               </p>
               {isGuest && (
@@ -681,7 +701,7 @@ export default function QuizPage() {
               )}
             </div>
 
-            <h3 className="text-sm font-semibold text-[#333] mb-3">Review answers</h3>
+            <h3 className="text-sm font-bold text-[var(--ink)] mb-3">Review answers</h3>
             <div className="space-y-3">
               {results.detailed.map((item, idx) => (
                 <div
@@ -761,28 +781,28 @@ export default function QuizPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="bg-[#006633] text-white sticky top-0 z-50 shadow-sm">
-        <div className="max-w-3xl mx-auto px-4 h-12 flex items-center justify-between">
+      <header className="glass-strong sticky top-0 z-50">
+        <div className="app-column h-14 flex items-center justify-between">
           <span className="text-sm font-medium truncate">{quiz!.title}</span>
           <div className="flex items-center gap-3">
             {timeLeft !== null && (
               <div className="flex items-center gap-1.5 text-sm">
                 <Clock className={`w-4 h-4 ${timeLeft < 60 ? "animate-pulse" : ""}`} />
-                <span className={timeLeft < 60 ? "text-red-300 font-bold" : ""}>
+                <span className={timeLeft < 60 ? "text-red-600 font-bold" : ""}>
                   {formatTime(timeLeft)}
                 </span>
               </div>
             )}
-            <span className="text-xs bg-white/20 px-2 py-0.5 rounded">
+            <span className="text-xs text-[var(--ink-muted)] bg-[var(--surface-2)] border border-[var(--border)] px-2 py-0.5 rounded">
               {answeredCount}/{questions.length} answered
             </span>
           </div>
         </div>
         {/* Sticky progress bar — fills as questions are answered, always visible */}
-        <div className="max-w-3xl mx-auto px-4 pb-2">
-          <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+        <div className="app-column pb-2">
+          <div className="h-1 bg-[var(--border)] rounded-full overflow-hidden">
             <div
-              className="h-full bg-white rounded-full transition-all duration-300 ease-out"
+              className="h-full bg-[var(--primary)] rounded-full transition-all duration-300 ease-out"
               style={{ width: `${questions.length ? (answeredCount / questions.length) * 100 : 0}%` }}
             />
           </div>
@@ -790,11 +810,11 @@ export default function QuizPage() {
       </header>
 
       <main className="flex-1 px-4 py-6">
-        <div className="max-w-2xl mx-auto space-y-4">
+        <div className="app-column space-y-3">
           {questions.map((q, idx) => (
-            <div key={q.id} className="bg-white border border-[#e0e0e0] rounded-lg p-4 sm:p-5">
+            <div key={q.id} className="app-card p-4 sm:p-5">
               <div className="flex items-start gap-3 mb-3">
-                <span className="w-6 h-6 rounded-full bg-[#006633] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                <span className="w-6 h-6 rounded-full bg-[var(--primary)] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
                   {idx + 1}
                 </span>
                 <p className="text-[15px] sm:text-sm font-medium text-[#333] leading-snug">{q.question_text}</p>

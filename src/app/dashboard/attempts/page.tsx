@@ -113,21 +113,23 @@ export default function MyAttemptsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-[#333]">My attempts</h1>
-        <p className="text-xs text-[#999] mt-0.5">
-          Every quiz you have taken, with question-by-question review
+    <div className="pt-2">
+      <div className="mb-5">
+        <h1 className="greeting">My attempts</h1>
+        <p className="greeting-sub">
+          Every quiz you have taken, with question-by-question review.
         </p>
       </div>
 
       {loading ? (
         <SkeletonPanel rows={4} />
       ) : attempts.length === 0 ? (
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
-          <History className="w-8 h-8 text-[#ccc] mx-auto mb-3" />
-          <p className="text-sm text-[#666]">No attempts yet.</p>
-          <p className="text-xs text-[#999] mt-1">
+        <div className="app-card py-12 text-center">
+          <span className="tile-icon mx-auto mb-3">
+            <History className="w-5 h-5" />
+          </span>
+          <p className="text-sm font-bold text-[var(--ink)]">No attempts yet</p>
+          <p className="text-xs text-[var(--ink-muted)] mt-1 max-w-xs mx-auto">
             Quizzes you take — from Test quizzes or a shared link — will appear here.
           </p>
         </div>
@@ -137,18 +139,18 @@ export default function MyAttemptsPage() {
             const isOpen = expanded === a.id;
             const questions = reviewData[a.id];
             return (
-              <div key={a.id} className="bg-white border border-[#e0e0e0] rounded-lg overflow-hidden">
+              <div key={a.id} className="list-card">
                 <button
                   onClick={() => toggle(a)}
-                  className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-[#fafafa] transition-colors"
+                  className="w-full px-4 py-3.5 flex items-center gap-3 text-left hover:bg-[#f7fbf8] transition-colors"
                 >
                   {isOpen ? (
                     <ChevronDown className="w-4 h-4 text-[#999] flex-shrink-0" />
                   ) : (
                     <ChevronRight className="w-4 h-4 text-[#999] flex-shrink-0" />
                   )}
-                  <div className={`w-11 h-11 rounded-lg flex items-center justify-center flex-shrink-0 ${scoreColor(a.score_percentage)}`}>
-                    <span className="text-sm font-bold">{a.score_percentage}%</span>
+                  <div className={`w-12 h-12 rounded-[14px] flex items-center justify-center flex-shrink-0 font-bold ${scoreColor(a.score_percentage)}`}>
+                    <span className="text-sm">{a.score_percentage}%</span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[#333] truncate">

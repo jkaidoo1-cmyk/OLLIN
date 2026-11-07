@@ -63,44 +63,48 @@ export default function NotificationsPage() {
 
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-[#333]">Notifications</h1>
-        <div className="flex items-center gap-3">
-          {notifications.some((n) => !n.read) && (
-            <button onClick={markAllRead} className="text-sm text-[#006633] hover:text-[#005528] font-medium">
-              Mark all as read
-            </button>
-          )}
-          {notifications.length > 0 && (
-            <button onClick={handleClearAll} className="text-sm text-red-500 hover:text-red-700 font-medium">
-              Clear all
-            </button>
-          )}
-        </div>
+    <div className="pt-2">
+      <div className="mb-5">
+        <h1 className="greeting">Notifications</h1>
+        <p className="greeting-sub">Updates on your quizzes and results.</p>
       </div>
+      {notifications.length > 0 && (
+        <div className="flex items-center gap-3 mb-4">
+          {notifications.some((n) => !n.read) && (
+            <button onClick={markAllRead} className="chip">
+              Mark all read
+            </button>
+          )}
+          <button onClick={handleClearAll} className="chip">
+            Clear all
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <SkeletonPanel rows={3} />
       ) : notifications.length === 0 ? (
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
-          <Bell className="w-8 h-8 text-[#ccc] mx-auto mb-3" />
-          <p className="text-sm text-[#666]">No notifications yet.</p>
+        <div className="app-card py-12 text-center">
+          <span className="tile-icon mx-auto mb-3">
+            <Bell className="w-5 h-5" />
+          </span>
+          <p className="text-sm font-bold text-[var(--ink)]">No notifications yet</p>
+          <p className="text-xs text-[var(--ink-muted)] mt-1">New quiz and result updates show up here.</p>
         </div>
       ) : (
-        <div className="bg-white border border-[#e0e0e0] rounded-lg overflow-hidden">
+        <div className="list-card">
           <div className="divide-y divide-[#e0e0e0]">
             {notifications.map((notif) => {
               const Icon = typeIcons[notif.type] || Bell;
               return (
                 <div
                   key={notif.id}
-                  className={`px-4 py-3 flex items-start gap-3 ${
+                  className={`px-4 py-3.5 flex items-start gap-3 ${
                     !notif.read ? "bg-[#f8fdf8]" : ""
                   }`}
                 >
-                  <div className={`w-8 h-8 rounded flex items-center justify-center flex-shrink-0 mt-0.5 ${typeColors[notif.type]}`}>
-                    <Icon className="w-4 h-4" />
+                  <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center flex-shrink-0 mt-0.5 ${typeColors[notif.type]}`}>
+                    <Icon className="w-[18px] h-[18px]" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">

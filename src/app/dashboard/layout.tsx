@@ -1,25 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Logo } from "@/components/Logo";
+import { BrandMark } from "@/components/Logo";
+import { BottomNav } from "@/components/BottomNav";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalUser, disableLocalMode, getUnreadCount, getLocalQuizzes } from "@/lib/local";
 import { isAdmin } from "@/lib/admin";
-import type { LocalUser } from "@/lib/local";
 import { useEffect, useState, useRef } from "react";
 import { Bell, UserRound } from "lucide-react";
 import { warmAll } from "@/lib/prefetch";
-
-const pageLabels: Record<string, string> = {
-  "/dashboard": "Dashboard",
-  "/dashboard/create": "Create quiz",
-  "/dashboard/quizzes": "My quizzes",
-  "/dashboard/test-quizzes": "Test quizzes",
-  "/dashboard/profile": "My profile",
-  "/join": "Join quiz",
-  "/dashboard/notifications": "Notifications",
-};
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -28,7 +18,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [profileOpen, setProfileOpen] = useState(false);
   const [local, setLocal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [currentYear] = useState<number>(1);
   const supabase = createClient();
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -47,8 +36,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             return;
           }
           setUser({ email: localUser.email, name: localUser.full_name });
-          // Year/class selection lives on the profile page now — the dropdown
-          // was removed to keep the menu lean.
           // Show a storage notice only when the server is NOT persisting to
           // Supabase — a healthy server session is not a local.
           try {
@@ -104,7 +91,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Warm page data while the student is still on the current page, so
   // navigating to any dashboard page renders content on first paint.
-  // Keys/fetchers mirror what each page reads (see src/lib/prefetch.ts).
   useEffect(() => {
     warmAll([
       ["quizzes", async () => {
@@ -153,7 +139,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, []);
 
   const handleLogout = async () => {
-    if (local) {
+    if (local || isLocalMode()) {
       // Clear the httpOnly session cookie server-side too.
       try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
       disableLocalMode();
@@ -166,107 +152,93 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const userInitial = user?.name?.charAt(0).toUpperCase() || "?";
 
-  const currentPage = pageLabels[pathname] || "Dashboard";
-
   return (
     <div className="min-h-screen">
       {local && (
-        <div className="bg-[#2E7D32] text-white/90 text-center py-1 text-xs font-medium backdrop-blur-sm">
+        <div className="bg-[#0b5d34] text-white/90 text-center py-1 text-[11px] font-medium">
           Limited storage — data is saved on this server only and may not persist
         </div>
       )}
 
-      <header className="sticky top-0 z-50 glass-strong">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center">
-          {/* Logo + current page — left side */}
-          <Link href="/dashboard" className="flex items-center gap-1.5 no-underline shrink-0">
-            <Logo onDark />
-            <span className="text-base font-bold text-white">OLLIN</span>
+      <header className="app-topbar">
+        <div className="app-column h-16 flex items-center justify-between">
+          <Link href="/dashboard" className="flex items-center gap-2 no-underline">
+            <BrandMark />
+            <span className="brand-word">Ollin</span>
           </Link>
-          <span className="text-white/60 text-xs font-medium ml-2 sm:ml-3 truncate">/ {currentPage}</span>
 
-          {/* Spacer */}
-          <nav className="flex-1" />
-
-          {/* Right side */}
-          <div className="flex items-center gap-3 shrink-0">
-            <Link href="/dashboard/notifications" replace className="relative text-white/60 hover:text-white transition-colors">
-              <Bell className="w-5 h-5" />
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/dashboard/notifications"
+              replace
+              className="icon-btn relative"
+              aria-label="Notifications"
+            >
+              <Bell className="w-[18px] h-[18px]" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#ef4444] text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm">
-                  {unreadCount}
-                </span>
+                <span className="absolute top-1 right-1 w-2 h-2 bg-[#ef4444] rounded-full ring-2 ring-white" />
               )}
             </Link>
 
-            {/* Avatar with dropdown */}
             {user && (
               <div ref={profileRef} className="relative">
                 <button
                   onClick={() => setProfileOpen(!profileOpen)}
-                  className="w-8 h-8 rounded-full bg-white border border-[var(--glass-border-strong)] flex items-center justify-center text-xs font-bold text-primary shadow-sm hover:shadow-md transition-shadow"
+                  className="avatar-btn"
+                  aria-label="Account menu"
                 >
                   {userInitial}
                 </button>
 
                 {profileOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-56 bg-white/95 backdrop-blur-md border border-[var(--glass-border-strong)] rounded-xl shadow-lg py-1 z-50">
-                    <div className="px-4 py-3 border-b border-[var(--glass-border)]">
-                      <p className="text-sm font-medium text-[#1f2937] truncate">{user.name}</p>
-                      <p className="text-[11px] text-[#64748b] truncate">{user.email}</p>
+                  <div className="absolute right-0 top-full mt-2 w-60 bg-white border border-[var(--card-border)] rounded-2xl shadow-lg py-1.5 z-50 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-[var(--border)]">
+                      <p className="text-sm font-semibold text-[var(--ink)] truncate">{user.name}</p>
+                      <p className="text-[11px] text-[var(--ink-faint)] truncate">{user.email}</p>
                     </div>
-                    <Link
-                      href="/dashboard"
-                      replace
-                      onClick={() => setProfileOpen(false)}
-                      className="block px-4 py-2 text-sm text-[#475569] hover:bg-white/70 rounded-b-lg no-underline"
-                    >
-                      Dashboard
-                    </Link>
-                    <Link
-                      href="/dashboard/quizzes"
-                      replace
-                      onClick={() => setProfileOpen(false)}
-                      className="block px-4 py-2 text-sm text-[#475569] hover:bg-white/70 rounded-b-lg no-underline"
-                    >
-                      My quizzes
-                    </Link>
-                    <Link
-                      href="/dashboard/test-quizzes"
-                      replace
-                      onClick={() => setProfileOpen(false)}
-                      className="block px-4 py-2 text-sm text-[#475569] hover:bg-white/70 rounded-b-lg no-underline"
-                    >
-                      Test quizzes
-                    </Link>
-                    <Link
-                      href="/dashboard/attempts"
-                      replace
-                      onClick={() => setProfileOpen(false)}
-                      className="block px-4 py-2 text-sm text-[#475569] hover:bg-white/70 rounded-b-lg no-underline"
-                    >
-                      My attempts
-                    </Link>
+                    {[
+                      { href: "/dashboard", label: "Home" },
+                      { href: "/dashboard/quizzes", label: "My quizzes" },
+                      { href: "/dashboard/test-quizzes", label: "Test quizzes" },
+                      { href: "/dashboard/attempts", label: "My attempts" },
+                    ].map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        replace
+                        onClick={() => setProfileOpen(false)}
+                        className="block px-4 py-2 text-sm text-[var(--ink-soft)] hover:bg-[var(--surface-2)] no-underline"
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
                     <Link
                       href="/dashboard/profile"
                       onClick={() => setProfileOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-[#475569] hover:bg-white/70 rounded-b-lg no-underline"
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--ink-soft)] hover:bg-[var(--surface-2)] no-underline"
                     >
-                      <UserRound className="w-4 h-4 text-primary" />
+                      <UserRound className="w-4 h-4 text-[var(--primary)]" />
                       My profile
                     </Link>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2 text-sm text-[#a32a20] hover:bg-[#fcedec]"
+                    >
+                      Log out
+                    </button>
                   </div>
                 )}
               </div>
             )}
-
           </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-6">
+      <main className="app-column pt-2 pb-32">
         {children}
       </main>
+
+      <BottomNav />
     </div>
   );
 }

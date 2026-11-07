@@ -187,10 +187,10 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
-          <Loader2 className="w-8 h-8 text-[#ccc] mx-auto mb-3 animate-spin" />
-          <p className="text-sm text-[#666]">Loading…</p>
+      <div className="pt-2">
+        <div className="app-card py-12 text-center">
+          <Loader2 className="w-8 h-8 text-[var(--ink-faint)] mx-auto mb-3 animate-spin" />
+          <p className="text-sm text-[var(--ink-muted)]">Loading…</p>
         </div>
       </div>
     );
@@ -198,10 +198,12 @@ export default function ProfilePage() {
 
   if (!me) {
     return (
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
-          <UserRound className="w-8 h-8 text-[#ccc] mx-auto mb-3" />
-          <p className="text-sm text-[#666]">You need to be logged in to view your profile.</p>
+      <div className="pt-2">
+        <div className="app-card py-12 text-center">
+          <span className="tile-icon mx-auto mb-3">
+            <UserRound className="w-5 h-5" />
+          </span>
+          <p className="text-sm font-bold text-[var(--ink)]">You need to be logged in to view your profile</p>
         </div>
       </div>
     );
@@ -226,17 +228,25 @@ export default function ProfilePage() {
   const pwMismatch = confirmPw.length > 0 && newPw !== confirmPw;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
+    <div className="pt-2 space-y-4">
+      <div>
+        <h1 className="greeting">Profile</h1>
+        <p className="greeting-sub">Your account and preferences.</p>
+      </div>
+
       {/* ── Identity banner ── */}
-      <div className="bg-[#006633] rounded-lg p-6 relative overflow-hidden">
+      <div
+        className="rounded-[var(--radius-xl)] p-5 relative overflow-hidden"
+        style={{ background: "linear-gradient(135deg, #0d6b3d 0%, #10804a 60%, #0f7a45 100%)" }}
+      >
         <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/5" aria-hidden />
         <div className="absolute -bottom-14 -left-6 w-36 h-36 rounded-full bg-white/5" aria-hidden />
         <div className="relative flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-2xl font-bold text-[#006633] shrink-0 shadow-sm">
+          <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-2xl font-bold text-[var(--primary-strong)] shrink-0 shadow-sm">
             {initial}
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-bold text-white truncate">{me.full_name || "Student"}</h1>
+            <h2 className="text-lg font-bold text-white truncate">{me.full_name || "Student"}</h2>
             <p className="text-sm text-white/70 truncate">{me.email}</p>
           </div>
         </div>
@@ -258,7 +268,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ── Settings list ── */}
-      <div className="bg-white border border-[#e0e0e0] rounded-lg divide-y divide-[#f0f0f0] overflow-hidden">
+      <div className="list-card divide-y divide-[#f0f0f0]">
         {/* Year row — expands to the picker */}
         <div>
           <button
@@ -400,7 +410,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ── More ── */}
-      <div className="bg-white border border-[#e0e0e0] rounded-lg divide-y divide-[#f0f0f0] overflow-hidden">
+      <div className="list-card divide-y divide-[#f0f0f0]">
         {/* Install as an app — hidden entirely once running standalone */}
         {typeof window !== "undefined" && !window.matchMedia("(display-mode: standalone)").matches && !installDone && (
           <button

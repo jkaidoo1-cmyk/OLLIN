@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { enableLocalMode, type LocalUser } from "@/lib/local";
-import { Logo } from "@/components/Logo";
+import { enableLocalMode } from "@/lib/local";
+import { BrandMark } from "@/components/Logo";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
@@ -68,147 +68,143 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-50 glass-strong">
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center">
-          <Link href="/" className="flex items-center gap-2.5 no-underline">
-            <Logo onDark />
-            <span className="text-base font-bold text-white">OLLIN</span>
+    <div className="min-h-screen">
+      <header className="app-topbar">
+        <div className="app-column h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2 no-underline">
+            <BrandMark />
+            <span className="brand-word">Ollin</span>
           </Link>
+          <Link href="/join" className="section-link">Join a quiz</Link>
         </div>
       </header>
 
-      {/* Content */}
-      <main className="flex-1 flex items-center justify-center px-4 py-16">
-        <div className="w-full max-w-sm">
-          <div className="glass-card p-6">
-            <div className="text-center mb-5">
-              <h1 className="text-base font-semibold text-[#1f2937] mb-1">Welcome back</h1>
-              <p className="text-xs text-[#64748b]">Sign in to your OLLIN account</p>
-            </div>
+      <main className="app-column py-8">
+        <h1 className="greeting">Welcome back</h1>
+        <p className="greeting-sub mb-6">Sign in to your Ollin account.</p>
 
-            {error && (
-              <div className="text-sm px-3 py-2 bg-red-50/80 border border-red-200/60 text-red-700 rounded-lg mb-4 backdrop-blur-sm">
-                {error}
-              </div>
-            )}
+        {error && (
+          <div className="text-sm px-4 py-3 bg-[#fcedec] border border-[#f3d2ce] text-[#a32a20] rounded-2xl mb-5">
+            {error}
+          </div>
+        )}
 
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-[#475569] mb-1">Email</label>
-                <input
-                  id="email-input"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="you@university.edu"
-                  className="glass-input"
-                />
-              </div>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label htmlFor="email-input" className="block text-xs font-semibold text-[var(--ink-soft)] mb-1.5">
+              Email
+            </label>
+            <input
+              id="email-input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="you@university.edu"
+              className="input-field"
+            />
+          </div>
 
-              <div>
-                <label className="block text-xs font-medium text-[#475569] mb-1">Password</label>
-                <div className="relative">
-                  <input
-                    id="password-input"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    placeholder="Your password"
-                    className="glass-input pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94a3b8] hover:text-[#475569] text-sm"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button id="login-submit-btn" type="submit" disabled={loading} className="glass-btn w-full">
-                {loading ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Logging in...</>
-                ) : "Log in"}
+          <div>
+            <label htmlFor="password-input" className="block text-xs font-semibold text-[var(--ink-soft)] mb-1.5">
+              Password
+            </label>
+            <div className="relative">
+              <input
+                id="password-input"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                placeholder="Your password"
+                className="input-field pr-11"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--ink-faint)] hover:text-[var(--ink-soft)]"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
-            </form>
-
-            {/* Forgot password — requests land in the admin's inbox */}
-            <div className="mt-4">
-              {!fpOpen ? (
-                <button
-                  type="button"
-                  onClick={() => { setFpOpen(true); setFpEmail(email); }}
-                  className="text-sm text-[#666] hover:text-[#006633] underline"
-                >
-                  Forgot password?
-                </button>
-              ) : fpDone ? (
-                <div className="glass-card border border-emerald-200/60 p-3 text-sm text-emerald-700">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
-                    <span className="font-medium">Request sent</span>
-                  </div>
-                  <p className="text-xs text-emerald-600/80 mt-1">Ask your admin for the new password.</p>
-                </div>
-              ) : (
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (fpSending) return;
-                    setFpSending(true);
-                    setFpError("");
-                    try {
-                      const res = await fetch("/api/auth/forgot-password", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ email: fpEmail }),
-                      });
-                      const data = await res.json().catch(() => ({}));
-                      if (!res.ok) setFpError(data.error || "Could not send. Try again.");
-                      else setFpDone(true);
-                    } catch {
-                      setFpError("Could not reach the server. Try again.");
-                    } finally {
-                      setFpSending(false);
-                    }
-                  }}
-                  className="bg-[#f8f8f8] border border-[#e0e0e0] rounded p-3"
-                >
-                  <p className="text-xs text-[#666] mb-2">
-                    Enter your account email — the admin will be notified to reset your password.
-                  </p>
-                  {fpError && <p className="text-xs text-red-600/90 mb-1">{fpError}</p>}
-                  <input
-                    type="email"
-                    value={fpEmail}
-                    onChange={(e) => setFpEmail(e.target.value)}
-                    required
-                    placeholder="you@university.edu"
-                    className="input-field mb-2"
-                  />
-                  <div className="flex gap-2">
-                    <button type="submit" disabled={fpSending} className="btn-primary flex-1 py-2 text-sm">
-                      {fpSending ? "Sending…" : "Send request"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setFpOpen(false); setFpDone(false); setFpError(""); }}
-                      className="text-xs text-[#475569] hover:text-[#1f2937] px-3"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              )}
             </div>
           </div>
 
+          <button id="login-submit-btn" type="submit" disabled={loading} className="btn-primary w-full">
+            {loading ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Logging in…</>
+            ) : "Log in"}
+          </button>
+        </form>
 
+        {/* Forgot password — requests land in the admin's inbox */}
+        <div className="mt-5">
+          {!fpOpen ? (
+            <button
+              type="button"
+              onClick={() => { setFpOpen(true); setFpEmail(email); }}
+              className="text-sm text-[var(--ink-muted)] hover:text-[var(--primary)]"
+            >
+              Forgot password?
+            </button>
+          ) : fpDone ? (
+            <div className="app-card border-[#cbe8d6] text-sm text-[#116b3c]">
+              <div className="flex items-center gap-2 mb-0.5">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
+                <span className="font-semibold">Request sent</span>
+              </div>
+              <p className="text-xs opacity-80 mt-1">Ask your admin for the new password.</p>
+            </div>
+          ) : (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (fpSending) return;
+                setFpSending(true);
+                setFpError("");
+                try {
+                  const res = await fetch("/api/auth/forgot-password", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: fpEmail }),
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (!res.ok) setFpError(data.error || "Could not send. Try again.");
+                  else setFpDone(true);
+                } catch {
+                  setFpError("Could not reach the server. Try again.");
+                } finally {
+                  setFpSending(false);
+                }
+              }}
+              className="app-card space-y-3"
+            >
+              <p className="text-xs text-[var(--ink-muted)]">
+                Enter your account email — the admin will be notified to reset your password.
+              </p>
+              {fpError && <p className="text-xs text-[#a32a20]">{fpError}</p>}
+              <input
+                type="email"
+                value={fpEmail}
+                onChange={(e) => setFpEmail(e.target.value)}
+                required
+                placeholder="you@university.edu"
+                className="input-field"
+              />
+              <div className="flex items-center gap-3">
+                <button type="submit" disabled={fpSending} className="btn-primary flex-1">
+                  {fpSending ? "Sending…" : "Send request"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setFpOpen(false); setFpDone(false); setFpError(""); }}
+                  className="text-sm text-[var(--ink-muted)] hover:text-[var(--ink)] px-2"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </main>
     </div>
