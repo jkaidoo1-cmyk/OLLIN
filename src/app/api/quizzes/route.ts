@@ -57,6 +57,27 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * Accept both spellings of a question payload. Clients and the DB schema use
+ * snake_case (`question_text`, `correct_answer`); older callers sent the
+ * camelCase shape. Reading only one spelling silently stored rows with no
+ * text and no answer key — i.e. a quiz that renders blank AND grades every
+ * answer wrong.
+ */
+function normalizeQuestionPayload(q: any, idx: number) {
+  return {
+    question_text: String(q.question_text ?? q.question ?? "").trim(),
+    question_type: (q.question_type ?? q.type ?? "multiple_choice") as Question["question_type"],
+    options: q.options ?? null,
+    correct_answer: q.correct_answer ?? q.correctAnswer ?? "",
+    explanation: q.explanation ?? null,
+    topic: q.topic ?? null,
+    difficulty: (q.difficulty || "medium") as "easy" | "medium" | "hard",
+    marks: q.marks ?? 1,
+    order_index: q.order_index ?? idx,
+  };
+}
+
 // POST — create a new quiz with questions.
 // In local mode, the client sends the fully-built quiz (`direct` mode) so it is
 // persisted to the server file and is visible from every browser / the admin panel.
@@ -69,7 +90,25 @@ export async function POST(request: NextRequest) {
     if (!body || typeof body !== "object") {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
-    const { title, description, time_limit_minutes, questions } = body;
+    const {
+      title,
+      description,
+      time_limit_minutes,
+      questions,
+      // Optional scheduling / policy fields. They used to be dropped whenever
+      // Supabase was unavailable, so a quiz could be published with no window
+      // and no attempt cap at all.
+      share_code,
+      max_attempts,
+      show_answers_after,
+      shuffle_questions,
+      shuffle_options,
+      passing_score,
+      starts_at,
+      ends_at,
+      course_id,
+      status,
+    } = body;
 
     if (!title || !title.trim()) {
       return NextResponse.json({ error: "Quiz title is required" }, { status: 400 });
@@ -186,13 +225,15 @@ export async function POST(request: NextRequest) {
             description: description || null,
             share_code: shareCode,
             time_limit_minutes: time_limit_minutes || null,
-            max_attempts: 1,
-            show_answers_after: "after_completion",
-            shuffle_questions: true,
-            shuffle_options: true,
-            passing_score: 60,
-            course_id: null,
-            status: "published",
+            max_attempts: max_attempts ?? 1,
+            show_answers_after: show_answers_after || "after_completion",
+            shuffle_questions: shuffle_questions ?? true,
+            shuffle_options: shuffle_options ?? true,
+            passing_score: passing_score ?? 60,
+            starts_at: starts_at ?? null,
+            ends_at: ends_at ?? null,
+            course_id: course_id ?? null,
+            status: status || "published",
           })
           .select()
           .single();
@@ -202,15 +243,7 @@ export async function POST(request: NextRequest) {
         if (questions && questions.length > 0) {
           const questionInserts = questions.map((q: any, idx: number) => ({
             quiz_id: quiz.id,
-            question_text: q.question,
-            question_type: q.type,
-            options: q.options || null,
-            correct_answer: q.correctAnswer,
-            explanation: q.explanation || null,
-            topic: q.topic || null,
-            difficulty: (q.difficulty || "medium") as "easy" | "medium" | "hard",
-            marks: 1,
-            order_index: idx,
+            ...normalizeQuestionPayload(q, idx),
           }));
           const { error: qError } = await admin.from("questions").insert(questionInserts);
           if (qError) throw qError;
@@ -229,17 +262,18 @@ export async function POST(request: NextRequest) {
         host_id: "bd4d7d39-3631-4b45-b86a-f18e2ff150f9",
         title: title.trim(),
         description: description || null,
-        share_code: "FALLBACK-" + Math.random().toString(36).slice(2, 8).toUpperCase(),
+        share_code:
+          share_code || "FALLBACK-" + Math.random().toString(36).slice(2, 8).toUpperCase(),
         time_limit_minutes: time_limit_minutes || null,
-        max_attempts: 1,
-        show_answers_after: "after_completion",
-        shuffle_questions: true,
-        shuffle_options: true,
-        passing_score: 60,
-        starts_at: null,
-        ends_at: null,
-        status: "published",
-        course_id: null,
+        max_attempts: max_attempts ?? 1,
+        show_answers_after: show_answers_after || "after_completion",
+        shuffle_questions: shuffle_questions ?? true,
+        shuffle_options: shuffle_options ?? true,
+        passing_score: passing_score ?? 60,
+        starts_at: starts_at ?? null,
+        ends_at: ends_at ?? null,
+        status: status || "published",
+        course_id: course_id ?? null,
         material_id: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -249,18 +283,10 @@ export async function POST(request: NextRequest) {
 
       if (questions && questions.length > 0) {
         const serverQuestions: Question[] = questions.map((q: any, idx: number) => ({
-          id: `q-${Date.now()}-${idx}`,
+          id: q.id || `q-${Date.now()}-${idx}`,
           quiz_id: quiz.id,
-          question_text: q.question,
-          question_type: q.type as Question["question_type"],
-          options: q.options || null,
-          correct_answer: q.correctAnswer,
-          explanation: q.explanation || null,
-          topic: q.topic || null,
-          difficulty: (q.difficulty || "medium") as "easy" | "medium" | "hard",
-          marks: 1,
-          order_index: idx,
-          created_at: new Date().toISOString(),
+          ...normalizeQuestionPayload(q, idx),
+          created_at: q.created_at || new Date().toISOString(),
         }));
         const allQuestions = readServerQuestions();
         allQuestions.push(...serverQuestions);

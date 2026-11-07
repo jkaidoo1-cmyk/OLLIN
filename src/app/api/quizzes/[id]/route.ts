@@ -166,7 +166,10 @@ export async function DELETE(
   try {
     const local = request.headers.get("x-local-mode") === "true";
     const { id } = await params;
-    const quiz = await getQuizById(id, local);
+    // A quiz created while Supabase was unreachable lives only in the file
+    // store, so the non-local path must fall back to it — otherwise the quiz
+    // is listed but can never be deleted.
+    const quiz = (await getQuizById(id, local)) || (local ? null : await getQuizById(id, true));
     if (!quiz) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
     }
@@ -174,6 +177,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Not allowed" }, { status: 403 });
     }
     await deleteQuiz(id, local);
+    if (!local) await deleteQuiz(id, true);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(
