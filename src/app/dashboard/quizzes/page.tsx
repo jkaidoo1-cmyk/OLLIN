@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizzes } from "@/lib/local";
 import { SkeletonText, SkeletonList } from "@/components/Skeleton";
+import { QuizViewSwitcher } from "@/components/QuizViewSwitcher";
 import { warmResource } from "@/lib/prefetch";
 import { Quiz, Course } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
@@ -94,6 +95,9 @@ export default function MyQuizzesPage() {
 
   return (
     <div className="pt-2">
+      <div className="flex justify-end mb-2">
+        <QuizViewSwitcher />
+      </div>
       <div className="flex items-start justify-between gap-3 mb-5">
         <div>
           <h1 className="greeting">My quizzes</h1>

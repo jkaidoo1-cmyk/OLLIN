@@ -208,7 +208,22 @@ export default function CreateQuizPage() {
         reader.readAsDataURL(file);
       });
       setMaterialFileBase64(base64);
-      setMaterialFileType(file.type);
+      // Windows and some browsers report an empty MIME type for PDFs/DOCX.
+      // Fall back to the extension so the server extracts the real file
+      // instead of receiving "[FILE:name]" as the material.
+      const ext = file.name.split(".").pop()?.toLowerCase() || "";
+      const byExtension: Record<string, string> = {
+        pdf: "application/pdf",
+        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        doc: "application/msword",
+        txt: "text/plain",
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        webp: "image/webp",
+        heic: "image/heic",
+      };
+      setMaterialFileType(file.type || byExtension[ext] || "");
       setMaterialText(`[FILE:${file.name}]`);
     } catch (err) {
       setExtractWarning(err instanceof Error ? err.message : "Failed to read file");
@@ -242,14 +257,29 @@ export default function CreateQuizPage() {
         body.material_text = materialText;
       }
 
-      const res = await fetch("/api/generate-questions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      // Hard stop so "Generating questions…" can never spin forever when the
+      // provider or the network stalls.
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120_000);
+      let res: Response;
+      try {
+        res = await fetch("/api/generate-questions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } catch (fetchErr) {
+        if (fetchErr instanceof DOMException && fetchErr.name === "AbortError") {
+          throw new Error("Question generation timed out. Please try again.");
+        }
+        throw fetchErr;
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to generate questions");
       }
 
@@ -635,7 +665,7 @@ export default function CreateQuizPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.docx,.doc,.txt"
+                accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg,.webp,.heic"
                 onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
                 className="hidden"
               />

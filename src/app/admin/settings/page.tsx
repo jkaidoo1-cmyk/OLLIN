@@ -12,7 +12,7 @@ interface ApiKeyEntry {
   label: string;
   provider: "groq" | "gemini";
   enabled: boolean;
-  source: "env" | "file";
+  source: "env" | "file" | "supabase";
   added_at: string | null;
   last_used_at: string | null;
   total_requests: number;
@@ -39,7 +39,7 @@ export default function AdminSettingsPage() {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [source, setSource] = useState<"env" | "file" | "browser">("file");
+  const [source, setSource] = useState<"env" | "file" | "supabase">("file");
   const [hint, setHint] = useState("");
 
   // Keys are stored server-side (Supabase or config file) — never in the browser.
@@ -78,7 +78,7 @@ export default function AdminSettingsPage() {
       const data = await res.json();
       const serverKeys = data.api_keys || [];
       setKeys(serverKeys);
-      setSource(serverKeys.length > 0 ? (data.source === "env" ? "env" : "file") : data.source);
+      setSource(data.source === "env" || data.source === "supabase" ? data.source : "file");
       setHint(data.hint || "");
     } catch { /* ignore */ }
   };
@@ -260,7 +260,7 @@ export default function AdminSettingsPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-1.5">
-                    {k.source === "file" && (
+                    {k.source !== "env" && (
                       <>
                         <button
                           onClick={() => handleToggleKey(k.id, !k.enabled)}

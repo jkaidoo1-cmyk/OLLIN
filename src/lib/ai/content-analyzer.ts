@@ -69,9 +69,12 @@ export interface AIOptions {
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "openai/gpt-oss-20b";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
-const GEMINI_MODEL = "gemini-3.7-flash";
-// Alternate Gemini model tried when the primary is overloaded (503).
-const GEMINI_FALLBACK_MODEL = "gemini-flash-latest";
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
+// Fallbacks walked in order when the primary model is overloaded (503),
+// throttled (429) or retired (404). Google rotates model availability often.
+const GEMINI_FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-flash-latest"];
+// A stalled provider must not hang the request (and the UI spinner) forever.
+const AI_REQUEST_TIMEOUT_MS = 75_000;
 
 // ─── Token Estimation ───────────────────────────────────
 
@@ -211,6 +214,20 @@ export async function analyzeAndGenerate(
 
   if (lastError) {
     const msg = lastError.message.toLowerCase();
+    // Network/timeout failures are infrastructure problems, not bad material —
+    // say so plainly instead of a generic "generation failed".
+    if (msg.includes("timed out") || msg.includes("aborted") || msg.includes("timeout")) {
+      throw new Error("The AI service took too long to respond. Please try again.");
+    }
+    if (
+      msg.includes("fetch failed") || msg.includes("econn") ||
+      msg.includes("enotfound") || msg.includes("network")
+    ) {
+      throw new Error("Could not reach the AI service from the server. Please try again in a moment.");
+    }
+    if (msg.includes("503") || msg.includes("unavailable") || msg.includes("high demand") || msg.includes("overloaded")) {
+      throw new Error("The AI service is busy right now. Please try again in a minute.");
+    }
     if (msg.includes("rate") || msg.includes("429") || msg.includes("limit")) {
       throw new Error("Too many requests. Please wait a moment and try again.");
     }
@@ -284,6 +301,20 @@ export async function extractFromExam(
 
   if (lastError) {
     const msg = lastError.message.toLowerCase();
+    // Network/timeout failures are infrastructure problems, not bad material —
+    // say so plainly instead of a generic "generation failed".
+    if (msg.includes("timed out") || msg.includes("aborted") || msg.includes("timeout")) {
+      throw new Error("The AI service took too long to respond. Please try again.");
+    }
+    if (
+      msg.includes("fetch failed") || msg.includes("econn") ||
+      msg.includes("enotfound") || msg.includes("network")
+    ) {
+      throw new Error("Could not reach the AI service from the server. Please try again in a moment.");
+    }
+    if (msg.includes("503") || msg.includes("unavailable") || msg.includes("high demand") || msg.includes("overloaded")) {
+      throw new Error("The AI service is busy right now. Please try again in a minute.");
+    }
     if (msg.includes("rate") || msg.includes("429") || msg.includes("limit")) {
       throw new Error("Too many requests. Please wait a moment and try again.");
     }
@@ -318,6 +349,7 @@ async function callGroqAPI(
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
+    signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
     body: JSON.stringify({
       model: GROQ_MODEL,
       messages: [
@@ -363,76 +395,67 @@ async function callGeminiAPI(
     ? buildExamExtractionPrompt(materialText, fileName, customInstructions)
     : buildDeepAnalysisAndQuestionPrompt(materialText, questionCount, questionTypes, fileName, customInstructions);
 
-  // Gemini uses OpenAI-compatible endpoint — exam papers need more room for
-  // the full question list, so allow a larger budget in extraction mode.
-  // Small counts need a generous floor: the analysis JSON wrapper alone is
-  // ~700 tokens, and truncation mid-string breaks JSON parsing entirely.
-  const maxTok2 = mode === "exam" ? 8192 : Math.min(4096, Math.max(1800, 256 + questionCount * 300));
-  const response = await fetch(GEMINI_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: GEMINI_MODEL,
-      messages: [
-        { role: "system", content: "Output valid JSON only. No markdown." },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.3,
-      max_tokens: maxTok2,
-    }),
-  });
+  // Exam papers need room for the full question list; small counts still need
+  // a generous floor because the JSON wrapper alone is several hundred tokens.
+  const maxTok = mode === "exam" ? 8192 : Math.min(4096, Math.max(1800, 256 + questionCount * 300));
 
-  if (!response.ok) {
-    // 503 (model overloaded) and 429 (primary model quota) are model-specific —
-    // retry once on the fallback model, which has its own quota bucket, so
-    // exam extraction isn't blocked by one busy/exhausted model.
-    if (response.status === 503 || response.status === 429) {
-      const retry = await fetch(GEMINI_API_URL, {
+  // Gemini regularly returns 503 “high demand” (and retires model names), so
+  // walk a chain of model names and use the first one that answers. This is
+  // what keeps generation working when a single model is unavailable.
+  const models = [...new Set([GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS])];
+  let lastError: Error | null = null;
+
+  for (const model of models) {
+    try {
+      const response = await fetch(GEMINI_API_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
+        signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
         body: JSON.stringify({
-          model: GEMINI_FALLBACK_MODEL,
+          model,
           messages: [
             { role: "system", content: "Output valid JSON only. No markdown." },
             { role: "user", content: prompt },
           ],
           temperature: 0.3,
-          max_tokens: maxTok2,
+          max_tokens: maxTok,
         }),
       });
-      if (!retry.ok) {
-        const errText = await retry.text();
-        throw new Error(`API Error (${retry.status}): ${errText}`);
+
+      if (!response.ok) {
+        const errText = await response.text();
+        const error = Object.assign(
+          new Error(`API Error (${response.status}) ${model}: ${errText}`),
+          { fatal: ![404, 429, 503].includes(response.status) }
+        );
+        lastError = error;
+        if (error.fatal) throw error;   // bad key / bad request — stop here
+        continue;                        // busy or retired model — try the next
       }
-      const rdata = await retry.json();
-      const rtext = rdata.choices?.[0]?.message?.content;
-      if (!rtext) throw new Error("Empty response from service.");
-      const rparsed = parseAIJSONResponse(rtext);
-      (rparsed as { __usage?: { inputTokens: number; outputTokens: number } }).__usage = {
-        inputTokens: rdata.usage?.prompt_tokens || 0,
-        outputTokens: rdata.usage?.completion_tokens || 0,
+
+      const data = await response.json();
+      const textContent = data.choices?.[0]?.message?.content;
+      if (!textContent) throw new Error("Empty response from service.");
+
+      const parsed = parseAIJSONResponse(textContent);
+      (parsed as { __usage?: { inputTokens: number; outputTokens: number } }).__usage = {
+        inputTokens: data.usage?.prompt_tokens || 0,
+        outputTokens: data.usage?.completion_tokens || 0,
       };
-      return rparsed;
+      return parsed;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      if ((error as { fatal?: boolean }).fatal) throw error;
+      lastError = error;
+      // Timeout / connection reset on one model — still worth the next one.
+      if (models.indexOf(model) === models.length - 1) throw error;
     }
-    const errText = await response.text();
-    throw new Error(`API Error (${response.status}): ${errText}`);
   }
 
-  const data = await response.json();
-  const textContent = data.choices?.[0]?.message?.content;    if (!textContent) throw new Error("Empty response from service.");
-
-  const parsed = parseAIJSONResponse(textContent);
-  (parsed as { __usage?: { inputTokens: number; outputTokens: number } }).__usage = {
-    inputTokens: data.usage?.prompt_tokens || 0,
-    outputTokens: data.usage?.completion_tokens || 0,
-  };
-  return parsed;
+  throw lastError || new Error("Empty response from service.");
 }
 
 // ─── JSON Response Parser ─────────────────────────────

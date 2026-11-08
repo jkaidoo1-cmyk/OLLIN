@@ -18,6 +18,13 @@ import { createAdminClient } from "@/lib/supabase/server";
 
 const NOTIFS_PATH = () => join(process.cwd(), ".ollin-notifications.json");
 
+// Built-in and imported accounts keep string ids ("admin-001", "demo-001")
+// while the notifications table keys on a uuid. Querying Postgres with the
+// former raises "invalid input syntax for type uuid", which surfaced as a 500
+// on the bell for exactly those accounts.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (value: string) => UUID_RE.test(value);
+
 interface StoredNotification {
   id: string;
   user_id: string;
@@ -72,7 +79,7 @@ export async function GET(request: NextRequest) {
   }
   try {
     const admin = await createAdminClient();
-    if (admin) {
+    if (admin && isUuid(session.id)) {
       const { data, error } = await admin
         .from("notifications")
         .select("*")
@@ -119,12 +126,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
     }
 
-    const ok = await notifySupabase(userIds, { title, message, type });
-    if (ok) return NextResponse.json({ message: "Notification sent" });
+    // Recipients with a uuid live in Supabase; string-id accounts have no row
+    // there, so they are delivered to the file store instead.
+    const uuidIds = userIds.filter(isUuid);
+    const fileIds = userIds.filter((id) => !isUuid(id));
+    const ok = uuidIds.length ? await notifySupabase(uuidIds, { title, message, type }) : false;
+    if (ok && fileIds.length === 0) return NextResponse.json({ message: "Notification sent" });
 
-    // File mode
+    // File mode (also receives the string-id recipients of a mixed fan-out)
     const notifs = readNotifsFile();
-    for (const user_id of userIds) {
+    for (const user_id of ok ? fileIds : userIds) {
       notifs.unshift({
         id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         user_id,
@@ -156,7 +167,7 @@ export async function PATCH(request: NextRequest) {
     const id = body.id ? String(body.id) : null;
 
     const admin = await createAdminClient();
-    if (admin) {
+    if (admin && isUuid(session.id)) {
       let query = admin.from("notifications").update({ read: true }).eq("user_id", session.id);
       if (id) query = query.eq("id", id);
       const { error } = await query;
@@ -190,7 +201,7 @@ export async function DELETE(request: NextRequest) {
     const all = searchParams.get("all") === "true";
 
     const admin = await createAdminClient();
-    if (admin) {
+    if (admin && isUuid(session.id)) {
       let query = admin.from("notifications").delete().eq("user_id", session.id);
       if (!all && id) query = query.eq("id", id);
       const { error } = await query;

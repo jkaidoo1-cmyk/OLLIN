@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getLocalUser } from "@/lib/local";
 import { Quiz, Course } from "@/lib/types";
 import { SkeletonList } from "@/components/Skeleton";
+import { QuizViewSwitcher } from "@/components/QuizViewSwitcher";
 import { warmResource } from "@/lib/prefetch";
 import { BookOpen, Clock, Play, Search, Share2, Check } from "lucide-react";
 
@@ -180,6 +181,9 @@ export default function TestQuizzesPage() {
 
   return (
     <div className="pt-2">
+      <div className="flex justify-end mb-2">
+        <QuizViewSwitcher />
+      </div>
       <div className="mb-5">
         <h1 className="greeting">Test quizzes</h1>
         <p className="greeting-sub">

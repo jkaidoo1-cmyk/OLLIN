@@ -7,6 +7,7 @@ import { ArrowLeft, Loader2, User, Ticket } from "lucide-react";
 import { BrandMark } from "@/components/Logo";
 import { isLocalMode, getLocalUser } from "@/lib/local";
 import { createClient } from "@/lib/supabase/client";
+import { BottomNav } from "@/components/BottomNav";
 
 export default function JoinQuizPage() {
   const [code, setCode] = useState("");
@@ -68,6 +69,76 @@ export default function JoinQuizPage() {
 
   const isValid = code.length === 7;
 
+  // When logged in, wrap the join content in the logged-in shell so the
+  // bottom nav persists while the user is on this page. Guests keep their
+  // own stand-alone header and no bottom nav.
+  const showShell = isLoggedIn;
+
+  if (showShell) {
+    return (
+      <div className="min-h-screen">
+        <header className="app-topbar">
+          <div className="app-column h-16 flex items-center justify-between">
+            <Link href="/dashboard" className="flex items-center gap-2 no-underline">
+              <BrandMark />
+              <span className="brand-word">Ollin</span>
+            </Link>
+          </div>
+        </header>
+
+        <main className="app-column pt-2 pb-32">
+          <div className="mb-6">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-1.5 text-sm text-[var(--ink-muted)] hover:text-[var(--ink)] no-underline"
+            >
+              <ArrowLeft className="w-4 h-4" /> Back
+            </Link>
+          </div>
+
+          <h1 className="greeting">Join a quiz</h1>
+          <p className="greeting-sub mb-6">Enter the code shared by your classmates.</p>
+
+          <form onSubmit={handleJoin} className="app-card space-y-5">
+            <div>
+              <label htmlFor="quiz-code-input" className="block text-xs font-semibold text-[var(--ink-soft)] mb-1.5">
+                Quiz code
+              </label>
+              <div className="relative">
+                <Ticket className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)] pointer-events-none" />
+                <input
+                  id="quiz-code-input"
+                  type="text"
+                  value={code}
+                  onChange={(e) => handleCodeInput(e.target.value)}
+                  required
+                  placeholder="9RX-DHJ"
+                  maxLength={7}
+                  className="input-field pl-10 text-center text-xl font-bold tracking-[0.22em] uppercase"
+                />
+              </div>
+            </div>
+
+            <button
+              id="join-quiz-btn"
+              type="submit"
+              disabled={loading || !isValid}
+              className="btn-primary w-full"
+            >
+              {loading ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Joining...</>
+              ) : (
+                "Join quiz"
+              )}
+            </button>
+          </form>
+        </main>
+
+        <BottomNav />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen">
       <header className="app-topbar">
@@ -76,55 +147,43 @@ export default function JoinQuizPage() {
             <BrandMark />
             <span className="brand-word">Ollin</span>
           </Link>
-          {isLoggedIn ? (
-            <Link href="/dashboard" className="section-link">Home</Link>
-          ) : (
-            <Link href="/login" className="section-link">Log in</Link>
-          )}
+          <Link href="/login" className="section-link">
+            Log in
+          </Link>
         </div>
       </header>
 
       <main className="app-column py-6">
         <Link
-          href={isLoggedIn ? "/dashboard" : "/"}
+          href="/"
           className="inline-flex items-center gap-1.5 text-sm text-[var(--ink-muted)] hover:text-[var(--ink)] mb-6 no-underline"
         >
           <ArrowLeft className="w-4 h-4" /> Back
         </Link>
 
         <h1 className="greeting">Join a quiz</h1>
-        <p className="greeting-sub mb-6">
-          {isLoggedIn
-            ? "Enter the code shared by your classmates."
-            : "Enter the quiz code — no account needed."}
-        </p>
+        <p className="greeting-sub mb-6">Enter the quiz code — no account needed.</p>
 
         <form onSubmit={handleJoin} className="app-card space-y-5">
-          {!isLoggedIn ? (
-            <div>
-              <label htmlFor="guest-name" className="block text-xs font-semibold text-[var(--ink-soft)] mb-1.5">
-                Your name
-              </label>
-              <div className="relative">
-                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)] pointer-events-none" />
-                <input
-                  id="guest-name"
-                  type="text"
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  placeholder="Enter your name"
-                  className="input-field pl-10"
-                />
-              </div>
-              <p className="text-[11px] text-[var(--ink-faint)] mt-1.5">
-                Your name is only shown for this quiz
-              </p>
+          <div>
+            <label htmlFor="guest-name" className="block text-xs font-semibold text-[var(--ink-soft)] mb-1.5">
+              Your name
+            </label>
+            <div className="relative">
+              <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)] pointer-events-none" />
+              <input
+                id="guest-name"
+                type="text"
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
+                placeholder="Enter your name"
+                className="input-field pl-10"
+              />
             </div>
-          ) : (
-            <p className="text-xs text-[var(--ink-muted)]">
-              Joining as <span className="font-semibold text-[var(--ink)]">{userName}</span>
+            <p className="text-[11px] text-[var(--ink-faint)] mt-1.5">
+              Your name is only shown for this quiz
             </p>
-          )}
+          </div>
 
           <div>
             <label htmlFor="quiz-code-input" className="block text-xs font-semibold text-[var(--ink-soft)] mb-1.5">
@@ -152,16 +211,19 @@ export default function JoinQuizPage() {
             className="btn-primary w-full"
           >
             {loading ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Joining…</>
-            ) : "Join quiz"}
+              <><Loader2 className="w-4 h-4 animate-spin" /> Joining...</>
+            ) : (
+              "Join quiz"
+            )}
           </button>
         </form>
 
-        {!isLoggedIn && (
-          <p className="text-center text-xs text-[var(--ink-faint)] mt-5">
-            <Link href="/login" className="text-[var(--primary)] font-semibold">Log in</Link> to create quizzes and track your results
-          </p>
-        )}
+        <p className="text-center text-xs text-[var(--ink-faint)] mt-5">
+          <Link href="/login" className="text-[var(--primary)] font-semibold">
+            Log in
+          </Link>{" "}
+          to create quizzes and track your results
+        </p>
       </main>
     </div>
   );

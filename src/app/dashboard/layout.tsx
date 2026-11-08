@@ -5,21 +5,19 @@ import { BrandMark } from "@/components/Logo";
 import { BottomNav } from "@/components/BottomNav";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { isLocalMode, getLocalUser, disableLocalMode, getUnreadCount, getLocalQuizzes } from "@/lib/local";
+import { isLocalMode, getLocalUser, getUnreadCount, getLocalQuizzes } from "@/lib/local";
 import { isAdmin } from "@/lib/admin";
-import { useEffect, useState, useRef } from "react";
-import { Bell, UserRound } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Bell } from "lucide-react";
 import { warmAll } from "@/lib/prefetch";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<{ email: string; name: string } | null>(null);
-  const [profileOpen, setProfileOpen] = useState(false);
   const [local, setLocal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const supabase = createClient();
-  const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // The quiz edit page is the one dashboard route admins may use —
@@ -128,28 +126,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ]);
   }, []);
 
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
-        setProfileOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  const handleLogout = async () => {
-    if (local || isLocalMode()) {
-      // Clear the httpOnly session cookie server-side too.
-      try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
-      disableLocalMode();
-      router.push("/");
-      return;
-    }
-    if (supabase) await supabase.auth.signOut();
-    router.push("/");
-  };
-
   const userInitial = user?.name?.charAt(0).toUpperCase() || "?";
 
   return (
@@ -181,54 +157,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
 
             {user && (
-              <div ref={profileRef} className="relative">
-                <button
-                  onClick={() => setProfileOpen(!profileOpen)}
-                  className="avatar-btn"
-                  aria-label="Account menu"
-                >
-                  {userInitial}
-                </button>
-
-                {profileOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-60 bg-white border border-[var(--card-border)] rounded-2xl shadow-lg py-1.5 z-50 overflow-hidden">
-                    <div className="px-4 py-3 border-b border-[var(--border)]">
-                      <p className="text-sm font-semibold text-[var(--ink)] truncate">{user.name}</p>
-                      <p className="text-[11px] text-[var(--ink-faint)] truncate">{user.email}</p>
-                    </div>
-                    {[
-                      { href: "/dashboard", label: "Home" },
-                      { href: "/dashboard/quizzes", label: "My quizzes" },
-                      { href: "/dashboard/test-quizzes", label: "Test quizzes" },
-                      { href: "/dashboard/attempts", label: "My attempts" },
-                    ].map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        replace
-                        onClick={() => setProfileOpen(false)}
-                        className="block px-4 py-2 text-sm text-[var(--ink-soft)] hover:bg-[var(--surface-2)] no-underline"
-                      >
-                        {item.label}
-                      </Link>
-                    ))}
-                    <Link
-                      href="/dashboard/profile"
-                      onClick={() => setProfileOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--ink-soft)] hover:bg-[var(--surface-2)] no-underline"
-                    >
-                      <UserRound className="w-4 h-4 text-[var(--primary)]" />
-                      My profile
-                    </Link>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full text-left px-4 py-2 text-sm text-[#a32a20] hover:bg-[#fcedec]"
-                    >
-                      Log out
-                    </button>
-                  </div>
-                )}
-              </div>
+              <span
+                className="avatar-btn"
+                title={`${user.name} · ${user.email}`}
+                aria-label={`Signed in as ${user.name}`}
+              >
+                {userInitial}
+              </span>
             )}
           </div>
         </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Award, ChevronDown, ChevronRight, Clock, CheckCircle2, XCircle, History } from "lucide-react";
 import { SkeletonPanel } from "@/components/Skeleton";
+import { QuizViewSwitcher } from "@/components/QuizViewSwitcher";
 import { useResource } from "@/lib/prefetch";
 
 interface AttemptRow {
@@ -114,6 +115,9 @@ export default function MyAttemptsPage() {
 
   return (
     <div className="pt-2">
+      <div className="flex justify-end mb-2">
+        <QuizViewSwitcher />
+      </div>
       <div className="mb-5">
         <h1 className="greeting">My attempts</h1>
         <p className="greeting-sub">

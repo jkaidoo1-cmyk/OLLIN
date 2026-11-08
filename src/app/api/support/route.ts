@@ -30,7 +30,10 @@ function readFileAdminIds(): string[] {
 }
 
 async function resolveAdminIds(): Promise<string[]> {
-  // Supabase mode first: real admin profiles
+  // Union of both admin populations: Supabase profiles (uuid) and the local
+  // account file ("admin-001"). Returning only the Supabase list meant a
+  // support message never reached a local-mode admin.
+  const ids = new Set<string>();
   try {
     const admin = await createAdminClient();
     if (admin) {
@@ -38,14 +41,22 @@ async function resolveAdminIds(): Promise<string[]> {
         .from("profiles")
         .select("id")
         .eq("role", "admin");
-      if (data && data.length) return data.map((p: { id: string }) => p.id);
+      for (const p of data || []) ids.add((p as { id: string }).id);
     }
-  } catch { /* fall through to file mode */ }
-  return readFileAdminIds();
+  } catch { /* file list below still applies */ }
+  for (const id of readFileAdminIds()) ids.add(id);
+  return [...ids];
 }
 
 const clamp = (v: unknown, max: number) =>
   String(v ?? "").trim().slice(0, max);
+
+// notifications.sender_id is a uuid referencing profiles; local-mode accounts
+// ("demo-001") have string ids. Sending one made the whole insert fail, which
+// silently pushed the message into a file store no Supabase admin ever reads.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const asUuidOrNull = (value: string | undefined | null) =>
+  value && UUID_RE.test(value) ? value : null;
 
 export async function POST(request: NextRequest) {
   const throttle = checkThrottle(request, "support", 5, 10 * 60_000);
@@ -95,22 +106,34 @@ export async function POST(request: NextRequest) {
 
     const adminIds = await resolveAdminIds();
 
+    // Two admin populations exist: Supabase profiles (uuid ids, read the table)
+    // and local accounts like "admin-001" (read the file store). A message has
+    // to reach both, otherwise it is invisible to whichever admins use the
+    // other store — which is exactly what happened when only Supabase was
+    // written and the signed-in admin was a local account.
+    const uuidAdminIds = adminIds.filter((id) => UUID_RE.test(id));
+    let fileAdminIds = adminIds.filter((id) => !UUID_RE.test(id));
+    let supabaseDelivered = false;
+
     // Supabase first (persistent across deploys)
     try {
       const supabaseAdmin = await createAdminClient();
-      if (supabaseAdmin) {
+      if (supabaseAdmin && uuidAdminIds.length) {
         const { error } = await supabaseAdmin.from("notifications").insert(
-          adminIds.map((user_id) => ({
+          uuidAdminIds.map((user_id) => ({
             user_id, title, message: full, type: "system",
             // Sender identity — routes the admin's reply back in-app.
-            sender_id: session?.id || null,
+            sender_id: asUuidOrNull(session?.id),
             sender_email: session?.email || (contact && contact.includes("@") ? contact : null),
             sender_name: name,
           }))
         );
-        if (!error) return NextResponse.json({ ok: true });
+        supabaseDelivered = !error;
       }
     } catch { /* fall through to file mode */ }
+
+    // No Supabase delivery (unconfigured or failed): every admin reads the file.
+    if (!supabaseDelivered) fileAdminIds = adminIds;
 
     // File mode fallback
     const notifsPath = join(process.cwd(), ".ollin-notifications.json");
@@ -126,7 +149,7 @@ export async function POST(request: NextRequest) {
     const senderMeta: Record<string, string | null> = session
       ? { sender_id: session.id, sender_email: session.email, sender_name: name }
       : { sender_id: null, sender_email: contact && contact.includes("@") ? contact : null, sender_name: name };
-    for (const user_id of adminIds) {
+    for (const user_id of fileAdminIds) {
       notifs.unshift({
         id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         user_id,

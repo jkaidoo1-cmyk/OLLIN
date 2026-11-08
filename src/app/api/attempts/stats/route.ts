@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  readServerAttempts,
-  readServerQuestions,
-  readServerQuizzes,
-} from "@/lib/data";
-import { serverGetLocalQuizById, serverGetLocalQuestions } from "@/lib/server-local";
+import { getQuizAttempts, getQuizById, getQuizQuestions } from "@/lib/data";
 import { getSessionUser } from "@/lib/session";
 
 /**
@@ -19,10 +14,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "quiz_id is required" }, { status: 400 });
     }
 
-    const quiz =
-      readServerQuizzes().find((q) => q.id === quizId) ||
-      serverGetLocalQuizById(quizId) ||
-      null;
+    // Supabase or file, depending on the caller — the old local-file-only
+    // lookup returned 404 for every quiz stored in Supabase.
+    const local = request.headers.get("x-local-mode") === "true";
+    const quiz = (await getQuizById(quizId, local)) || null;
     if (!quiz) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
     }
@@ -36,7 +31,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const allAttempts = readServerAttempts() as any[];
+    const allAttempts = (await getQuizAttempts(quizId, local)) as any[];
     const quizAttempts = allAttempts.filter(
       (a) => a.quiz_id === quizId && a.status !== "in_progress"
     );
@@ -69,9 +64,7 @@ export async function GET(request: NextRequest) {
     // Per-question list. Attempts currently store only totals, not per-question
     // answers, so correct_rate is null until that data exists — the UI hides
     // the bar rather than showing a fake 0%.
-    const questions =
-      readServerQuestions().filter((q) => q.quiz_id === quizId) ||
-      serverGetLocalQuestions(quizId);
+    const questions = await getQuizQuestions(quizId, local);
     const per_question = questions.map((q, i) => ({
       index: i + 1,
       question: q.question_text,

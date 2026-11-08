@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { BrandMark } from "@/components/Logo";
+import { BottomNav } from "@/components/BottomNav";
 import { ArrowLeft, Check, LifeBuoy, Loader2, MessageCircle, Send, UserRound } from "lucide-react";
 
 /**
@@ -80,9 +82,23 @@ export default function SupportPage() {
 
   const canSend = form.message.trim().length >= 2 && !sending;
 
+  // Signed-in visitors keep the full app shell (top bar + bottom nav) so the
+  // help desk stays part of the dashboard; guests keep the plain page.
+  const inShell = !!me;
+
   return (
     <div className="min-h-screen bg-[var(--background)]">
-      <div className="app-column py-6">
+      {inShell && (
+        <header className="app-topbar">
+          <div className="app-column h-16 flex items-center justify-between">
+            <Link href="/dashboard" className="flex items-center gap-2 no-underline">
+              <BrandMark />
+              <span className="brand-word">Ollin</span>
+            </Link>
+          </div>
+        </header>
+      )}
+      <div className={`app-column py-6${inShell ? " pb-32" : ""}`}>
         <Link href={back.href} className="inline-flex items-center gap-1.5 text-sm text-[var(--ink-muted)] hover:text-[var(--ink)] mb-6 no-underline">
           <ArrowLeft className="w-4 h-4" /> {back.label}
         </Link>
@@ -227,6 +243,7 @@ export default function SupportPage() {
           </form>
         )}
       </div>
+      {inShell && <BottomNav />}
     </div>
   );
 }
