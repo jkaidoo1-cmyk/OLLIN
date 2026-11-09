@@ -17,30 +17,4 @@ export function BrandMark({ className = "", onDark = false }: { className?: stri
         <circle cx="12" cy="12" r="2" fill={onDark ? "#7FE0A6" : "#3CC46F"}/>
       </svg>
     </span>
-  );
-}
-
-export function Logo({ className = "w-[35px] h-[35px]", onDark = false }: { className?: string; onDark?: boolean }) {
-  if (onDark) {
-    return (
-      <Image
-        src="/logo.png"
-        alt="OLLIN logo"
-        width={50}
-        height={50}
-        className="w-[50px] h-[50px] object-contain"
-        draggable={false}
-      />
-    );
-  }
-  return (
-    <Image
-      src="/logo-ink.png"
-      alt="OLLIN logo"
-      width={50}
-      height={50}
-      className={`${className} object-contain`}
-      draggable={false}
-    />
-  );
-}
+  );}
