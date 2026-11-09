@@ -191,16 +191,14 @@ a:hover { text-decoration: none; }
   justify-content: center;
   width: 38px;
   height: 38px;
-  border-radius: 12px;
-  background: var(--primary-strong);
-  color: #fff;
+  color: var(--primary-strong);
   flex-shrink: 0;
 }
 .brand-word {
   font-size: 1.15rem;
   font-weight: 800;
   letter-spacing: -0.035em;
-  color: var(--ink);
+  color: var(--primary-strong);
 }
 
 .icon-btn {

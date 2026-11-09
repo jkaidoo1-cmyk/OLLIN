@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 112 112">
+  <mask id="ollin-notch">
+    <rect width="112" height="112" fill="#fff"/>
+    <rect x="-21" y="-10" width="42" height="20" transform="translate(32.7 79.3) rotate(135)" fill="#000"/>
+  </mask>
+  <circle cx="56" cy="56" r="38" fill="none" stroke="#1D4A2E" stroke-width="24" mask="url(#ollin-notch)"/>
+  <circle cx="56" cy="56" r="10.5" fill="#3CC46F"/>
+</svg>
