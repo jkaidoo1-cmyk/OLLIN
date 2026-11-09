@@ -128,13 +128,14 @@ ${textBlock}
 Rules:
 - Copy questions exactly as written. Do not rewrite or invent questions.
 - For multiple choice: options must list ALL choices exactly as they appear (no letters like A, B, C inside the text).
-- correctAnswer is the exact text of the correct option (multiple choice), "True"/"False", or the model answer.
+- correctAnswer is the ZERO-BASED INDEX of the correct option (multiple choice), "true"/"false" (true/false).
+- answerKey: the EXACT TEXT of the correct option — this is the ground truth the server stores and shows after grading.
 - If an answer cannot be determined, use your subject knowledge — these are real exam questions.
 - explanation: max 12 words justifying the answer.
 - Keep the exam's original title if present.
 
 JSON only:
-{"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"","explanation":""}]}`;
+{"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"0","answerKey":"","explanation":""}]}`;
 }
 
 export function buildDeepAnalysisAndQuestionPrompt(
@@ -175,11 +176,12 @@ Rules:
 - question: one complete, self-contained sentence. No markdown, no "According to the text".
 - multiple_choice: exactly 4 distinct options of similar length, no "A)"/numbers, no "All of the above".
 - correctAnswer: the ZERO-BASED INDEX of the correct option as a string: "0", "1", "2" or "3".
+- answerKey: the EXACT TEXT of the correct option — this is the ground truth, never leave it empty.
 - true_false: options ["True","False"] and correctAnswer is "true" or "false".
 - explanation: max 15 words, why the answer is right.
 
 JSON only:
-{"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"0","explanation":""}]}`;
+{"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"0","answerKey":"","explanation":""}]}`;
 }
 
 // ─── Main Generation Entry Point ─────────────────────────
