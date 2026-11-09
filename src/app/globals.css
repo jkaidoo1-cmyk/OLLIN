@@ -189,8 +189,8 @@ a:hover { text-decoration: none; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 60px;
+  height: 60px;
   color: var(--primary-strong);
   flex-shrink: 0;
 }

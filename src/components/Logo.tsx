@@ -13,7 +13,7 @@
           </mask>
         </defs>
         <circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" strokeWidth="3.4" mask="url(#bm-n)"/>
-        <circle cx="12" cy="12" r="3.4" fill={onDark ? "#7FE0A6" : "#3CC46F"}/>
+        <circle cx="12" cy="12" r="3.6" fill={onDark ? "#7FE0A6" : "#3CC46F"}/>
       </svg>
     </span>
   );
