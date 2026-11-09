@@ -30,16 +30,14 @@ export async function GET(request: NextRequest) {
           const { data, error } = await admin
             .from("quizzes")
             .select("*")
-            .eq("status", "published")
             .order("created_at", { ascending: false });
           if (!error && data) {
-            const sbIds = new Set((data || []).map((q: any) => q.id));
-            // Replace file quizzes with Supabase versions when they match
-            const merged = (data || []).map((q: any) => ({
+            const published = (data || []).filter((q: any) => q.status === "published");
+            const sbIds = new Set((published || []).map((q: any) => q.id));
+            const merged = (published || []).map((q: any) => ({
               ...q,
               share_code: q.share_code,
             }));
-            // Add file-only quizzes that aren't in Supabase
             for (const fq of quizzes) {
               if (!sbIds.has(fq.id)) merged.push(fq);
             }
@@ -225,15 +223,15 @@ export async function POST(request: NextRequest) {
         const session = await getSessionUser(request).catch(() => null);
         const shareCode = "API-" + Math.random().toString(36).slice(2, 8).toUpperCase();
 
-        // Important: the creator's profile must own the quiz. Using the admin id
-        // here caused published quizzes to appear under the wrong account and
-        // prevented the creator from seeing/deleting their own published content.
-        const hostId = session?.id || undefined;
+        // Important: published quizzes must be attributed to the actual creator.
+        // Never silently assign the built-in admin id here; that makes the
+        // quiz appear under the wrong account and breaks the admin-side list.
+        const hostId = session?.id || "anonymous";
 
         const { data: quiz, error: quizError } = await admin
           .from("quizzes")
           .insert({
-            host_id: hostId || "bd4d7d39-3631-4b45-b86a-f18e2ff150f9",
+            host_id: hostId,
             title: title.trim(),
             description: description || null,
             share_code: shareCode,
@@ -281,10 +279,11 @@ export async function POST(request: NextRequest) {
       }
 
       // Supabase failed — fall back to local file
+      const session = await getSessionUser(request).catch(() => null);
       const quizzes = readServerQuizzes();
       const quiz: Quiz = {
         id: `local-quiz-${Date.now()}`,
-        host_id: "bd4d7d39-3631-4b45-b86a-f18e2ff150f9",
+        host_id: session?.id || "anonymous",
         title: title.trim(),
         description: description || null,
         share_code:
