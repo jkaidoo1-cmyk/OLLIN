@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Loader2, User, Ticket } from "lucide-react";
-import { BrandMark } from "@/components/Logo";
+import { ArrowLeft, User, Ticket } from "lucide-react";
+import { BrandMark, BrandSpinner } from "@/components/Logo";
 import { isLocalMode, getLocalUser } from "@/lib/local";
 import { createClient } from "@/lib/supabase/client";
 import { BottomNav } from "@/components/BottomNav";
@@ -135,7 +135,7 @@ export default function JoinQuizPage() {
               className="btn-primary w-full"
             >
               {loading ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Joining...</>
+                <><BrandSpinner className="w-4 h-4" /> Joining...</>
               ) : (
                 "Join quiz"
               )}
@@ -220,7 +220,7 @@ export default function JoinQuizPage() {
             className="btn-primary w-full"
           >
             {loading ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Joining...</>
+              <><BrandSpinner className="w-4 h-4" /> Joining...</>
             ) : (
               "Join quiz"
             )}

@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { enableLocalMode } from "@/lib/local";
-import { BrandMark } from "@/components/Logo";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { BrandMark, BrandSpinner } from "@/components/Logo";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -132,7 +132,7 @@ export default function LoginPage() {
 
           <button id="login-submit-btn" type="submit" disabled={loading} className="btn-primary w-full">
             {loading ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Logging in…</>
+              <><BrandSpinner className="w-4 h-4" /> Logging in…</>
             ) : "Log in"}
           </button>
         </form>
