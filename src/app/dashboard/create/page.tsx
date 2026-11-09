@@ -41,7 +41,7 @@ export default function CreateQuizPage() {
   const [materialText, setMaterialText] = useState("");
   const [materialTitle, setMaterialTitle] = useState("");
   const [materialFile, setMaterialFile] = useState<File | null>(null);
-  const [materialType, setMaterialType] = useState<"paste" | "file">("paste");
+  const [materialType, setMaterialType] = useState<"paste" | "file">("file");
   const [sourceMode, setSourceMode] = useState<"material" | "exam">("material");
   const [materialFileBase64, setMaterialFileBase64] = useState("");
   const [materialFileType, setMaterialFileType] = useState("");
@@ -613,17 +613,13 @@ export default function CreateQuizPage() {
           <div className="flex gap-2 p-1 bg-slate-100 rounded-lg mb-4 max-w-xs">
             <button
               onClick={() => setMaterialType("file")}
-              className={`flex-1 py-1.5 px-3 rounded text-xs font-medium transition-colors ${
-                materialType === "file" ? "bg-white text-green-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
-              }`}
+              className={`flex-1 py-1.5 px-3 rounded text-xs font-medium transition-colors ${materialType === "file" ? "bg-white text-green-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
             >
               Upload file
             </button>
             <button
               onClick={() => setMaterialType("paste")}
-              className={`flex-1 py-1.5 px-3 rounded text-xs font-medium transition-colors ${
-                materialType === "paste" ? "bg-white text-green-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
-              }`}
+              className={`flex-1 py-1.5 px-3 rounded text-xs font-medium transition-colors ${materialType === "paste" ? "bg-white text-green-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
             >
               Paste text
             </button>
