@@ -210,7 +210,7 @@ a:hover { text-decoration: none; }
   height: 1rem;
   color: var(--primary-strong);
   transform-origin: center;
-  animation: brand-spinner-rotate 0.9s linear infinite;
+  animation: brand-spinner-rotate 1.5s linear infinite;
 }
 .brand-spinner svg {
   width: 100%;

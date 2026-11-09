@@ -263,7 +263,6 @@ export async function POST(request: NextRequest) {
           if (qError) throw qError;
         }
 
-        const session = await getSessionUser(request).catch(() => null);
         if (session) {
           await recordAdminAction(
             request,

@@ -35,10 +35,10 @@ export function BrandSpinner({ className = "" }: { className?: string }) {
         <defs>
           <mask id={`bs-${maskId}`}>
             <rect width="24" height="24" fill="#fff"/>
-            <rect x="-6.1" y="-2.5" width="10.8" height="5" transform="translate(5.5 18.8) rotate(135)" fill="#000"/>
+            <rect x="-8" y="-2.5" width="14.2" height="6" transform="translate(5.5 19) rotate(135)" fill="#000"/>
           </mask>
         </defs>
-        <circle cx="12" cy="12" r="8.8" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" mask={`url(#bs-${maskId})`} opacity="0.9"/>
+        <circle cx="12" cy="12" r="8.8" stroke="currentColor" strokeWidth="2.9" strokeLinecap="round" mask={`url(#bs-${maskId})`} opacity="0.9"/>
         <circle cx="12" cy="12" r="3.2" fill="#3CC46F"/>
       </svg>
     </span>
