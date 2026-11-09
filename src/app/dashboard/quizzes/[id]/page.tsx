@@ -19,7 +19,9 @@ import {
   ChevronUp,
   Award,
   Check,
+  Trash2,
 } from "lucide-react";
+import { useConfirm, useToast } from "@/components/ui/toast";
 
 interface AttemptWithAnswers extends QuizAttempt {
   attempt_answers?: {
@@ -45,6 +47,8 @@ export default function QuizDetailPage() {
   const [loading, setLoading] = useState(true);
   const [expandedAttempt, setExpandedAttempt] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
+  const confirmDialog = useConfirm();
+  const toast = useToast();
 
   useEffect(() => {
     const fetchQuiz = async () => {
@@ -173,6 +177,33 @@ export default function QuizDetailPage() {
     }
   };
 
+  const handleDeleteQuiz = async () => {
+    if (!quiz) return;
+    const ok = await confirmDialog({
+      title: `Delete "${quiz.title}"?`,
+      body: "This will remove the quiz from your published list and students will no longer be able to join it.",
+      confirmLabel: "Delete quiz",
+      tone: "danger",
+    });
+    if (!ok) return;
+
+    try {
+      const res = await fetch(`/api/quizzes/${quiz.id}`, {
+        method: "DELETE",
+        headers: isLocalMode() ? { "x-local-mode": "true" } : {},
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Failed to delete quiz");
+        return;
+      }
+      toast.success(`"${quiz.title}" deleted`);
+      router.push("/dashboard/quizzes");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete quiz");
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4 pt-2">
@@ -222,11 +253,10 @@ export default function QuizDetailPage() {
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={copyCode}
               className="flex items-center gap-1.5 px-3 py-2 border border-[var(--border-strong)] rounded-full text-xs font-mono font-bold text-[var(--ink-soft)] bg-white hover:bg-[var(--surface-2)] transition-colors"
-              
             >
               {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
               {quiz.share_code}
@@ -238,6 +268,13 @@ export default function QuizDetailPage() {
             >
               <ExternalLink className="w-3.5 h-3.5" /> Preview Quiz
             </Link>
+            <button
+              type="button"
+              onClick={handleDeleteQuiz}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full border border-red-200 bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </button>
           </div>
         </div>
       </div>

@@ -10,7 +10,8 @@ import { QuizViewSwitcher } from "@/components/QuizViewSwitcher";
 import { warmResource } from "@/lib/prefetch";
 import { Quiz, Course } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
-import { Plus, Copy, CheckCircle, ExternalLink, Pencil, ClipboardList } from "lucide-react";
+import { Plus, Copy, CheckCircle, ExternalLink, Pencil, ClipboardList, Trash2 } from "lucide-react";
+import { useConfirm, useToast } from "@/components/ui/toast";
 
 export default function MyQuizzesPage() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -20,6 +21,8 @@ export default function MyQuizzesPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
+  const confirmDialog = useConfirm();
+  const toast = useToast();
 
   useEffect(() => {
     const fetchQuizzes = async () => {
@@ -72,6 +75,32 @@ export default function MyQuizzesPage() {
     navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}`);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleDeleteQuiz = async (quiz: Quiz) => {
+    const ok = await confirmDialog({
+      title: `Delete "${quiz.title}"?`,
+      body: "This quiz will be removed from your published list and can no longer be joined by students.",
+      confirmLabel: "Delete quiz",
+      tone: "danger",
+    });
+    if (!ok) return;
+
+    try {
+      const res = await fetch(`/api/quizzes/${quiz.id}`, {
+        method: "DELETE",
+        headers: isLocalMode() ? { "x-local-mode": "true" } : {},
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Failed to delete quiz");
+        return;
+      }
+      setQuizzes((prev) => prev.filter((q) => q.id !== quiz.id));
+      toast.success(`"${quiz.title}" deleted`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete quiz");
+    }
   };
 
   const filtered = filter === "all" ? quizzes : quizzes.filter((q) => q.status === filter);
@@ -200,6 +229,14 @@ export default function MyQuizzesPage() {
                     </Link>
                   </>
                 )}
+                <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
+                <button
+                  type="button"
+                  onClick={() => handleDeleteQuiz(quiz)}
+                  className="text-xs font-semibold text-red-600 inline-flex items-center gap-1"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete
+                </button>
               </div>
             </div>
           ))}

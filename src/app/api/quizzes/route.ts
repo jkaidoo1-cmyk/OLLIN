@@ -222,14 +222,13 @@ export async function POST(request: NextRequest) {
         const admin = await createAdminClient();
         if (!admin) throw new Error("Supabase admin client unavailable");
 
+        const session = await getSessionUser(request).catch(() => null);
         const shareCode = "API-" + Math.random().toString(36).slice(2, 8).toUpperCase();
-        // Resolve admin UUID from Supabase profiles (admin-001 is a string ID, not a UUID)
-        const { data: adminProfile } = await admin
-          .from("profiles")
-          .select("id")
-          .eq("email", "jkaidoo1@mail.com")
-          .maybeSingle();
-        const hostId = (adminProfile && adminProfile.id) ? adminProfile.id : undefined;
+
+        // Important: the creator's profile must own the quiz. Using the admin id
+        // here caused published quizzes to appear under the wrong account and
+        // prevented the creator from seeing/deleting their own published content.
+        const hostId = session?.id || undefined;
 
         const { data: quiz, error: quizError } = await admin
           .from("quizzes")
