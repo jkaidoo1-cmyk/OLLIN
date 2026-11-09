@@ -9,11 +9,11 @@
         <defs>
           <mask id="bm-n">
             <rect width="24" height="24" fill="#fff"/>
-            <rect x="-4.6" y="-2.4" width="9" height="4.8" transform="translate(8.2 19.7) rotate(135)" fill="#000"/>
+            <rect x="-4.6" y="-2.4" width="9" height="4.8" transform="translate(7.5 19.4) rotate(135)" fill="#000"/>
           </mask>
         </defs>
-        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="3.4" mask="url(#bm-n)"/>
-        <circle cx="12" cy="12" r="2.8" fill={onDark ? "#7FE0A6" : "#3CC46F"}/>
+        <circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" strokeWidth="3.4" mask="url(#bm-n)"/>
+        <circle cx="12" cy="12" r="3.4" fill={onDark ? "#7FE0A6" : "#3CC46F"}/>
       </svg>
     </span>
   );
