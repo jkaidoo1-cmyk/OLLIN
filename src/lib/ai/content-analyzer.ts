@@ -152,7 +152,9 @@ export function buildDeepAnalysisAndQuestionPrompt(
   // from 100 chars each doesn't need a 2000-char input (~4x token savings for
   // small quizzes).
   const compressed = compressMaterial(materialText);
-  const charLimit = Math.min(2400, Math.max(800, questionCount * 240));
+  // Ground the questions in as much of the document as the model can take —
+  // a 800-char window produced vague, generic questions on longer notes.
+  const charLimit = Math.min(8000, Math.max(1200, questionCount * 400));
   const textBlock = compressed.length > 0
     ? compressed.slice(0, charLimit)
     : "Generate general academic questions.";
@@ -161,12 +163,20 @@ export function buildDeepAnalysisAndQuestionPrompt(
     ? `\n\nAdditional instructions: ${customInstructions}`
     : "";
 
-  return `${questionCount} ${typeDesc} questions from this material. Be specific to the content.${instructionsBlock}
+  return `You are an expert exam writer. Write ${questionCount} ${typeDesc} questions that test real understanding of the material below.${instructionsBlock}
 
 Material:
 ${textBlock}
 
-Rules: Plain text only, no markdown/symbols. Full sentences. Explanations max 15 words.
+Rules:
+- Every question must be answerable from this material alone, with exactly one correct answer.
+- Ask about concepts, causes, processes and definitions — not trivia or wording.
+- Do not repeat a question or test the same fact twice.
+- question: one complete, self-contained sentence. No markdown, no "According to the text".
+- multiple_choice: exactly 4 distinct options of similar length, no "A)"/numbers, no "All of the above".
+- correctAnswer: the ZERO-BASED INDEX of the correct option as a string: "0", "1", "2" or "3".
+- true_false: options ["True","False"] and correctAnswer is "true" or "false".
+- explanation: max 15 words, why the answer is right.
 
 JSON only:
 {"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"0","explanation":""}]}`;

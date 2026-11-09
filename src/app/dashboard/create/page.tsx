@@ -115,15 +115,31 @@ export default function CreateQuizPage() {
         setEndsAt(qz.ends_at ? new Date(qz.ends_at).toISOString().slice(0, 16) : "");
         setSelectedCourseId(qz.course_id || "");
         setQuestions(
-          qs.map((q) => ({
-            type: q.question_type || q.type || "multiple_choice",
-            question: q.question_text || q.question || "",
-            options: q.options || undefined,
-            correctAnswer: String(q.correct_answer ?? ""),
-            explanation: q.explanation || "",
-            topic: q.topic || "",
-            difficulty: q.difficulty || "medium",
-          }))
+          qs.map((q) => {
+            const type = q.question_type || q.type || "multiple_choice";
+            const options: string[] | undefined = q.options || undefined;
+            // Older/AI-made questions may store the correct OPTION TEXT instead
+            // of its index — map it back so the editor highlights the answer
+            // and re-saving stores the form the grader expects.
+            let correctAnswer = String(q.correct_answer ?? "");
+            if (type === "multiple_choice" && options?.length && !/^\d+$/.test(correctAnswer)) {
+              const idx = options.findIndex(
+                (opt) => String(opt).trim().toLowerCase() === correctAnswer.trim().toLowerCase()
+              );
+              if (idx >= 0) correctAnswer = String(idx);
+            } else if (type === "true_false") {
+              correctAnswer = correctAnswer.toLowerCase().startsWith("t") ? "true" : "false";
+            }
+            return {
+              type,
+              question: q.question_text || q.question || "",
+              options,
+              correctAnswer,
+              explanation: q.explanation || "",
+              topic: q.topic || "",
+              difficulty: q.difficulty || "medium",
+            };
+          })
         );
       } catch (e) {
         setEditError(e instanceof Error ? e.message : "Could not load this quiz for editing.");

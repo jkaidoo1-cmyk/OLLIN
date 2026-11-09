@@ -3,6 +3,41 @@ import { getQuizQuestions, readServerAttempts, writeServerAttempts } from "@/lib
 import type { QuizAttempt } from "@/lib/types";
 import type { Question } from "@/lib/types";
 
+const loose = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * Older/AI-generated questions may store the correct option's text instead of
+ * its index. The client always sends the selected option index, so compare on
+ * whichever form the stored key uses.
+ */
+function isAnswerCorrect(
+  selected: string,
+  correct: string,
+  options: string[]
+): boolean {
+  if (selected === correct) return true;
+  if (!options.length || !selected) return false;
+
+  const selectedText = /^\d+$/.test(selected) ? options[Number(selected)] : undefined;
+  if (selectedText && loose(selectedText) === loose(correct)) return true;
+
+  if (/^\d+$/.test(correct)) {
+    const correctText = options[Number(correct)];
+    if (correctText && loose(correctText) === loose(selected)) return true;
+  }
+
+  return false;
+}
+
+/** Map a stored answer key to the option index when it is option text. */
+function answerKeyFor(question: { correct_answer?: unknown; options?: unknown }): string {
+  const raw = String(question.correct_answer ?? "");
+  const options = Array.isArray(question.options) ? question.options.map(String) : [];
+  if (!options.length || /^\d+$/.test(raw)) return raw;
+  const idx = options.findIndex((o) => loose(o) === loose(raw));
+  return idx >= 0 ? String(idx) : raw;
+}
+
 // POST — submit an attempt; the SERVER grades it and returns the result
 // plus the answer key (safe now — grading already happened).
 export async function POST(
@@ -190,7 +225,8 @@ export async function POST(
       if (!q) return { question_id: a.question_id, selected_answer: a.selected_answer, is_correct: false, marks_awarded: 0 };
       const selected = String(a.selected_answer ?? "").trim().toLowerCase();
       const correct = String(q.correct_answer ?? "").trim().toLowerCase();
-      const isCorrect = selected === correct;
+      const options = Array.isArray(q.options) ? q.options.map(String) : [];
+      const isCorrect = isAnswerCorrect(selected, correct, options);
       const result = {
         question_id: a.question_id,
         selected_answer: a.selected_answer,
@@ -206,7 +242,7 @@ export async function POST(
     const answer_key: Record<string, string> = {};
     const explanations: Record<string, string | null> = {};
     for (const q of questions) {
-      answer_key[q.id] = q.correct_answer;
+      answer_key[q.id] = answerKeyFor(q);
       explanations[q.id] = q.explanation ?? null;
     }
     const now = new Date().toISOString();

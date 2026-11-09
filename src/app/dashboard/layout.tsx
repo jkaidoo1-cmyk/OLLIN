@@ -14,7 +14,6 @@ import { warmAll } from "@/lib/prefetch";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<{ email: string; name: string } | null>(null);
   const [local, setLocal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const supabase = createClient();
@@ -33,7 +32,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             router.replace("/admin");
             return;
           }
-          setUser({ email: localUser.email, name: localUser.full_name });
           // Show a storage notice only when the server is NOT persisting to
           // Supabase — a healthy server session is not a local.
           try {
@@ -55,7 +53,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             router.replace("/admin");
             return;
           }
-          setUser({ email: meData.user.email || "", name: meData.user.full_name || meData.user.email?.split("@")[0] || "User" });
           return;
         }
       } catch { /* fall through */ }
@@ -65,10 +62,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         router.push("/login");
         return;
       }
-      setUser({
-        email: data.user.email || "",
-        name: data.user.user_metadata?.full_name || data.user.email?.split("@")[0] || "User",
-      });
     };
     getUser();
   }, [supabase, router]);
@@ -126,8 +119,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ]);
   }, []);
 
-  const userInitial = user?.name?.charAt(0).toUpperCase() || "?";
-
   return (
     <div className="min-h-screen">
       {local && (
@@ -155,16 +146,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <span className="absolute top-1 right-1 w-2 h-2 bg-[#ef4444] rounded-full ring-2 ring-white" />
               )}
             </Link>
-
-            {user && (
-              <span
-                className="avatar-btn"
-                title={`${user.name} · ${user.email}`}
-                aria-label={`Signed in as ${user.name}`}
-              >
-                {userInitial}
-              </span>
-            )}
           </div>
         </div>
       </header>

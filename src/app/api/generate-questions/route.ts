@@ -4,6 +4,59 @@ import { extractTextFromBase64, getRelevantText } from "@/lib/file-extract";
 import { getSessionUser } from "@/lib/session";
 import { checkThrottle } from "@/lib/rate-limit";
 
+/**
+ * The app stores a multiple-choice answer as the option's zero-based index
+ * ("0".."3") and a true/false answer as "true"/"false". Models sometimes
+ * return the option text instead (exam extraction always does), which would
+ * mark every participant wrong. Normalize every answer key here and reject
+ * questions whose answer can't be resolved.
+ */
+function normalizeAnswerKey(
+  type: string,
+  rawAnswer: unknown,
+  options?: string[]
+): string {
+  const raw = String(rawAnswer ?? "").trim();
+  if (!raw) return "";
+
+  const opts = options || [];
+  const loose = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  if (type === "short_answer" || type === "fill_blank") return raw;
+
+  if (type === "true_false" || /^(true|false)$/i.test(raw)) {
+    const lower = raw.toLowerCase();
+    if (lower.startsWith("t")) return "true";
+    if (lower.startsWith("f")) return "false";
+    const idx = Number(raw);
+    if (idx === 0) return "true";
+    if (idx === 1) return "false";
+    return "";
+  }
+
+  if (/^\d+$/.test(raw)) {
+    const idx = Number(raw);
+    if (opts.length === 0 || (idx >= 0 && idx < opts.length)) return String(idx);
+    return "";
+  }
+
+  // "A", "B)", "Option C", "answer: d"
+  const letter = raw.match(/^(?:option\s*)?([A-Za-z])\b/i);
+  if (letter && opts.length > 0) {
+    const idx = letter[1].toUpperCase().charCodeAt(0) - 65;
+    if (idx >= 0 && idx < opts.length) return String(idx);
+  }
+
+  // The correct option's text (exact or formatting-insensitive match).
+  if (opts.length > 0) {
+    let idx = opts.findIndex((o) => o.trim().toLowerCase() === raw.toLowerCase());
+    if (idx < 0) idx = opts.findIndex((o) => loose(o) === loose(raw));
+    if (idx >= 0) return String(idx);
+  }
+
+  return "";
+}
+
 export async function POST(request: NextRequest) {
   try {
     // AI calls spend real money/tokens — only logged-in users may trigger
@@ -87,7 +140,20 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      return NextResponse.json({ analysis, questions });
+      const normalizedExamQuestions = (questions as Record<string, unknown>[])
+        .filter((q) => q.question)
+        .map((q) => {
+          const type = String(q.type || "multiple_choice");
+          const options = Array.isArray(q.options) ? q.options.map(String) : undefined;
+          return {
+            ...q,
+            type,
+            correctAnswer: normalizeAnswerKey(type, q.correctAnswer, options),
+          };
+        })
+        .filter((q) => q.correctAnswer !== "");
+
+      return NextResponse.json({ analysis, questions: normalizedExamQuestions });
     }
 
     // Extract existing questions mode (regex-based, no AI)
@@ -142,7 +208,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    finalText = getRelevantText(finalText, 4000);
+    finalText = getRelevantText(finalText, 7000);
 
     // Call AI — keys come from the server only (Supabase / config file / env).
     const { analysis, questions } = await analyzeAndGenerate(
@@ -173,18 +239,23 @@ export async function POST(request: NextRequest) {
           rawOptions = ["True", "False"];
         }
 
+        const type = String(
+          question_types.includes(q.type as string) ? q.type : question_types[0]
+        ) as string;
+
         return {
-          type: question_types.includes(q.type as string) ? q.type : question_types[0],
+          type,
           question: String(q.question || ""),
           options: rawOptions,
-          correctAnswer: String(q.correctAnswer || "0"),
+          correctAnswer: normalizeAnswerKey(type, q.correctAnswer, rawOptions),
           explanation: String(q.explanation || "Based on the provided material."),
           topic: String(q.topic || analysis.subject || "General"),
           difficulty: ["easy", "medium", "hard"].includes(q.difficulty as string)
             ? q.difficulty
             : "medium",
         };
-      });
+      })
+      .filter((q) => q.correctAnswer !== "");
 
     if (validatedQuestions.length === 0) {
       return NextResponse.json(

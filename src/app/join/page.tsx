@@ -39,9 +39,18 @@ export default function JoinQuizPage() {
     check();
   }, [supabase]);
 
+  // Accept any code shape the platform issues (3-3, SMKR8VX9, FALLBACK-…),
+  // and let people paste the whole share link instead of hunting for the code.
+  const extractCode = (value: string) => {
+    const fromLink = value.match(/\/quiz\/([^/?#\s]+)/i);
+    const base = fromLink ? decodeURIComponent(fromLink[1]) : value;
+    return base.replace(/[^A-Za-z0-9-]/g, "").toUpperCase();
+  };
+
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!code.trim()) return;
+    const cleanCode = extractCode(code);
+    if (!cleanCode) return;
 
     // If not logged in and not a guest yet, require name
     if (!isLoggedIn && !isGuest) {
@@ -51,23 +60,19 @@ export default function JoinQuizPage() {
 
     setLoading(true);
     // Pass guest name via URL so the quiz page knows
-    const params = new URLSearchParams({ code: code.trim().toUpperCase() });
+    const params = new URLSearchParams();
     if (!isLoggedIn && userName.trim()) {
       params.set("guest", userName.trim());
     }
-    router.push(`/quiz/${code.trim().toUpperCase()}?${params.toString()}`);
+    const query = params.toString();
+    router.push(`/quiz/${cleanCode}${query ? `?${query}` : ""}`);
   };
 
   const handleCodeInput = (value: string) => {
-    const cleaned = value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-    if (cleaned.length <= 3) {
-      setCode(cleaned);
-    } else {
-      setCode(cleaned.slice(0, 3) + "-" + cleaned.slice(3, 6));
-    }
+    setCode(extractCode(value).slice(0, 24));
   };
 
-  const isValid = code.length === 7;
+  const isValid = extractCode(code).length >= 4;
 
   // When logged in, wrap the join content in the logged-in shell so the
   // bottom nav persists while the user is on this page. Guests keep their
@@ -112,8 +117,8 @@ export default function JoinQuizPage() {
                   value={code}
                   onChange={(e) => handleCodeInput(e.target.value)}
                   required
-                  placeholder="9RX-DHJ"
-                  maxLength={7}
+                  placeholder="ABC-123"
+                  maxLength={24}
                   className="input-field pl-10 text-center text-xl font-bold tracking-[0.22em] uppercase"
                 />
               </div>
