@@ -66,6 +66,8 @@ export interface Quiz {
   material_id: string | null;
   created_at: string;
   updated_at: string;
+  /** The correct answers for the quiz's questions, keyed by question id. */
+  answer_key?: Record<string, string> | null;
 }
 
 export interface Question {
@@ -81,6 +83,8 @@ export interface Question {
   marks: number;
   order_index: number;
   created_at: string;
+  /** The exact text of the correct option, preserved from exam extraction. */
+  answer_key?: string | null;
 }
 
 export interface QuizAttempt {
@@ -120,6 +124,7 @@ export interface GeneratedQuestion {
   question: string;
   options?: string[];
   correctAnswer: string;
+  answerKey?: string;
   explanation: string;
   topic?: string;
   difficulty?: "easy" | "medium" | "hard";

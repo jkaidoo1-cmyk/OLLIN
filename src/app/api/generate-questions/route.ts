@@ -145,10 +145,18 @@ export async function POST(request: NextRequest) {
         .map((q) => {
           const type = String(q.type || "multiple_choice");
           const options = Array.isArray(q.options) ? q.options.map(String) : undefined;
+          // correctAnswer must be a zero-based index (server stores answers as an
+          // index); answerKey keeps the option's exact text because that is the
+          // ground truth the submit/grading and the post-quiz answer key both need.
+          const correctAnswer = normalizeAnswerKey(type, q.correctAnswer, options);
+          const answerKey = typeof q.answerKey === "string" && q.answerKey.trim()
+            ? q.answerKey.trim()
+            : options?.[Number(correctAnswer)] ?? "";
           return {
             ...q,
             type,
-            correctAnswer: normalizeAnswerKey(type, q.correctAnswer, options),
+            correctAnswer,
+            answerKey,
           };
         })
         .filter((q) => q.correctAnswer !== "");

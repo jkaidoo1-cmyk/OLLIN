@@ -137,6 +137,7 @@ export async function createQuiz(
       question: string;
       options?: string[];
       correctAnswer: string;
+      answerKey?: string;
       explanation: string;
       topic?: string;
       difficulty?: string;
@@ -192,6 +193,10 @@ export async function createQuiz(
           marks: 1,
           order_index: idx,
           created_at: new Date().toISOString(),
+          // Exam extraction carries the exact option text as answer_key —
+          // the correct answers are stored as an index, so this preserves
+          // the ground truth for grading and the post-quiz answer key.
+          answer_key: q.answerKey || null,
         }));
         const allQuestions = readServerQuestions();
         allQuestions.push(...serverQuestions);
@@ -304,6 +309,8 @@ export async function createQuiz(
         marks: 1,
         order_index: idx,
         created_at: new Date().toISOString(),
+        // Exam extraction carries the exact option text as answer_key.
+        answer_key: q.answerKey || null,
       }));
       const allQuestions = readServerQuestions();
       allQuestions.push(...serverQuestions);

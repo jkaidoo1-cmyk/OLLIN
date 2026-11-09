@@ -153,6 +153,8 @@ export async function POST(request: NextRequest) {
         created_at: raw.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
+      // Exam extraction carries the exact option text as answer_key —
+      // preserve it so grading and the post-quiz answer key stay intact.
       const serverQuestions: Question[] = (body.questions || []).map(
         (q: any, idx: number) => ({
           id: q.id || `q-${Date.now()}-${idx}`,
@@ -161,6 +163,7 @@ export async function POST(request: NextRequest) {
           question_type: q.question_type || q.type,
           options: q.options || null,
           correct_answer: q.correct_answer ?? q.correctAnswer,
+          answer_key: q.answer_key || null,
           explanation: q.explanation || null,
           topic: q.topic || null,
           difficulty: (q.difficulty || "medium") as "easy" | "medium" | "hard",
@@ -282,10 +285,12 @@ export async function POST(request: NextRequest) {
       writeServerQuizzes(quizzes);
 
       if (questions && questions.length > 0) {
+        // Exam extraction carries the exact option text as answer_key.
         const serverQuestions: Question[] = questions.map((q: any, idx: number) => ({
           id: q.id || `q-${Date.now()}-${idx}`,
           quiz_id: quiz.id,
           ...normalizeQuestionPayload(q, idx),
+          answer_key: q.answer_key ?? null,
           created_at: q.created_at || new Date().toISOString(),
         }));
         const allQuestions = readServerQuestions();

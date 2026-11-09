@@ -239,6 +239,10 @@ export async function POST(
     const correct = graded.filter((g) => g.is_correct).length;
     const total = graded.length;
     const marksEarned = graded.reduce((s, g) => s + g.marks_awarded, 0);
+    // answer_key is the CORE data the grading needs: for each question the
+    // stored correct answer (the zero-based index for MC/TF, or the raw text
+    // for short_answer/fill_blank). The client's selections are compared
+    // against this server-side, never trusted from the browser.
     const answer_key: Record<string, string> = {};
     const explanations: Record<string, string | null> = {};
     for (const q of questions) {

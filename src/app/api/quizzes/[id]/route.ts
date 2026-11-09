@@ -236,6 +236,8 @@ export async function PUT(
     else quizzes.unshift(quiz as any);
     writeServerQuizzes(quizzes);
 
+    // Exam extraction carries the exact option text as answer_key; keep it
+    // when re-saving an extracted quiz so grading and the answer key stay intact.
     const kept = readServerQuestions().filter((q) => q.quiz_id !== quiz.id);
     kept.push(
       ...questions.map((q: any, i: number) => ({
@@ -245,6 +247,7 @@ export async function PUT(
         question_type: q.question_type || q.type,
         options: q.options || null,
         correct_answer: q.correct_answer ?? q.correctAnswer,
+        answer_key: q.answer_key ?? null,
         explanation: q.explanation || null,
         topic: q.topic || null,
         difficulty: (q.difficulty || "medium") as "easy" | "medium" | "hard",
