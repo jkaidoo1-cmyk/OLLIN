@@ -42,15 +42,19 @@ export default function JoinQuizPage() {
   // Accept any code shape the platform issues (3-3, SMKR8VX9, FALLBACK-…),
   // and let people paste the whole share link instead of hunting for the code.
   const extractCode = (value: string) => {
-    const fromLink = value.match(/\/quiz\/([^/?#\s]+)/i);
-    const base = fromLink ? decodeURIComponent(fromLink[1]) : value;
-    return base.replace(/[^A-Za-z0-9-]/g, "").toUpperCase();
+    const raw = value.trim();
+    if (!raw) return "";
+
+    const fromLink = raw.match(/(?:\/quiz\/|[?&]code=)([A-Za-z0-9-]+)/i);
+    const candidate = fromLink ? decodeURIComponent(fromLink[1]) : raw;
+    const cleaned = candidate.replace(/[^A-Za-z0-9-]/g, "").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
+    return cleaned.toUpperCase();
   };
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanCode = extractCode(code);
-    if (!cleanCode) return;
+    if (!cleanCode || cleanCode.length < 4) return;
 
     // If not logged in and not a guest yet, require name
     if (!isLoggedIn && !isGuest) {

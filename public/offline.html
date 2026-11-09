@@ -5,42 +5,81 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>OLLIN – Offline</title>
   <style>
+    :root {
+      --bg: #f5f7f4;
+      --card: #ffffff;
+      --muted: #667085;
+      --ink: #1f2937;
+      --line: #e5e7eb;
+      --brand: #1f7a45;
+      --brand-soft: #ebf7f0;
+    }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #f4f6f9;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      color: #333;
+      color: var(--ink);
     }
     .card {
-      background: rgba(255, 255, 255, 0.72);
-      border: 1px solid rgba(255, 255, 255, 0.55);
-      border-radius: 16px;
-      padding: 32px;
-      max-width: 340px;
+      width: min(92vw, 360px);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 28px 24px 22px;
       text-align: center;
-      box-shadow: 0 8px 32px rgba(15, 23, 42, 0.06);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
     }
-    .dot { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #388E3C 0%, #4CAF50 100%); margin: 0 auto 16px; }
-    h1 { font-size: 16px; margin: 0 0 8px; }
-    p { font-size: 13px; color: #666; margin: 0 0 16px; line-height: 1.5; }
+    .icon {
+      width: 68px;
+      height: 68px;
+      margin: 0 auto 16px;
+      border-radius: 18px;
+      background: var(--brand-soft);
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(31, 122, 69, 0.1);
+    }
+    .icon svg {
+      width: 34px;
+      height: 34px;
+      stroke: var(--brand);
+      stroke-width: 2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    h1 { font-size: 1.1rem; margin: 0 0 10px; }
+    p { font-size: 0.88rem; color: var(--muted); margin: 0 0 18px; line-height: 1.5; }
     button {
-      background: linear-gradient(135deg, #388E3C 0%, #4CAF50 100%); color: #fff; border: 0; border-radius: 10px;
-      padding: 10px 20px; font-size: 14px; cursor: pointer;
-      box-shadow: 0 4px 14px rgba(56, 142, 60, 0.25);
+      appearance: none;
+      border: 0;
+      border-radius: 12px;
+      background: var(--brand);
+      color: white;
+      padding: 11px 18px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
     }
+    button:hover { filter: brightness(0.97); }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="dot"></div>
+    <div class="icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24">
+        <path d="M8 18h8a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.7 1.5A3.5 3.5 0 0 0 8 18Z"/>
+        <path d="M12 8v6"/>
+        <path d="m9.5 13.5 2.5 2.5 2.5-2.5"/>
+      </svg>
+    </div>
     <h1>You're offline</h1>
-    <p>OLLIN needs a connection to load quizzes and save your results. Check your internet and try again.</p>
+    <p>OLLIN needs a connection to load quizzes and save results. Check your internet and try again.</p>
     <button onclick="location.reload()">Retry</button>
   </div>
 </body>

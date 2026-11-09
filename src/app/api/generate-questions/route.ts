@@ -3,6 +3,7 @@ import { analyzeAndGenerate, extractFromExam, extractExistingQuestions } from "@
 import { extractTextFromBase64, getRelevantText } from "@/lib/file-extract";
 import { getSessionUser } from "@/lib/session";
 import { checkThrottle } from "@/lib/rate-limit";
+import { recordAdminAction } from "@/lib/audit";
 
 /**
  * The app stores a multiple-choice answer as the option's zero-based index
@@ -161,6 +162,15 @@ export async function POST(request: NextRequest) {
         })
         .filter((q) => q.correctAnswer !== "");
 
+      await recordAdminAction(
+        request,
+        session,
+        "quiz.extract",
+        "quiz",
+        null,
+        `Extracted ${normalizedExamQuestions.length} questions from ${file_name || material_text?.slice(0, 32) || "exam upload"}`
+      );
+
       return NextResponse.json({ analysis, questions: normalizedExamQuestions });
     }
 
@@ -271,6 +281,15 @@ export async function POST(request: NextRequest) {
         { status: 422 }
       );
     }
+
+    await recordAdminAction(
+      request,
+      session,
+      "quiz.generate",
+      "quiz",
+      null,
+      `Generated ${validatedQuestions.length} ${question_types.join(", ")} questions from material`
+    );
 
     return NextResponse.json({
       questions: validatedQuestions,

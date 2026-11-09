@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createQuiz, getUserQuizzes, readServerQuizzes, writeServerQuizzes, readServerQuestions, writeServerQuestions } from "@/lib/data";
 import { getSessionUser } from "@/lib/session";
+import { recordAdminAction } from "@/lib/audit";
 import { Quiz, Question } from "@/lib/types";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -197,6 +198,15 @@ export async function POST(request: NextRequest) {
       allQuestions.push(...serverQuestions);
       writeServerQuestions(allQuestions);
 
+      await recordAdminAction(
+        request,
+        session,
+        "quiz.create",
+        "quiz",
+        quiz.id,
+        `Created quiz "${quiz.title}" with ${serverQuestions.length} questions`
+      );
+
       return NextResponse.json({
         quiz,
         code: quiz.share_code,
@@ -206,6 +216,7 @@ export async function POST(request: NextRequest) {
     if (!local) {
       // Use admin client to create quiz in Supabase (bypasses RLS)
       let supabaseError: Error | null = null;
+      let createdQuestionCount = 0;
       try {
         const { createAdminClient } = await import("@/lib/supabase/server");
         const admin = await createAdminClient();
@@ -248,8 +259,21 @@ export async function POST(request: NextRequest) {
             quiz_id: quiz.id,
             ...normalizeQuestionPayload(q, idx),
           }));
+          createdQuestionCount = questionInserts.length;
           const { error: qError } = await admin.from("questions").insert(questionInserts);
           if (qError) throw qError;
+        }
+
+        const session = await getSessionUser(request).catch(() => null);
+        if (session) {
+          await recordAdminAction(
+            request,
+            session,
+            "quiz.create",
+            "quiz",
+            quiz.id,
+            `Created quiz "${title.trim()}" with ${createdQuestionCount} questions`
+          );
         }
 
         return NextResponse.json({ quiz, code: shareCode });
@@ -296,6 +320,29 @@ export async function POST(request: NextRequest) {
         const allQuestions = readServerQuestions();
         allQuestions.push(...serverQuestions);
         writeServerQuestions(allQuestions);
+        const session = await getSessionUser(request).catch(() => null);
+        if (session) {
+          await recordAdminAction(
+            request,
+            session,
+            "quiz.create",
+            "quiz",
+            quiz.id,
+            `Created quiz "${quiz.title}" with ${serverQuestions.length} questions`
+          );
+        }
+      } else {
+        const session = await getSessionUser(request).catch(() => null);
+        if (session) {
+          await recordAdminAction(
+            request,
+            session,
+            "quiz.create",
+            "quiz",
+            quiz.id,
+            `Created quiz "${quiz.title}"`
+          );
+        }
       }
 
       return NextResponse.json({ quiz, code: quiz.share_code, fallback: true });

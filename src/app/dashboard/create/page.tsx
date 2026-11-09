@@ -934,10 +934,10 @@ export default function CreateQuizPage() {
                           {q.type === "multiple_choice" && q.options && (
                             <div className="space-y-1.5 mb-2">
                               {q.options.map((opt, oi) => (
-                                <div key={oi} className="flex items-center gap-2">
+                                <div key={oi} className="flex items-center gap-2 min-h-[42px]">
                                   <button
                                     onClick={() => setCorrectAnswer(idx, oi)}
-                                    className={`w-5 h-5 rounded-full border text-xs flex items-center justify-center flex-shrink-0 ${
+                                    className={`w-6 h-6 rounded-full border text-[11px] flex items-center justify-center flex-shrink-0 ${
                                       String(oi) === q.correctAnswer
                                         ? "border-green-500 bg-green-500 text-white"
                                         : "border-[#ccc] text-[#999]"
@@ -951,7 +951,7 @@ export default function CreateQuizPage() {
                                     value={opt}
                                     onChange={(e) => updateQuestionOptions(idx, oi, e.target.value)}
                                     placeholder={`Option ${String.fromCharCode(65 + oi)}`}
-                                    className="input-field text-xs flex-1"
+                                    className="input-field text-xs flex-1 h-10"
                                   />
                                 </div>
                               ))}
