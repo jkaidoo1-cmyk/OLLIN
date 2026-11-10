@@ -38,6 +38,22 @@ export async function GET(request: NextRequest) {
     const { getPrograms } = await import("@/lib/data");
     try {
       const programs = await getPrograms(false);
+      // Merge in file-backed programs (created while Supabase was unreachable),
+      // so a fallback save never looks like it was lost.
+      try {
+        // Dedupe by id and by code: the same program is seeded into both
+        // stores, and listing it twice looks like a failed duplicate save.
+        const knownIds = new Set(programs.map((p: any) => p.id));
+        const knownCodes = new Set(
+          programs.map((p: any) => String(p.code || "").toUpperCase())
+        );
+        for (const localProgram of readLocalPrograms() as any[]) {
+          const code = String(localProgram.code || "").toUpperCase();
+          if (knownIds.has(localProgram.id) || (code && knownCodes.has(code))) continue;
+          programs.push(localProgram);
+          knownCodes.add(code);
+        }
+      } catch { /* file store optional */ }
       return NextResponse.json({ programs });
     } catch (err) {
       // NO_BACKEND (Supabase unconfigured or unavailable) → file-backed storage
@@ -124,6 +140,10 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     };
     programs.push(newProgram);
+    // Write before verifying: the read-back check below used to run without a
+    // write, so it always failed and reported "not writable" while silently
+    // discarding the program.
+    writeLocalPrograms(programs);
     // Best-effort write: check if it persisted
     const checkPersisted = readLocalPrograms().some((p: any) => p.id === newProgram.id);
     if (!checkPersisted) {

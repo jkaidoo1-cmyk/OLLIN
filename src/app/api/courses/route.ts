@@ -43,6 +43,23 @@ export async function GET(request: NextRequest) {
     const { getCourses } = await import("@/lib/data");
     try {
       const courses = await getCourses(false, programId);
+      // Merge in file-backed courses (created while Supabase was unreachable).
+      // Without this, a course saved by the fallback path is persisted but
+      // never listed again — it looks like the save was lost.
+      try {
+        // Dedupe by id and by code: the same course is seeded into both
+        // stores, and listing it twice looks like a failed duplicate save.
+        const knownIds = new Set(courses.map((c: any) => c.id));
+        const knownCodes = new Set(
+          courses.map((c: any) => String(c.code || "").toUpperCase())
+        );
+        for (const localCourse of readLocalCourses() as any[]) {
+          const code = String(localCourse.code || "").toUpperCase();
+          if (knownIds.has(localCourse.id) || (code && knownCodes.has(code))) continue;
+          courses.push(localCourse);
+          knownCodes.add(code);
+        }
+      } catch { /* file store optional */ }
       return NextResponse.json({ courses });
     } catch (err) {
       // NO_BACKEND (Supabase unconfigured or unavailable) → file-backed storage
@@ -106,6 +123,12 @@ export async function POST(request: NextRequest) {
       const { createAdminClient } = await import("@/lib/supabase/server");
       const admin = await createAdminClient();
       if (admin) {
+        // program_id is a uuid column: a locally-created program id (the file
+        // store uses "local-program-…") would fail the whole insert. Keep the
+        // course and drop the unresolvable link instead of losing the row.
+        const isUuid = (v: unknown) =>
+          typeof v === "string" &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
         const { data, error } = await admin
           .from("courses")
           .insert({
@@ -113,7 +136,7 @@ export async function POST(request: NextRequest) {
             name: coursePayload.name,
             description: coursePayload.description,
             department: coursePayload.department,
-            program_id: coursePayload.program_id,
+            program_id: isUuid(coursePayload.program_id) ? coursePayload.program_id : null,
             year: coursePayload.year,
           })
           .select()
@@ -142,7 +165,10 @@ export async function POST(request: NextRequest) {
     };
     courses.push(newCourse);
     // Local file write is best-effort; on read-only fs it silently fails.
-    // Check if the write actually persisted by reading back.
+    // Write it, then check by reading back — the check used to run without a
+    // write, so this path could never succeed and every Supabase hiccup
+    // dropped the course with a misleading "not writable" error.
+    writeLocalCourses(courses);
     const checkPersisted = readLocalCourses().some((c: any) => c.id === newCourse.id);
     if (!checkPersisted) {
       return NextResponse.json(
