@@ -90,10 +90,10 @@ async function iconPngBuffer(size, markFraction) {
 }
 
 // --- Launcher / PWA icons -------------------------------------------------
-await renderPng("public/icon-192.png", { size: 192, markFraction: 0.521, ring: INK, dot: GREEN, background: CANVAS });
-await renderPng("public/icon-512.png", { size: 512, markFraction: 0.521, ring: INK, dot: GREEN, background: CANVAS });
+await renderPng("public/icon-192.png", { size: 192, markFraction: 0.573, ring: INK, dot: GREEN, background: CANVAS });
+await renderPng("public/icon-512.png", { size: 512, markFraction: 0.573, ring: INK, dot: GREEN, background: CANVAS });
 // Maskable: keep the mark inside the 80% safe circle.
-await renderPng("public/icon-maskable.png", { size: 512, markFraction: 0.41, ring: INK, dot: GREEN, background: CANVAS });
+await renderPng("public/icon-maskable.png", { size: 512, markFraction: 0.451, ring: INK, dot: GREEN, background: CANVAS });
 
 // --- Transparent lockups --------------------------------------------------
 await renderPng("public/logo-ink.png", { size: 512, markFraction: 0.508, ring: INK, dot: GREEN });
@@ -104,7 +104,7 @@ await renderPng("public/logo.png", { size: 512, markFraction: 0.508, ring: WHITE
   const sizes = [16, 24, 32, 48, 64];
   const pngs = [];
   for (const size of sizes) {
-    pngs.push({ size, data: await iconPngBuffer(size, 0.521) });
+    pngs.push({ size, data: await iconPngBuffer(size, 0.625) });
   }
   const ico = pngToIco(pngs);
   fs.writeFileSync("public/favicon.ico", ico);
