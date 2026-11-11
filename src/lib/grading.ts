@@ -36,7 +36,21 @@ export function isAnswerCorrect(
         : "";
     const a = toBool(sel);
     const b = toBool(cor);
-    return !!a && a === b;
+    if (a && a === b) return true;
+
+    // Typed answers (short answer / fill in the blank). Punctuation, casing and
+    // spacing must not decide a mark: "Photosynthesis." and "photosynthesis"
+    // are the same answer, and so are "8" and "8.0".
+    if (loose(sel) === loose(cor)) return true;
+    const asNumber = (v: string) => {
+      if (!v.trim()) return null;
+      const n = Number(v.replace(/,/g, "").replace(/\s+/g, ""));
+      return Number.isFinite(n) ? n : null;
+    };
+    const na = asNumber(sel);
+    const nb = asNumber(cor);
+    if (na !== null && nb !== null && na === nb) return true;
+    return false;
   }
 
   const at = (v: string) =>
