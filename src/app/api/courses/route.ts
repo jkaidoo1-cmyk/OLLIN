@@ -271,36 +271,48 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    if (local) {
-      const courses = readLocalCourses();
-      const target = courses.find((c: any) => c.id === id);
-      const remaining = courses.filter((c: any) => c.id !== id);
-      writeLocalCourses(remaining);
-      const admin = await getSessionAdmin(request);
-      await recordAdminAction(request, admin, "course.delete", "course", id, `Deleted course ${target?.code || id}`);
-      return NextResponse.json({ success: true });
-    }
-
-    // Try Supabase first using admin client
-    try {
-      const { createAdminClient } = await import("@/lib/supabase/server");
-      const admin = await createAdminClient();
-      if (admin) {
-        const { error } = await admin.from("courses").delete().eq("id", id);
-        if (!error) return NextResponse.json({ success: true });
+    // A course can come from either store: GET merges Supabase with the file
+    // store, so deleting from only one left the other copy to reappear.
+    let removedFromSupabase = false;
+    let supabaseError: Error | null = null;
+    if (!local) {
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/server");
+        const admin = await createAdminClient();
+        if (admin) {
+          const { data, error } = await admin
+            .from("courses")
+            .delete()
+            .eq("id", id)
+            .select("id");
+          if (error) supabaseError = new Error(error.message);
+          else removedFromSupabase = (data?.length || 0) > 0;
+        }
+      } catch (err) {
+        supabaseError = err instanceof Error ? err : new Error(String(err));
       }
-    } catch {
-      // Supabase failed — fall back to local file
     }
 
-    // Fall back to local file
     const courses = readLocalCourses();
     const target = courses.find((c: any) => c.id === id);
     const remaining = courses.filter((c: any) => c.id !== id);
-    writeLocalCourses(remaining);
+    const removedFromFile = remaining.length !== courses.length;
+    if (removedFromFile) writeLocalCourses(remaining);
+
+    if (!removedFromSupabase && !removedFromFile) {
+      return NextResponse.json(
+        {
+          error: supabaseError
+            ? `Course not found (${supabaseError.message})`
+            : "Course not found",
+        },
+        { status: 404 }
+      );
+    }
+
     const admin = await getSessionAdmin(request);
     await recordAdminAction(request, admin, "course.delete", "course", id, `Deleted course ${target?.code || id}`);
-    return NextResponse.json({ success: true, fallback: true });
+    return NextResponse.json({ success: true, fallback: removedFromFile && !removedFromSupabase });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to delete course" },

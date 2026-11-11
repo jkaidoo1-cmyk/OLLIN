@@ -243,36 +243,50 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    if (local) {
-      const programs = readLocalPrograms();
-      const target = programs.find((p: any) => p.id === id);
-      const remaining = programs.filter((p: any) => p.id !== id);
-      writeLocalPrograms(remaining);
-      const admin = await getSessionAdmin(request);
-      await recordAdminAction(request, admin, "program.delete", "program", id, `Deleted program ${target?.code || id}`);
-      return NextResponse.json({ success: true });
-    }
-
-    // Try Supabase first using admin client
-    try {
-      const { createAdminClient } = await import("@/lib/supabase/server");
-      const admin = await createAdminClient();
-      if (admin) {
-        const { error } = await admin.from("programs").delete().eq("id", id);
-        if (!error) return NextResponse.json({ success: true });
+    // A program can come from either store: GET merges Supabase with the file
+    // store, so the row the admin sees may live in only one of them. Deleting
+    // from a single store left the other copy to reappear on the next load.
+    let removedFromSupabase = false;
+    let supabaseError: Error | null = null;
+    if (!local) {
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/server");
+        const admin = await createAdminClient();
+        if (admin) {
+          const { data, error } = await admin
+            .from("programs")
+            .delete()
+            .eq("id", id)
+            .select("id");
+          if (error) supabaseError = new Error(error.message);
+          else removedFromSupabase = (data?.length || 0) > 0;
+        }
+      } catch (err) {
+        supabaseError = err instanceof Error ? err : new Error(String(err));
       }
-    } catch {
-      // Supabase failed — fall back to local file
     }
 
-    // Fall back to local file
     const programs = readLocalPrograms();
     const target = programs.find((p: any) => p.id === id);
     const remaining = programs.filter((p: any) => p.id !== id);
-    writeLocalPrograms(remaining);
+    const removedFromFile = remaining.length !== programs.length;
+    if (removedFromFile) writeLocalPrograms(remaining);
+
+    // 404 only when NEITHER store knew the id — the phone-the-rest-in case.
+    if (!removedFromSupabase && !removedFromFile) {
+      return NextResponse.json(
+        {
+          error: supabaseError
+            ? `Program not found (${supabaseError.message})`
+            : "Program not found",
+        },
+        { status: 404 }
+      );
+    }
+
     const admin = await getSessionAdmin(request);
     await recordAdminAction(request, admin, "program.delete", "program", id, `Deleted program ${target?.code || id}`);
-    return NextResponse.json({ success: true, fallback: true });
+    return NextResponse.json({ success: true, fallback: removedFromFile && !removedFromSupabase });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to delete program" },
