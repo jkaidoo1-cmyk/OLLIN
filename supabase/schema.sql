@@ -441,3 +441,14 @@ create table if not exists public.sessions (
 );
 
 create index if not exists idx_sessions_user on public.sessions(user_id);
+
+-- ============================================================
+-- 8. SERVER-ONLY TABLES: RLS ON, NO POLICIES
+-- audit_log and sessions are created outside the RLS section above. They hold
+-- admin audit rows (emails, IPs) and live session ids, so leaving RLS off let
+-- the public anon key read both. With RLS on and no policy, only the
+-- service-role key (the server) can touch them.
+-- ============================================================
+
+alter table public.audit_log enable row level security;
+alter table public.sessions enable row level security;
