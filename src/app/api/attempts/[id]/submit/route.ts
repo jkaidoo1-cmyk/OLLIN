@@ -2,32 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getQuizQuestions, readServerAttempts, writeServerAttempts } from "@/lib/data";
 import type { QuizAttempt } from "@/lib/types";
 import type { Question } from "@/lib/types";
-
-const loose = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
-
-/**
- * Older/AI-generated questions may store the correct option's text instead of
- * its index. The client always sends the selected option index, so compare on
- * whichever form the stored key uses.
- */
-function isAnswerCorrect(
-  selected: string,
-  correct: string,
-  options: string[]
-): boolean {
-  if (selected === correct) return true;
-  if (!options.length || !selected) return false;
-
-  const selectedText = /^\d+$/.test(selected) ? options[Number(selected)] : undefined;
-  if (selectedText && loose(selectedText) === loose(correct)) return true;
-
-  if (/^\d+$/.test(correct)) {
-    const correctText = options[Number(correct)];
-    if (correctText && loose(correctText) === loose(selected)) return true;
-  }
-
-  return false;
-}
+import { isAnswerCorrect, loose } from "@/lib/grading";
+import { getSessionUser } from "@/lib/session";
 
 /** Map a stored answer key to the option index when it is option text. */
 function answerKeyFor(question: { correct_answer?: unknown; options?: unknown }): string {
@@ -218,27 +194,41 @@ export async function POST(
     const questionMap = new Map<string, any>();
     for (const q of questions) questionMap.set(q.id, q);
 
-    const graded: Array<{ question_id: string; selected_answer: string; is_correct: boolean; marks_awarded: number }> = (
-      answers as Array<{ question_id: string; selected_answer: string }>
-    ).map((a) => {
-      const q = questionMap.get(a.question_id);
-      if (!q) return { question_id: a.question_id, selected_answer: a.selected_answer, is_correct: false, marks_awarded: 0 };
-      const selected = String(a.selected_answer ?? "").trim().toLowerCase();
-      const correct = String(q.correct_answer ?? "").trim().toLowerCase();
-      const options = Array.isArray(q.options) ? q.options.map(String) : [];
-      const isCorrect = isAnswerCorrect(selected, correct, options);
-      const result = {
-        question_id: a.question_id,
-        selected_answer: a.selected_answer,
-        is_correct: isCorrect,
-        marks_awarded: isCorrect ? (q.marks ?? 1) : 0,
-      };
-      return result;
-    });
+    // Grade EVERY question in the quiz, not just the ones the client sent.
+    // Grading only the submitted answers let a caller post a single correct
+    // answer and be awarded 100%.
+    const submitted = new Map<string, string>();
+    for (const a of answers as Array<{ question_id: string; selected_answer: string }>) {
+      if (a && a.question_id) submitted.set(String(a.question_id), String(a.selected_answer ?? ""));
+    }
+    const graded: Array<{ question_id: string; selected_answer: string; is_correct: boolean; marks_awarded: number }> =
+      questions.map((q) => {
+        const has = submitted.has(q.id);
+        const selected = has ? submitted.get(q.id)! : "";
+        const options = Array.isArray(q.options) ? q.options.map(String) : [];
+        const isCorrect =
+          has &&
+          isAnswerCorrect(
+            selected.trim().toLowerCase(),
+            String(q.correct_answer ?? "").trim().toLowerCase(),
+            options
+          );
+        return {
+          question_id: q.id,
+          selected_answer: selected,
+          is_correct: isCorrect,
+          marks_awarded: isCorrect ? (q.marks ?? 1) : 0,
+        };
+      });
 
     const correct = graded.filter((g) => g.is_correct).length;
     const total = graded.length;
     const marksEarned = graded.reduce((s, g) => s + g.marks_awarded, 0);
+    // Total marks come from the quiz, not from the answer count: a 2-mark
+    // question must not make marks_earned/marks_total exceed 100%.
+    const marksTotal = questions.reduce((s, q) => s + (Number(q.marks) || 1), 0);
+    const scorePercentage =
+      marksTotal > 0 ? Math.round((marksEarned / marksTotal) * 100) : 0;
     // answer_key is the CORE data the grading needs: for each question the
     // stored correct answer (the zero-based index for MC/TF, or the raw text
     // for short_answer/fill_blank). The client's selections are compared
@@ -250,20 +240,31 @@ export async function POST(
       explanations[q.id] = q.explanation ?? null;
     }
     const now = new Date().toISOString();
+    // Ownership and timing come from the server, not the client's claims: an
+    // unverified participant_email let anyone file an attempt (and its score)
+    // under someone else's name, and started_at was overwritten with the
+    // completion time, so every attempt looked instant.
+    const submitterSession = await getSessionUser(request).catch(() => null);
+    const priorAttempt = readServerAttempts().find((a) => a.id === attemptId);
+    const claimedStartMs =
+      typeof body.started_at === "string" ? new Date(body.started_at).getTime() : NaN;
+    const startedAt =
+      priorAttempt?.started_at ||
+      (Number.isFinite(claimedStartMs) ? new Date(claimedStartMs).toISOString() : now);
     const attempt: QuizAttempt = {
       id: attemptId,
       quiz_id: resolvedQuizId,
       participant_id: null,
-      participant_email: participant_email ?? null,
+      participant_email: submitterSession?.email || participant_email || null,
       participant_name: participant_name ?? "Anonymous",
-      started_at: now,
+      started_at: startedAt,
       completed_at: now,
       time_taken_seconds: time_taken_seconds ?? 600,
       total_questions: total,
       correct_answers: correct,
-      score_percentage: total > 0 ? Math.round((correct / total) * 100) : 0,
+      score_percentage: scorePercentage,
       marks_earned: marksEarned,
-      marks_total: total,
+      marks_total: marksTotal,
       status: "completed",
       created_at: now,
     };
@@ -301,9 +302,9 @@ export async function POST(
             completed_at: now,
             time_taken_seconds: time_taken_seconds ?? 600,
             correct_answers: correct,
-            score_percentage: total > 0 ? Math.round((correct / total) * 100) : 0,
+            score_percentage: scorePercentage,
             marks_earned: marksEarned,
-            marks_total: total,
+            marks_total: marksTotal,
             status: "completed",
           })
           .eq("id", attemptId)

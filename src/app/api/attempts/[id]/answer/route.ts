@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readServerAttempts, writeServerAttempts, saveAnswer, getQuizQuestions } from "@/lib/data";
 import { getSessionUser } from "@/lib/session";
 import { checkThrottle } from "@/lib/rate-limit";
+import { isAnswerCorrect } from "@/lib/grading";
 import type { QuizAttempt } from "@/lib/types";
 
 /** File-mode attempt rows carry an answers map (question_id → selection). */
@@ -64,11 +65,13 @@ export async function POST(
       }
     }
 
-    // Server-derived correctness — mirrors the submit route's normalization.
+    // Server-derived correctness — the SAME comparison the submit route uses,
+    // so autosave feedback can't disagree with the final score (a stored
+    // answer key in option-text form used to look wrong here).
     const questions = (await getQuizQuestions(attempt.quiz_id, true)) as any[];
     const q = questions.find((qq) => qq.id === questionId);
-    const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
-    const isCorrect = !!(q && norm(selected) === norm(q.correct_answer));
+    const options = Array.isArray(q?.options) ? (q.options as unknown[]).map(String) : [];
+    const isCorrect = !!q && isAnswerCorrect(selected, String(q.correct_answer ?? ""), options);
     const marks = isCorrect ? (q?.marks ?? 1) : 0;
 
     // File mode keeps the autosave on the attempt row itself; the row-level

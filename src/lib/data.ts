@@ -603,27 +603,36 @@ export async function submitAttempt(
   // Correctness and marks are computed HERE from the stored questions.
   // Client-sent is_correct/marks_awarded are ignored so participants can't
   // grade their own submissions.
-  const gradeAnswers = async (): Promise<
-    Array<{ question_id: string; selected_answer: string; is_correct: boolean; marks_awarded: number }>
-  > => {
-    const answeredIds = new Set(answers.map((a) => a.question_id));
+  const gradeAnswers = async (): Promise<{
+    graded: Array<{ question_id: string; selected_answer: string; is_correct: boolean; marks_awarded: number }>;
+    marksTotal: number;
+  }> => {
     const quizId = quizIdHint || (await getAttemptQuizId(attemptId, local)) || "";
     const allQuestions = await getQuizQuestions(quizId, local);
-    const questions = allQuestions.filter((q) => answeredIds.has(q.id));
-    return answers.map((a) => {
-      const q = questions.find((qq) => qq.id === a.question_id);
-      const isCorrect = !!q && normalizeAnswer(a.selected_answer) === normalizeAnswer(q.correct_answer);
+    const { isAnswerCorrect } = await import("@/lib/grading");
+    const submitted = new Map(answers.map((a) => [String(a.question_id), String(a.selected_answer ?? "")]));
+    // Grade every question in the quiz (not only the answered ones) and use the
+    // same option-aware comparison as the submit route, so an omitted question
+    // counts as wrong instead of shrinking the denominator.
+    const graded = allQuestions.map((q) => {
+      const has = submitted.has(q.id);
+      const selected = has ? submitted.get(q.id)! : "";
+      const options = Array.isArray(q.options) ? (q.options as unknown[]).map(String) : [];
+      const isCorrect =
+        has && isAnswerCorrect(selected, String(q.correct_answer ?? ""), options);
       return {
-        question_id: a.question_id,
-        selected_answer: a.selected_answer,
+        question_id: q.id,
+        selected_answer: selected,
         is_correct: isCorrect,
-        marks_awarded: isCorrect ? (q?.marks ?? 1) : 0,
+        marks_awarded: isCorrect ? (q.marks ?? 1) : 0,
       };
     });
+    const marksTotal = allQuestions.reduce((s, q) => s + (Number(q.marks) || 1), 0);
+    return { graded, marksTotal };
   };
 
   if (checkLocal(local)) {
-    const graded = await gradeAnswers();
+    const { graded, marksTotal } = await gradeAnswers();
     const correct = graded.filter((a) => a.is_correct).length;
     const total = graded.length;
     // Keep the selections for question-by-question review (My attempts and
@@ -643,7 +652,7 @@ export async function submitAttempt(
       correct_answers: correct,
       score_percentage: total > 0 ? Math.round((correct / total) * 100) : 0,
       marks_earned: graded.reduce((s, a) => s + a.marks_awarded, 0),
-      marks_total: total,
+      marks_total: marksTotal,
       status: "completed",
       created_at: new Date().toISOString(),
       answers: answersRecord,
@@ -666,7 +675,7 @@ export async function submitAttempt(
   const supabase = await createAdminClient();
   if (!supabase) throw new Error("Supabase unavailable");
 
-  const graded: any[] = await gradeAnswers() as any[];
+  const { graded, marksTotal } = await gradeAnswers();
 
   // Save all answers (graded server-side)
   if (graded && graded.length > 0) {
@@ -704,7 +713,7 @@ export async function submitAttempt(
       correct_answers: correct,
       score_percentage: total > 0 ? Math.round((correct / total) * 100) : 0,
       marks_earned: marksEarned,
-      marks_total: total,
+      marks_total: marksTotal,
       status: "completed",
     })
     .eq("id", attemptId)

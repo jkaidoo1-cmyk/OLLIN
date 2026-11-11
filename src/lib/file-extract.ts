@@ -3,6 +3,8 @@
  * Converts base64-encoded files into plain text for AI processing.
  */
 
+import { join } from "path";
+
 export interface ExtractionResult {
   text: string;
   pageCount?: number;
@@ -63,47 +65,84 @@ export async function extractTextFromBase64(
 }
 
 /**
- * Extract text from a PDF buffer using pdf2json.
+ * Extract text from a PDF buffer using pdfjs-dist.
+ *
+ * pdf2json rejected perfectly valid PDFs with "Invalid XRef stream header"
+ * (cross-reference streams, which pdf-lib and modern Word/LaTeX exports emit),
+ * so every PDF upload failed. pdfjs-dist reads the same files and is the
+ * parser browsers themselves use.
  */
 async function extractPDF(buffer: Buffer): Promise<ExtractionResult> {
-  const PDFParser = (await import("pdf2json")).default;
-  const parser = new PDFParser();
+  // Load the parser from node_modules at RUNTIME. A plain dynamic import gets
+  // rewritten into a bundled chunk, and pdf.js then looks for its worker next
+  // to that chunk ("Setting up fake worker failed: Cannot find module
+  // .../.next/dev/server/chunks/..."). Requiring the real file keeps
+  // import.meta.url inside node_modules, where pdf.worker.mjs actually lives.
+  const { createRequire } = await import("node:module");
+  const nodeRequire = createRequire(join(process.cwd(), "package.json"));
+  const pdfjs = nodeRequire("pdfjs-dist/legacy/build/pdf.mjs") as unknown as {
+    getDocument: (src: Record<string, unknown>) => {
+      promise: Promise<{
+        numPages: number;
+        getPage: (n: number) => Promise<{
+          getTextContent: () => Promise<{
+            items: Array<{ str?: string; hasEOL?: boolean }>;
+          }>;
+          cleanup: () => void;
+        }>;
+      }>;
+      // destroy() releases the worker/transport and lives on the LOADING TASK,
+      // not on the document proxy.
+      destroy: () => Promise<void>;
+    };
+  };
 
-  return new Promise((resolve) => {
-    parser.on("pdfParser_dataError", (errData: { parserError: Error } | Error) => {
-      const msg = errData instanceof Error ? errData.message : String(errData.parserError);
-      resolve({ text: "", error: `PDF parse error: ${msg}` });
-    });
-
-    parser.on("pdfParser_dataReady", (pdfData: { Pages?: Array<{ Texts?: Array<{ R?: Array<{ T?: string }> }> }> }) => {
-      const pages = pdfData.Pages || [];
-      let text = "";
-
-      for (const page of pages) {
-        const texts = page.Texts || [];
-        for (const t of texts) {
-          const runs = t.R || [];
-          for (const r of runs) {
-            // pdf2json URL-encodes text content
-            try {
-              text += decodeURIComponent(r.T || "") + " ";
-            } catch {
-              text += (r.T || "") + " ";
-            }
-          }
-        }
-        text += "\n\n";
-      }
-
-      resolve({ text: compressText(text), pageCount: pages.length });
-    });
-
-    try {
-      parser.parseBuffer(buffer);
-    } catch (err) {
-      resolve({ text: "", error: `PDF parse failed: ${err instanceof Error ? err.message : "Unknown error"}` });
-    }
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(buffer),
+    isEvalSupported: false,
+    useSystemFonts: true,
+    disableFontFace: true,
   });
+  const doc = await loadingTask.promise;
+
+  try {
+    const out: string[] = [];
+    for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
+      const page = await doc.getPage(pageNumber);
+      const content = await page.getTextContent();
+      let line = "";
+      for (const item of content.items) {
+        if (typeof item.str !== "string") continue;
+        line += item.str;
+        // hasEOL marks the end of a visual line; otherwise keep words apart.
+        if (item.hasEOL) {
+          out.push(line);
+          line = "";
+        } else {
+          line += " ";
+        }
+      }
+      if (line.trim()) out.push(line);
+      out.push("");
+      page.cleanup();
+    }
+
+    const pageCount = doc.numPages;
+    const text = compressText(out.join("\n"));
+    if (!text.trim()) {
+      return {
+        text: "",
+        pageCount,
+        error:
+          "This PDF has no selectable text (it may be a scan or an image export). Try pasting the text instead.",
+      };
+    }
+    return { text, pageCount };
+  } finally {
+    await Promise.resolve()
+      .then(() => loadingTask.destroy())
+      .catch(() => { /* transport already closed */ });
+  }
 }
 
 /**
@@ -144,22 +183,25 @@ function compressText(text: string): string {
   t = t.replace(/\n{3,}/g, "\n\n");                     // max 2 newlines
   t = t.replace(/ {2,}/g, " ");                            // multiple spaces
 
-  // 4. Remove repeated lines (duplicated content from PDF parsing)
+  // 4. Collapse runs of identical lines (PDF parsers repeat overlay text).
+  //    Only CONSECUTIVE duplicates: option lines like "True" or "None of the
+  //    above" legitimately repeat across questions, and a global dedupe
+  //    deleted them from every question after the first, corrupting the
+  //    options of later questions.
   const lines = t.split("\n");
   const uniqueLines: string[] = [];
-  const seen = new Set<string>();
+  let prevKey = "";
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.length < 3) {
       uniqueLines.push(line);
+      prevKey = "";
       continue;
     }
-    // Normalize for dedup comparison
     const key = trimmed.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniqueLines.push(line);
-    }
+    if (key === prevKey) continue;
+    prevKey = key;
+    uniqueLines.push(line);
   }
   t = uniqueLines.join("\n");
 

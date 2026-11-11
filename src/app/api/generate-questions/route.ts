@@ -144,15 +144,27 @@ export async function POST(request: NextRequest) {
       const normalizedExamQuestions = (questions as Record<string, unknown>[])
         .filter((q) => q.question)
         .map((q) => {
-          const type = String(q.type || "multiple_choice");
+          let type = String(q.type || "multiple_choice");
           const options = Array.isArray(q.options) ? q.options.map(String) : undefined;
           // correctAnswer must be a zero-based index (server stores answers as an
           // index); answerKey keeps the option's exact text because that is the
           // ground truth the submit/grading and the post-quiz answer key both need.
-          const correctAnswer = normalizeAnswerKey(type, q.correctAnswer, options);
+          let correctAnswer = normalizeAnswerKey(type, q.correctAnswer, options);
+          // A model answering an optionless question returns text rather than
+          // an index. Keep that question as a short answer instead of dropping
+          // it — the whole point is a complete set.
+          const rawAnswer = String(q.correctAnswer ?? "").trim();
+          if (!correctAnswer && rawAnswer && (!options || options.length < 2)) {
+            type = "short_answer";
+            correctAnswer = rawAnswer;
+          }
+          const resolvedIdx = Number(correctAnswer);
           const answerKey = typeof q.answerKey === "string" && q.answerKey.trim()
             ? q.answerKey.trim()
-            : options?.[Number(correctAnswer)] ?? "";
+            : Number.isInteger(resolvedIdx) && options
+              ? options[resolvedIdx] ?? ""
+              // true/false keys are "true"/"false", not an option index.
+              : correctAnswer;
           return {
             ...q,
             type,
@@ -171,7 +183,13 @@ export async function POST(request: NextRequest) {
         `Extracted ${normalizedExamQuestions.length} questions from ${file_name || material_text?.slice(0, 32) || "exam upload"}`
       );
 
-      return NextResponse.json({ analysis, questions: normalizedExamQuestions });
+      return NextResponse.json({
+        analysis,
+        questions: normalizedExamQuestions,
+        // Questions the model returned without a resolvable answer are dropped
+        // rather than stored with a guessed key — report how many.
+        dropped: Math.max(0, (questions as Record<string, unknown>[]).filter((q) => q.question).length - normalizedExamQuestions.length),
+      });
     }
 
     // Extract existing questions mode (regex-based, no AI)
@@ -182,13 +200,50 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      const extracted = extractExistingQuestions(material_text, Math.min(question_count, 50));
+      const limit = Math.min(question_count, 50);
+      const stats: { skipped: number; pending: Array<{ question: string; options?: string[] }> } = {
+        skipped: 0,
+        pending: [],
+      };
+      const extracted = extractExistingQuestions(material_text, limit, stats);
+
+      // Questions whose answer the document never states are SOLVED, not
+      // thrown away: an uploaded worksheet without a key should still become a
+      // full, gradeable quiz (the model also writes options when none exist).
+      let completed: unknown[] = [];
+      let completionError = "";
+      if (stats.pending.length > 0) {
+        try {
+          const { completeQuestions } = await import("@/lib/ai/content-analyzer");
+          completed = await completeQuestions(stats.pending, material_text, {
+            onUsage: ({ keyId, inputTokens, outputTokens }) => {
+              import("@/lib/ai/key-rotation").then(({ recordKeyUsage }) =>
+                recordKeyUsage(keyId, inputTokens, outputTokens)
+              ).catch(() => { /* non-critical */ });
+            },
+          });
+        } catch (err) {
+          completionError = err instanceof Error ? err.message : "Could not fill in the missing answers.";
+        }
+      }
+
+      const questions = [...extracted, ...completed].slice(0, limit);
+      const unresolved = stats.pending.length - completed.length;
+      const completedNote = completed.length > 0
+        ? ` ${completed.length} question${completed.length === 1 ? "" : "s"} had no stated answer and ${completed.length === 1 ? "was" : "were"} solved automatically.`
+        : "";
+      const unresolvedNote = unresolved > 0
+        ? ` ${unresolved} question${unresolved === 1 ? "" : "s"} could not be completed${completionError ? ` (${completionError})` : ""}.`
+        : "";
+
       return NextResponse.json({
-        questions: extracted,
+        questions,
+        completed: completed.length,
+        skipped: unresolved,
         analysis: {
           title: "Extracted Questions",
           subject: "Extracted Content",
-          summary: `Found ${extracted.length} questions directly inside the document.`,
+          summary: `Found ${questions.length} questions in the document.${completedNote}${unresolvedNote}`,
           conceptsFound: 0,
           factsFound: 0,
           definitionsFound: 0,

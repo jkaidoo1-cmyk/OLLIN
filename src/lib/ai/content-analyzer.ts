@@ -9,6 +9,7 @@
  */
 
 import { tryWithRotation } from "./key-rotation";
+import { QUESTION_EXEMPLARS, QUESTION_STANDARD } from "./exemplars";
 
 // ─── Types ─────────────────────────────────────────────
 
@@ -127,10 +128,12 @@ ${textBlock}
 
 Rules:
 - Copy questions exactly as written. Do not rewrite or invent questions.
+- Return EVERY question in the paper, in order. Never drop one because it has no answer printed or no options listed.
 - For multiple choice: options must list ALL choices exactly as they appear (no letters like A, B, C inside the text).
-- correctAnswer is the ZERO-BASED INDEX of the correct option (multiple choice), "true"/"false" (true/false).
-- answerKey: the EXACT TEXT of the correct option — this is the ground truth the server stores and shows after grading.
-- If an answer cannot be determined, use your subject knowledge — these are real exam questions.
+- If a question lists no options, write exactly four distinct plausible options of similar length (no "all of the above", no near-duplicates), place the correct answer among them, and return its zero-based index. Only if the question is genuinely open-ended (e.g. "Define osmosis", "Explain why…") return type "short_answer" with no options and the answer text in correctAnswer.
+- correctAnswer is the ZERO-BASED INDEX of the correct option (multiple choice), "true"/"false" (true/false), or the answer text (short answer).
+- answerKey: the EXACT TEXT of the correct option (or the short answer text) — this is the ground truth the server stores and shows after grading. It must never be empty.
+- If the paper states no answers (or an answer sheet is missing), solve each question yourself from the subject matter. correctAnswer and answerKey must never be empty — an unanswered question is a failed extraction, not a safe result.
 - explanation: max 12 words justifying the answer.
 - Keep the exam's original title if present.
 
@@ -169,6 +172,8 @@ export function buildDeepAnalysisAndQuestionPrompt(
 Material:
 ${textBlock}
 
+${QUESTION_STANDARD}
+
 Rules:
 - Every question must be answerable from this material alone, with exactly one correct answer.
 - Ask about concepts, causes, processes and definitions — not trivia or wording.
@@ -179,6 +184,9 @@ Rules:
 - answerKey: the EXACT TEXT of the correct option — this is the ground truth, never leave it empty.
 - true_false: options ["True","False"] and correctAnswer is "true" or "false".
 - explanation: max 15 words, why the answer is right.
+
+Examples of the standard expected (other subjects — match this quality, do not reuse their content):
+${QUESTION_EXEMPLARS}
 
 JSON only:
 {"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"0","answerKey":"","explanation":""}]}`;
@@ -264,7 +272,7 @@ async function callAIProvider(
   fileType?: string,
   fileName?: string,
   customInstructions?: string,
-  mode: "generate" | "exam" = "generate"
+  mode: "generate" | "exam" | "complete" = "generate"
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
   if (provider === "gemini") {
     return callGeminiAPI(materialText, questionCount, questionTypes, apiKey, fileData, fileType, fileName, customInstructions, mode);
@@ -337,6 +345,102 @@ export async function extractFromExam(
 
 // ─── Groq API ─────────────────────────────────────────
 
+// ─── Answer Completion ─────────────────────────────────
+
+export interface PendingQuestion {
+  question: string;
+  options?: string[];
+}
+
+/**
+ * Prompt for completing questions that arrived with no answer (and often no
+ * options). Unlike exam extraction this is not copying anything — it solves
+ * each question and, when options are missing, writes four plausible ones
+ * around the answer so the result is a full, gradeable set.
+ */
+export function buildCompletionPrompt(listAndSource: string): string {
+  return `An exam paper was uploaded without its answer key. Complete EVERY question below.
+
+Rules:
+- Answer each question from the source material first; if the material does not cover it, use your subject knowledge. Never leave one unanswered and never drop one.
+- If the question already lists options, pick the correct one, return its ZERO-BASED INDEX in correctAnswer, and put its exact text in answerKey.
+- If it lists no options, write exactly four distinct plausible options of similar length (they must be real distractors — misconceptions or reversed relationships — not near-copies of the answer, and no "all of the above"), include the correct answer among them, and return its zero-based index.
+- If it is genuinely open-ended ("Define…", "Explain why…"), set type "short_answer", omit options, and put the expected answer in both correctAnswer and answerKey (max 12 words).
+- explanation: max 12 words.
+- Return the same number of questions, in the same order.
+
+${listAndSource}
+
+JSON only:
+{"questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"0","answerKey":"","explanation":""}]}`;
+}
+
+/**
+ * Solve extracted questions that have no key and, where needed, build their
+ * options. Returns [] only when there was nothing to do; throws when no
+ * provider could answer, so the caller can report partial results.
+ */
+export async function completeQuestions(
+  pending: PendingQuestion[],
+  materialText: string,
+  options: AIOptions = {}
+): Promise<unknown[]> {
+  if (pending.length === 0) return [];
+
+  const { getAllKeys } = await import("./key-rotation");
+  const allKeys = await getAllKeys();
+  const enabledKeys = allKeys.filter((k) => k.enabled && k.key);
+  if (enabledKeys.length === 0) {
+    throw new Error("No service configured. Please contact your administrator.");
+  }
+
+  const source = compressMaterial(materialText).slice(0, 6000);
+  const list = pending
+    .map((p, i) =>
+      `${i + 1}. ${p.question}${p.options && p.options.length ? `\n   Given options: ${p.options.join(" | ")}` : ""}`
+    )
+    .join("\n");
+  const payload = `Source material:\n${source}\n\nQuestions to complete:\n${list}`;
+
+  const providers = [...new Set(enabledKeys.map((k) => k.provider))];
+  let lastError: Error | null = null;
+
+  for (const p of providers) {
+    try {
+      const { result, keyId } = await tryWithRotation(
+        (apiKey) =>
+          callAIProvider(
+            p,
+            payload,
+            pending.length,
+            ["multiple_choice"],
+            apiKey,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            "complete"
+          ),
+        p
+      );
+      const usage = (result as { __usage?: { inputTokens: number; outputTokens: number } }).__usage;
+      options.onUsage?.({
+        keyId,
+        inputTokens: usage?.inputTokens || 0,
+        outputTokens: usage?.outputTokens || 0,
+      });
+      delete (result as { __usage?: unknown }).__usage;
+      return result.questions || [];
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.error(`${p} answer completion failed:`, lastError.message);
+      continue;
+    }
+  }
+
+  throw lastError || new Error("Could not complete the extracted questions.");
+}
+
 async function callGroqAPI(
   materialText: string,
   questionCount: number,
@@ -346,15 +450,19 @@ async function callGroqAPI(
   fileType?: string,
   fileName?: string,
   customInstructions?: string,
-  mode: "generate" | "exam" = "generate"
+  mode: "generate" | "exam" | "complete" = "generate"
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
   const prompt = mode === "exam"
     ? buildExamExtractionPrompt(materialText, fileName, customInstructions)
-    : buildDeepAnalysisAndQuestionPrompt(materialText, questionCount, questionTypes, fileName, customInstructions);
+    : mode === "complete"
+      ? buildCompletionPrompt(materialText)
+      : buildDeepAnalysisAndQuestionPrompt(materialText, questionCount, questionTypes, fileName, customInstructions);
 
   // Tighter output budget: ~55 tokens per question covers question + options
   // + short explanation at the slimmed-down schema.
-  const maxTok = Math.min(4096, Math.max(1800, 320 + questionCount * 130));
+  const maxTok = mode === "complete"
+    ? 4096
+    : Math.min(4096, Math.max(1800, 320 + questionCount * 130));
   const response = await fetch(GROQ_API_URL, {
     method: "POST",
     headers: {
@@ -401,15 +509,21 @@ async function callGeminiAPI(
   fileType?: string,
   fileName?: string,
   customInstructions?: string,
-  mode: "generate" | "exam" = "generate"
+  mode: "generate" | "exam" | "complete" = "generate"
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
   const prompt = mode === "exam"
     ? buildExamExtractionPrompt(materialText, fileName, customInstructions)
-    : buildDeepAnalysisAndQuestionPrompt(materialText, questionCount, questionTypes, fileName, customInstructions);
+    : mode === "complete"
+      ? buildCompletionPrompt(materialText)
+      : buildDeepAnalysisAndQuestionPrompt(materialText, questionCount, questionTypes, fileName, customInstructions);
 
   // Exam papers need room for the full question list; small counts still need
   // a generous floor because the JSON wrapper alone is several hundred tokens.
-  const maxTok = mode === "exam" ? 8192 : Math.min(4096, Math.max(1800, 256 + questionCount * 300));
+  const maxTok = mode === "exam"
+    ? 8192
+    : mode === "complete"
+      ? 4096
+      : Math.min(4096, Math.max(1800, 256 + questionCount * 300));
 
   // Gemini regularly returns 503 “high demand” (and retires model names), so
   // walk a chain of model names and use the first one that answers. This is
@@ -688,42 +802,120 @@ function generateDeepDocumentQuestions(
 
 // ─── Extraction Helpers ─────────────────────────────────
 
-export function extractExistingQuestions(materialText: string, maxCount: number): unknown[] {
+/**
+ * Pull existing multiple-choice questions out of pasted material, including
+ * their answers.
+ *
+ * This used to hardcode correctAnswer "0" for every question and pad short
+ * option lists with "Option C"/"Option D" placeholders — so every extracted
+ * quiz marked option A correct and could not be graded. Now the answer is read
+ * from the document ("Answer: B", "Ans. (c)", or a ticked option) and a
+ * question with no determinable answer is skipped instead of being graded
+ * wrongly (stats.skipped counts those).
+ */
+export function extractExistingQuestions(
+  materialText: string,
+  maxCount: number,
+  stats?: { skipped: number; pending?: PendingQuestion[] }
+): unknown[] {
   const questions: unknown[] = [];
-  const lines = materialText.split(/\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+  const lines = materialText
+    .replace(/\*\*|__/g, "")
+    .split(/\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  // "A. text", "a) text", "(C) text"
+  const optionRe = /^(?:\(([A-Da-d])\)|([A-Da-d])[.)])\s*(.+)$/;
+  // "Answer: B", "Ans. (c)", "Correct answer - d"
+  const answerRe = /^(?:correct\s+)?(?:answer|ans)\b\s*[:.\-]?\s*\(?([A-Da-d])\)?\b/i;
+  const isQuestionStart = (l: string) => /^\d+[.)\]]\s*\S/.test(l) || /\?\s*$/.test(l);
+  // A trailing tick/asterisk marks the keyed option: "c) Glucose ✓"
+  const isMarked = (l: string) => /[*\u2713\u2714]+\s*$/.test(l);
 
   let i = 0;
   while (i < lines.length && questions.length < maxCount) {
     const line = lines[i];
-    if (line.includes("?") || /^\d+[.)\]]\s*/.test(line)) {
-      const qText = line.replace(/^\d+[.)\]]\s*/, "").trim();
-      const options: string[] = [];
-      let j = i + 1;
+    if (!isQuestionStart(line)) {
+      i++;
+      continue;
+    }
 
-      while (j < lines.length && options.length < 4) {
-        if (/^\(?[A-Da-d]\)[.)\s]/.test(lines[j]) || /^[-•]\s*/.test(lines[j])) {
-          options.push(lines[j].replace(/^\(?[A-Da-d]\)[.)\s]*/, "").replace(/^[-•]\s*/, "").trim());
-        } else if (lines[j].includes("?")) {
-          break;
+    const qText = line
+      .replace(/^\d+[.)\]]\s*/, "")
+      .replace(/\s*[*\u2713\u2714]+$/, "")
+      .trim();
+    if (qText.length < 8) {
+      i++;
+      continue;
+    }
+
+    const options: string[] = [];
+    let markedIdx = -1;
+    let answerLetter = "";
+    let j = i + 1;
+
+    while (j < lines.length && j <= i + 14) {
+      const next = lines[j];
+      const opt = next.match(optionRe);
+      if (opt) {
+        const text = opt[3].replace(/\s*[*\u2713\u2714]+$/, "").trim();
+        if (text) {
+          options.push(text);
+          if (isMarked(next)) markedIdx = options.length - 1;
         }
         j++;
+        continue;
       }
-
-      if (options.length >= 2) {
-        questions.push({
-          type: "multiple_choice",
-          question: qText.endsWith("?") ? qText : qText + "?",
-          options: options.length >= 4 ? options.slice(0, 4) : [...options, "Option C", "Option D"].slice(0, 4),
-          correctAnswer: "0",
-          explanation: "Extracted from the uploaded study document.",
-          topic: "Document Questions",
-          difficulty: "medium",
-        });
+      const ans = next.match(answerRe);
+      if (ans) {
+        answerLetter = ans[1];
+        break;
       }
-      i = Math.max(i + 1, j);
-    } else {
-      i++;
+      if (isQuestionStart(next)) break;
+      j++;
     }
+
+    // The answer line often sits just below the option block.
+    if (!answerLetter) {
+      for (let k = j; k < lines.length && k <= j + 2; k++) {
+        const ans = lines[k].match(answerRe);
+        if (ans) {
+          answerLetter = ans[1];
+          break;
+        }
+        if (isQuestionStart(lines[k])) break;
+      }
+    }
+
+    const letterIdx = answerLetter
+      ? answerLetter.toUpperCase().charCodeAt(0) - 65
+      : -1;
+    const correctIdx =
+      letterIdx >= 0 && letterIdx < options.length ? letterIdx : markedIdx;
+
+    if (correctIdx >= 0 && correctIdx < options.length) {
+      questions.push({
+        type: "multiple_choice",
+        question: qText.endsWith("?") ? qText : `${qText}?`,
+        options,
+        correctAnswer: String(correctIdx),
+        answerKey: options[correctIdx],
+        explanation: "Extracted from the uploaded study document.",
+        topic: "Document Questions",
+        difficulty: "medium",
+      });
+    } else if (stats) {
+      // No answer stated (and no ticked option). Collect it for answer
+      // completion instead of discarding a real question from the document.
+      stats.skipped += 1;
+      stats.pending?.push({
+        question: qText.endsWith("?") ? qText : `${qText}?`,
+        options,
+      });
+    }
+
+    i = Math.max(i + 1, j);
   }
 
   return questions;
