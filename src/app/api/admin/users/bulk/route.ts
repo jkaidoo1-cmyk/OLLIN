@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readLocalUsers, writeLocalUsers, publicUser, hashPassword } from "@/lib/local-users-store";
+import { randomBytes } from "crypto";
+import { readLocalUsers, writeLocalUsers, hashPassword } from "@/lib/local-users-store";
 import { getSessionAdmin } from "@/lib/session";
 import { recordAdminAction } from "@/lib/audit";
 
@@ -49,7 +50,7 @@ function parseCsv(text: string): string[][] {
 function randomPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%";
   let out = "";
-  const bytes = require("crypto").randomBytes(12) as Buffer;
+  const bytes = randomBytes(12);
   for (const b of bytes) out += chars[b % chars.length];
   return out;
 }

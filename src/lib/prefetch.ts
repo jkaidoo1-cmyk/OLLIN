@@ -57,7 +57,9 @@ export function useResource<T>(key: string, fetcher: Fetcher<T>): {
   const [loading, setLoading] = useState(true);
   const [nonce, setNonce] = useState(0);
   const fetcherRef = useRef(fetcher);
-  fetcherRef.current = fetcher;
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  }, [fetcher]);
 
   useEffect(() => {
     let alive = true;

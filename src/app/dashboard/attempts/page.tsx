@@ -6,18 +6,6 @@ import { SkeletonPanel } from "@/components/Skeleton";
 import { QuizViewSwitcher } from "@/components/QuizViewSwitcher";
 import { useResource } from "@/lib/prefetch";
 
-interface AttemptRow {
-  id: string;
-  quiz_id: string;
-  score_percentage: number;
-  correct_answers: number;
-  total_questions: number;
-  time_taken_seconds: number | null;
-  completed_at: string;
-  answers: Record<string, string> | null;
-  status?: string;
-}
-
 interface MyAttempt {
   id: string;
   quiz_id: string;
@@ -187,7 +175,7 @@ export default function MyAttemptsPage() {
                   <div className="px-4 pb-4 pt-1 border-t border-[#f0f0f0]">
                     {!a.answers ? (
                       <p className="text-xs text-[#999] py-3">
-                        Answer details weren't recorded for this attempt.
+                        Answer details weren&apos;t recorded for this attempt.
                       </p>
                     ) : reviewLoading === a.id ? (
                       <p className="text-xs text-[#999] py-3">Loading review…</p>
