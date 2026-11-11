@@ -12,7 +12,7 @@
  * vanish. Offline users see the offline page instead of a broken quiz.
  */
 
-const CACHE = "ollin-v6";
+const CACHE = "ollin-v7";
 
 // New logo mark — bumping the cache so browsers can't serve the old assets.
 const LOGO_URLS = ["/logo-ink.png", "/logo.png", "/icon-192.png", "/icon-512.png", "/icon-maskable.png", "/favicon.ico", "/logo-mark.svg"];
@@ -41,12 +41,9 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Static assets: cache-first
-  if (
-    url.pathname.startsWith("/_next/static/") ||
-    url.pathname.startsWith("/icon-") ||
-    url.pathname === "/logo.png"
-  ) {
+  // Icons and the logo have fixed names, so a cached copy can never be a
+  // different file. Cache-first is safe here.
+  if (url.pathname.startsWith("/icon-") || url.pathname === "/logo.png") {
     event.respondWith(
       caches.match(request).then(
         (hit) =>
@@ -59,6 +56,25 @@ self.addEventListener("fetch", (event) => {
             return res;
           })
       )
+    );
+    return;
+  }
+
+  // Build chunks: network-first, NOT cache-first. Dev chunk names are stable
+  // rather than content-hashed, so serving a cached copy after a rebuild hands
+  // the page an old module graph and Next fails with "module factory is not
+  // available" — half-loaded pages with stale data.
+  if (url.pathname.startsWith("/_next/static/")) {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(request))
     );
     return;
   }

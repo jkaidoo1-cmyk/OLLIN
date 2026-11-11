@@ -40,6 +40,15 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `if ('serviceWorker' in navigator) window.addEventListener('load', function() {
+              // Loopback is the dev server. A worker there only ever serves stale
+              // build chunks, which Next reports as "module factory is not
+              // available" — so drop any worker and skip registering.
+              if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+                navigator.serviceWorker.getRegistrations().then(function (rs) {
+                  rs.forEach(function (r) { r.unregister(); });
+                }).catch(function () {});
+                return;
+              }
               navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(function(){});
               var hadController = !!navigator.serviceWorker.controller;
               var reloading = false;
