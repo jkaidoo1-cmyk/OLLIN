@@ -321,7 +321,7 @@ export default function AdminUsersPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-6">
         <div>
           <h1 className="text-xl font-bold text-[#333]">Users</h1>
-          <p className="text-xs text-[#999] mt-0.5">{displayUsers.length} accounts {pending.length > 0 && `(${pending.length} pending)`}</p>
+          <p className="text-xs text-[#999] mt-0.5">{users.length} accounts</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
           <button
@@ -431,7 +431,7 @@ export default function AdminUsersPage() {
                 type="submit"
                 className="btn-primary text-xs px-4 py-2 flex items-center gap-1.5"
               >
-                <Mail className="w-3.5 h-3.5" /> Add to changes
+                <Mail className="w-3.5 h-3.5" /> Create account
               </button>
               <button
                 type="button"
@@ -545,11 +545,11 @@ export default function AdminUsersPage() {
       {/* User List */}
       {loading ? (
         <SkeletonList rows={5} rowClass="h-14" />
-      ) : displayUsers.length === 0 ? (
+      ) : users.length === 0 ? (
         <div className="text-center py-8 text-sm text-[#999]">No users found</div>
       ) : (
         <div className="space-y-2">
-          {displayUsers.map((user) => {
+          {users.map((user) => {
             const isPendingAdd = pending.some((a) => a.type === "add" && a.user.id === user.id);
             const isPendingUpdate = pending.some((a) => a.type === "update" && a.user.id === user.id);
             const isPendingDelete = pending.some((a) => a.type === "delete" && a.userId === user.id);
@@ -609,33 +609,6 @@ export default function AdminUsersPage() {
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Save bar */}
-      {pending.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#e0e0e0] shadow-lg z-50">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0">
-            <p className="text-sm text-[#333]">
-              <span className="font-semibold">{pending.length} change{pending.length > 1 ? "s" : ""}</span> pending
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleDiscard}
-                className="px-4 py-2 text-sm text-[#666] hover:text-[#333] border border-[#e0e0e0] rounded-lg flex items-center gap-1.5"
-              >
-                <X className="w-4 h-4" /> Discard
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-4 py-2 text-sm text-white bg-[#006633] hover:bg-[#004d26] rounded-lg flex items-center gap-1.5"
-              >
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {saving ? "Saving..." : "Save changes"}
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

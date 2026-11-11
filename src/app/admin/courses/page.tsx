@@ -274,7 +274,7 @@ export default function AdminCoursesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-6">
         <div>
           <h1 className="text-xl font-bold text-[#333]">Courses</h1>
-          <p className="text-xs text-[#999] mt-0.5">{displayCourses.length} courses {pending.length > 0 && `(${pending.length} pending)`}</p>
+          <p className="text-xs text-[#999] mt-0.5">{courses.length} courses</p>
         </div>
         <button onClick={() => setShowForm(!showForm)} className="btn-primary text-xs flex items-center gap-1.5">
           <Plus className="w-3.5 h-3.5" /> Add course
@@ -336,7 +336,7 @@ export default function AdminCoursesPage() {
             </div>
             <div className="flex items-center gap-2 pt-1">
               <button type="submit" className="btn-primary text-xs px-4 py-2 flex items-center gap-1.5">
-                <Save className="w-3.5 h-3.5" /> Add to changes
+                <Save className="w-3.5 h-3.5" /> Save changes
               </button>
               <button type="button" onClick={() => setEditing(null)} className="text-xs text-[#666] hover:text-[#333] px-3 py-2">Cancel</button>
             </div>
@@ -392,7 +392,7 @@ export default function AdminCoursesPage() {
             </div>
             <div className="flex items-center gap-2 pt-1">
               <button type="submit" className="btn-primary text-xs px-4 py-2 flex items-center gap-1.5">
-                <Plus className="w-3.5 h-3.5" /> Add to changes
+                <Plus className="w-3.5 h-3.5" /> Create course
               </button>
               <button type="button" onClick={() => setShowForm(false)} className="text-xs text-[#666] hover:text-[#333] px-3 py-2">Cancel</button>
             </div>
@@ -402,11 +402,11 @@ export default function AdminCoursesPage() {
 
       {loading ? (
         <SkeletonList rows={4} rowClass="h-14" />
-      ) : displayCourses.length === 0 ? (
+      ) : courses.length === 0 ? (
         <div className="text-center py-8 text-sm text-[#999]">No courses yet. Add one above.</div>
       ) : (
         <div className="space-y-2">
-          {displayCourses.map((course) => {
+          {courses.map((course) => {
             const isPendingAdd = pending.some((a) => a.type === "add" && a.course.id === course.id);
             const isPendingUpdate = pending.some((a) => a.type === "update" && a.course.id === course.id);
             const isPendingDelete = pending.some((a) => a.type === "delete" && a.courseId === course.id);
@@ -527,25 +527,6 @@ export default function AdminCoursesPage() {
         </div>
       )}
 
-      {/* Save bar */}
-      {pending.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#e0e0e0] shadow-lg z-50">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0">
-            <p className="text-sm text-[#333]">
-              <span className="font-semibold">{pending.length} change{pending.length > 1 ? "s" : ""}</span> pending
-            </p>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setPending([])} className="px-4 py-2 text-sm text-[#666] hover:text-[#333] border border-[#e0e0e0] rounded-lg flex items-center gap-1.5">
-                <X className="w-4 h-4" /> Discard
-              </button>
-              <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm text-white bg-[#006633] hover:bg-[#004d26] rounded-lg flex items-center gap-1.5">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {saving ? "Saving..." : "Save changes"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
