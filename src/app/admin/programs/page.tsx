@@ -76,7 +76,7 @@ export default function AdminProgramsPage() {
       updated_at: new Date().toISOString(),
     };
 
-    setPending((prev) => [...prev, { type: "add", program: newProgram }]);
+    void persist({ type: "add", program: newProgram });
     setFormCode("");
     setFormName("");
     setFormDept("");
@@ -87,12 +87,12 @@ export default function AdminProgramsPage() {
   const handleDelete = async (id: string) => {
     const ok = await confirmDialog({
       title: "Remove this program?",
-      body: "It stays visible below until you save — nothing is deleted server-side yet.",
+      body: "This removes it immediately and cannot be undone.",
       confirmLabel: "Remove",
       tone: "danger",
     });
     if (!ok) return;
-    setPending((prev) => [...prev, { type: "delete", programId: id }]);
+    void persist({ type: "delete", programId: id });
   };
 
   const handleEditSubmit = (e: React.FormEvent) => {
@@ -110,49 +110,67 @@ export default function AdminProgramsPage() {
       description: editing.desc || null,
       updated_at: new Date().toISOString(),
     };
-    setPending((prev) => [...prev, { type: "update", program: updated }]);
+    void persist({ type: "update", program: updated });
     setEditing(null);
-  };  const handleSave = async () => {
+  };  const sendRequest = async (method: string, url: string, body?: unknown) => {
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json", ...(isLocal ? { "x-local-mode": "true" } : {}) },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.error || `Failed (${res.status})`);
+    }
+  };
+
+  const applyAction = async (action: PendingAction) => {
+    if (action.type === "add") {
+      await sendRequest("POST", "/api/programs", { code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description });
+    } else if (action.type === "update") {
+      await sendRequest("PATCH", "/api/programs", { id: action.program.id, code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description });
+    } else if (action.type === "delete") {
+      await sendRequest("DELETE", `/api/programs?id=${action.programId}`);
+    }
+  };
+
+  const reportSaveError = (err: unknown) => {
+    const msg = err instanceof Error ? err.message : "Save failed";
+    if (isAuthError(msg)) {
+      setSaveError("Your session has expired — redirecting to login…");
+      setTimeout(() => clearStaleAdminSession(), 1200);
+    } else {
+      setSaveError(`Save failed: ${msg}. Your change is still listed — press Save to retry.`);
+    }
+  };
+
+  // Changes are written immediately. Staging them until a Save click made
+  // "I added a program" and "it never persisted" indistinguishable: the row
+  // lived only in local state, so a reload or any navigation discarded it.
+  const persist = async (action: PendingAction) => {
+    setSaveError("");
+    setPending((prev) => [...prev, action]);
+    try {
+      await applyAction(action);
+      setPending((prev) => prev.filter((a) => a !== action));
+    } catch (err) {
+      reportSaveError(err);
+    } finally {
+      // Re-read so the list shows the server's real state either way.
+      await fetchPrograms();
+    }
+  };
+
+  const handleSave = async () => {
     setSaving(true);
     setSaveError("");
     try {
-      // Fire every pending mutation, checking each response. Any failure
-      // aborts the save: pending actions are KEPT so nothing silently
-      // disappears, and the list is re-fetched to reflect server reality.
-      const send = async (method: string, url: string, body?: unknown) => {
-        const res = await fetch(url, {
-          method,
-          headers: { "Content-Type": "application/json", ...(isLocal ? { "x-local-mode": "true" } : {}) },
-          body: body !== undefined ? JSON.stringify(body) : undefined,
-        });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          throw new Error(d.error || `Failed (${res.status})`);
-        }
-      };
-
-      for (const action of pending) {
-        if (action.type === "add") {
-          await send("POST", "/api/programs", { code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description });
-        } else if (action.type === "update") {
-          await send("PATCH", "/api/programs", { id: action.program.id, code: action.program.code, name: action.program.name, department: action.program.department, description: action.program.description });
-        } else if (action.type === "delete") {
-          await send("DELETE", `/api/programs?id=${action.programId}`);
-        }
-      }
-
+      // Retry path: anything that failed to write is still pending.
+      for (const action of pending) await applyAction(action);
       setPending([]);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Save failed";
-      if (isAuthError(msg)) {
-        setSaveError("Your session has expired — redirecting to login…");
-        setTimeout(() => clearStaleAdminSession(), 1200);
-      } else {
-        setSaveError(`Save failed: ${msg}. Your changes are still listed — try saving again.`);
-      }
+      reportSaveError(err);
     } finally {
-      // Always re-fetch: on success it confirms persistence; on failure it
-      // shows the server's actual state instead of optimistic fiction.
       await fetchPrograms();
       setSaving(false);
     }

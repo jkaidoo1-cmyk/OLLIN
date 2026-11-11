@@ -166,18 +166,24 @@ export async function DELETE(
   try {
     const local = request.headers.get("x-local-mode") === "true";
     const { id } = await params;
-    // A quiz created while Supabase was unreachable lives only in the file
-    // store, so the non-local path must fall back to it — otherwise the quiz
-    // is listed but can never be deleted.
-    const quiz = (await getQuizById(id, local)) || (local ? null : await getQuizById(id, true));
+    // x-local-mode says which VIEW the caller uses, not which store holds the
+    // quiz: the list merges file-backed rows into a Supabase-mode browser (and
+    // vice-versa), so deleting a quiz that lives in the other store used to
+    // answer "Quiz not found" for a row the user could see. Resolve against
+    // BOTH stores before claiming it doesn't exist.
+    const quiz =
+      (await getQuizById(id, local)) ||
+      (await getQuizById(id, !local).catch(() => null));
     if (!quiz) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
     }
     if (!(await canManage(quiz, request))) {
       return NextResponse.json({ error: "Not allowed" }, { status: 403 });
     }
-    await deleteQuiz(id, local);
-    if (!local) await deleteQuiz(id, true);
+    // Delete everywhere it exists — a leftover copy in the other store brings
+    // the quiz straight back on the next list.
+    await deleteQuiz(id, true);
+    await deleteQuiz(id, false).catch(() => { /* Supabase optional */ });
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(

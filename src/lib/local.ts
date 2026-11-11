@@ -227,6 +227,21 @@ export function addLocalQuiz(quiz: Quiz, questions?: Question[]): void {
   }
 }
 
+/**
+ * Drop a quiz from this browser's cache. Used when the server answers 404 for
+ * a delete: the row exists only here (it was never persisted), so without this
+ * it stays on the page as a quiz that can never be removed.
+ */
+export function removeLocalQuiz(id: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const quizzes = getLocalQuizzes().filter((q) => q.id !== id);
+    localStorage.setItem(LOCAL_QUIZZES_KEY, JSON.stringify(quizzes));
+    const questions = getLocalAllQuestions().filter((q) => q.quiz_id !== id);
+    localStorage.setItem(LOCAL_QUESTIONS_KEY, JSON.stringify(questions));
+  } catch { /* storage unavailable */ }
+}
+
 function getLocalAllQuestions(): Question[] {
   if (typeof window === "undefined") return [];
   const stored = localStorage.getItem(LOCAL_QUESTIONS_KEY);

@@ -52,25 +52,6 @@ export default function AdminCoursesPage() {
 
   const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
 
-  useEffect(() => {
-    fetchCourses();
-    fetchPrograms();
-  }, []);
-
-  const fetchCourses = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/courses", {
-        headers: isLocal ? { "x-local-mode": "true" } : {},
-      });
-      const data = await res.json();
-      const courseList = data.courses || [];
-      setCourses(courseList);
-      // Preload quiz associations once (single fetch) so each course row shows its count
-      await loadAllQuizzesForCourses(courseList);
-    } catch { /* ignore */ } finally { setLoading(false); }
-  };
-
   // Bulk-load quizzes for every course in one pass (no per-course fetch spam)
   const loadAllQuizzesForCourses = async (courseList: Course[]) => {
     try {
@@ -106,6 +87,20 @@ export default function AdminCoursesPage() {
     } catch { /* ignore */ }
   };
 
+  const fetchCourses = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/courses", {
+        headers: isLocal ? { "x-local-mode": "true" } : {},
+      });
+      const data = await res.json();
+      const courseList = data.courses || [];
+      setCourses(courseList);
+      // Preload quiz associations once (single fetch) so each course row shows its count
+      await loadAllQuizzesForCourses(courseList);
+    } catch { /* ignore */ } finally { setLoading(false); }
+  };
+
   const fetchPrograms = async () => {
     try {
       const res = await fetch("/api/programs", {
@@ -115,6 +110,11 @@ export default function AdminCoursesPage() {
       setPrograms(data.programs || []);
     } catch { /* ignore */ }
   };
+
+  useEffect(() => {
+    fetchCourses();
+    fetchPrograms();
+  }, []);
 
   const handleRemoveQuizFromCourse = async (courseId: string, quizId: string) => {
     await removeSavedQuiz(quizId, courseId);
@@ -151,7 +151,7 @@ export default function AdminCoursesPage() {
       updated_at: new Date().toISOString(),
     };
 
-    setPending((prev) => [...prev, { type: "add", course: newCourse }]);
+    void persist({ type: "add", course: newCourse });
     setFormCode("");
     setFormName("");
     setFormDept("");
@@ -164,12 +164,12 @@ export default function AdminCoursesPage() {
   const handleDelete = async (id: string) => {
     const ok = await confirmDialog({
       title: "Remove this course?",
-      body: "It stays visible below until you save — nothing is deleted server-side yet.",
+      body: "This removes it immediately and cannot be undone.",
       confirmLabel: "Remove",
       tone: "danger",
     });
     if (!ok) return;
-    setPending((prev) => [...prev, { type: "delete", courseId: id }]);
+    void persist({ type: "delete", courseId: id });
   };
 
   const handleEditSubmit = (e: React.FormEvent) => {
@@ -189,51 +189,69 @@ export default function AdminCoursesPage() {
       year: editing.year || null,
       updated_at: new Date().toISOString(),
     };
-    setPending((prev) => [...prev, { type: "update", course: updated }]);
+    void persist({ type: "update", course: updated });
     setEditing(null);
+  };
+
+  const sendRequest = async (method: string, url: string, body?: unknown) => {
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json", ...(isLocal ? { "x-local-mode": "true" } : {}) },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.error || `Failed (${res.status})`);
+    }
+  };
+
+  const applyAction = async (action: PendingAction) => {
+    if (action.type === "add") {
+      await sendRequest("POST", "/api/courses", { code: action.course.code, name: action.course.name, department: action.course.department, description: action.course.description, program_id: action.course.program_id, year: action.course.year });
+    } else if (action.type === "update") {
+      await sendRequest("PATCH", "/api/courses", { id: action.course.id, code: action.course.code, name: action.course.name, department: action.course.department, description: action.course.description, program_id: action.course.program_id, year: action.course.year });
+    } else if (action.type === "delete") {
+      await sendRequest("DELETE", `/api/courses?id=${action.courseId}`);
+    }
+  };
+
+  const reportSaveError = (err: unknown) => {
+    const msg = err instanceof Error ? err.message : "Save failed";
+    if (isAuthError(msg)) {
+      setSaveError("Your session has expired — redirecting to login…");
+      setTimeout(() => clearStaleAdminSession(), 1200);
+    } else {
+      setSaveError(`Save failed: ${msg}. Your change is still listed — press Save to retry.`);
+    }
+  };
+
+  // Changes are written immediately. Staging them until a Save click made
+  // "I added a course" and "it never persisted" indistinguishable: the row
+  // lived only in local state, so a reload or any navigation discarded it.
+  const persist = async (action: PendingAction) => {
+    setSaveError("");
+    setPending((prev) => [...prev, action]);
+    try {
+      await applyAction(action);
+      setPending((prev) => prev.filter((a) => a !== action));
+    } catch (err) {
+      reportSaveError(err);
+    } finally {
+      // Re-read so the list shows the server's real state either way.
+      await fetchCourses();
+    }
   };
 
   const handleSave = async () => {
     setSaving(true);
     setSaveError("");
     try {
-      // Fire every pending mutation, checking each response. Any failure
-      // aborts the save: pending actions are KEPT so nothing silently
-      // disappears, and the list is re-fetched to reflect server reality.
-      const send = async (method: string, url: string, body?: unknown) => {
-        const res = await fetch(url, {
-          method,
-          headers: { "Content-Type": "application/json", ...(isLocal ? { "x-local-mode": "true" } : {}) },
-          body: body !== undefined ? JSON.stringify(body) : undefined,
-        });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          throw new Error(d.error || `Failed (${res.status})`);
-        }
-      };
-
-      for (const action of pending) {
-        if (action.type === "add") {
-          await send("POST", "/api/courses", { code: action.course.code, name: action.course.name, department: action.course.department, description: action.course.description, program_id: action.course.program_id, year: action.course.year });
-        } else if (action.type === "update") {
-          await send("PATCH", "/api/courses", { id: action.course.id, code: action.course.code, name: action.course.name, department: action.course.department, description: action.course.description, program_id: action.course.program_id, year: action.course.year });
-        } else if (action.type === "delete") {
-          await send("DELETE", `/api/courses?id=${action.courseId}`);
-        }
-      }
-
+      // Retry path: anything that failed to write is still pending.
+      for (const action of pending) await applyAction(action);
       setPending([]);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Save failed";
-      if (isAuthError(msg)) {
-        setSaveError("Your session has expired — redirecting to login…");
-        setTimeout(() => clearStaleAdminSession(), 1200);
-      } else {
-        setSaveError(`Save failed: ${msg}. Your changes are still listed — try saving again.`);
-      }
+      reportSaveError(err);
     } finally {
-      // Always re-fetch: on success it confirms persistence; on failure it
-      // shows the server's actual state instead of optimistic fiction.
       await fetchCourses();
       setSaving(false);
     }

@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizzes } from "@/lib/local";
 import { SkeletonText, SkeletonList } from "@/components/Skeleton";
 import { QuizViewSwitcher } from "@/components/QuizViewSwitcher";
-import { warmResource } from "@/lib/prefetch";
+import { warmResource, invalidateResource } from "@/lib/prefetch";
 import { Quiz, Course } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
 import { Plus, Copy, CheckCircle, ExternalLink, Pencil, ClipboardList, Trash2 } from "lucide-react";
@@ -92,11 +92,24 @@ export default function MyQuizzesPage() {
         headers: isLocalMode() ? { "x-local-mode": "true" } : {},
       });
       const data = await res.json().catch(() => ({}));
+      if (res.status === 404) {
+        // The server has never heard of this quiz: it lives only in this
+        // browser's cache, which is exactly why the delete fails. Remove the
+        // phantom locally so it stops reappearing on every visit.
+        const { removeLocalQuiz } = await import("@/lib/local");
+        removeLocalQuiz(quiz.id);
+        setQuizzes((prev) => prev.filter((q) => q.id !== quiz.id));
+        invalidateResource("quizzes");
+        toast.success(`"${quiz.title}" removed from this browser`);
+        return;
+      }
       if (!res.ok) {
         toast.error(data.error || "Failed to delete quiz");
         return;
       }
       setQuizzes((prev) => prev.filter((q) => q.id !== quiz.id));
+      // Keep the warmed list in step, or a later visit resurrects the row.
+      invalidateResource("quizzes");
       toast.success(`"${quiz.title}" deleted`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete quiz");

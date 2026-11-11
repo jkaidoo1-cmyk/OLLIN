@@ -136,7 +136,7 @@ export default function AdminUsersPage() {
       created_at: new Date().toISOString(),
     };
 
-    setPending((prev) => [...prev, { type: "add", user: newUser, password: formPassword }]);
+    void persist({ type: "add", user: newUser, password: formPassword });
     resetForm();
   };
 
@@ -179,92 +179,108 @@ export default function AdminUsersPage() {
       program_id: editing.program_id || null,
     };
 
-    setPending((prev) => [
-      ...prev,
-      { type: "update", user: updated, password: editing.password || undefined },
-    ]);
+    void persist({ type: "update", user: updated, password: editing.password || undefined });
     setEditing(null);
   };
 
   const handleDelete = async (userId: string) => {
     const ok = await confirmDialog({
       title: "Remove this user?",
-      body: "They keep access until you save — nothing is deleted server-side yet.",
+      body: "This removes the account immediately and cannot be undone.",
       confirmLabel: "Remove",
       tone: "danger",
     });
     if (!ok) return;
-    setPending((prev) => [...prev, { type: "delete", userId }]);
+    void persist({ type: "delete", userId });
+  };
+
+  const applyAction = async (action: PendingAction) => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (isLocal) headers["x-local-mode"] = "true";
+
+    if (action.type === "add") {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          email: action.user.email,
+          password: action.password,
+          full_name: action.user.full_name,
+          role: action.user.role,
+          program_id: action.user.program_id,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || "Failed to create user");
+      }
+    } else if (action.type === "update") {
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({
+          id: action.user.id,
+          email: action.user.email,
+          full_name: action.user.full_name,
+          role: action.user.role,
+          program_id: action.user.program_id,
+          password: action.password,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || "Failed to update user");
+      }
+    } else if (action.type === "delete") {
+      const res = await fetch(`/api/admin/users?id=${action.userId}`, {
+        method: "DELETE",
+        headers: isLocal ? { "x-local-mode": "true" } : {},
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || "Failed to delete user");
+      }
+    }
+  };
+
+  const reportSaveError = (err: unknown) => {
+    const msg = err instanceof Error ? err.message : "Save failed — see message above";
+    if (isAuthError(msg)) {
+      // Session cookie is missing/expired/invalid — re-login instead of a dead end.
+      setSaveError("Your session has expired — redirecting to login…");
+      setTimeout(() => clearStaleAdminSession(), 1200);
+      return;
+    }
+    setSaveError(msg);
+  };
+
+  // Changes are written immediately. Staging them until a Save click made
+  // "I added a user" and "it never persisted" indistinguishable: the row lived
+  // only in local state, so a reload or any navigation discarded it.
+  const persist = async (action: PendingAction) => {
+    setSaveError("");
+    setPending((prev) => [...prev, action]);
+    try {
+      await applyAction(action);
+      setPending((prev) => prev.filter((a) => a !== action));
+    } catch (err) {
+      reportSaveError(err);
+    } finally {
+      // Re-read so the list shows the server's real state either way.
+      await fetchUsers();
+    }
   };
 
   const handleSave = async () => {
     setSaving(true);
     setSaveError("");
     try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (isLocal) headers["x-local-mode"] = "true";
-
-      for (const action of pending) {
-        if (action.type === "add") {
-          const res = await fetch("/api/admin/users", {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              email: action.user.email,
-              password: action.password,
-              full_name: action.user.full_name,
-              role: action.user.role,
-              program_id: action.user.program_id,
-            }),
-          });
-          if (!res.ok) {
-            const d = await res.json();
-            throw new Error(d.error || "Failed to create user");
-          }
-        } else if (action.type === "update") {
-          const res = await fetch("/api/admin/users", {
-            method: "PATCH",
-            headers,
-            body: JSON.stringify({
-              id: action.user.id,
-              email: action.user.email,
-              full_name: action.user.full_name,
-              role: action.user.role,
-              program_id: action.user.program_id,
-              password: action.password,
-            }),
-          });
-          if (!res.ok) {
-            const d = await res.json();
-            throw new Error(d.error || "Failed to update user");
-          }
-        } else if (action.type === "delete") {
-          const res = await fetch(`/api/admin/users?id=${action.userId}`, {
-            method: "DELETE",
-            headers: isLocal ? { "x-local-mode": "true" } : {},
-          });
-          if (!res.ok) {
-            const d = await res.json();
-            throw new Error(d.error || "Failed to delete user");
-          }
-        }
-      }
-
-      // Always re-read from the server so the list + admin counts stay accurate
-      await fetchUsers();
-
-      // Notify
-
+      // Retry path: anything that failed to write is still pending.
+      for (const action of pending) await applyAction(action);
       setPending([]);
+      await fetchUsers();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Save failed — see message above";
-      if (isAuthError(msg)) {
-        // Session cookie is missing/expired/invalid — re-login instead of a dead end.
-        setSaveError("Your session has expired — redirecting to login…");
-        setTimeout(() => clearStaleAdminSession(), 1200);
-        return;
-      }
-      setSaveError(msg);
+      reportSaveError(err);
     } finally {
       setSaving(false);
     }

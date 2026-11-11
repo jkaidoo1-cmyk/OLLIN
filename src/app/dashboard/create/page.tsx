@@ -6,7 +6,8 @@ import Link from "next/link";
 import { generateQuizCode } from "@/lib/utils";
 import { isLocalMode, addLocalQuiz, getLocalUser } from "@/lib/local";
 import { cleanText } from "@/lib/utils";
-import { Quiz, Course, Profile } from "@/lib/types";
+import { invalidateResource } from "@/lib/prefetch";
+import { Quiz, Course } from "@/lib/types";
 import {
   Upload,
   FileText,
@@ -157,7 +158,7 @@ export default function CreateQuizPage() {
         let programId: string | undefined;
 
         if (isLocal) {
-          const user = getLocalUser();
+          getLocalUser();
           // In local, user has no program assigned — show all courses
           programId = undefined;
         } else {
@@ -383,6 +384,10 @@ export default function CreateQuizPage() {
           return;
         }
         addLocalQuiz(localQuiz, localQuestions);
+        // Drop the warmed quiz list: it was cached when the app loaded, so a
+        // quiz published now stayed invisible on My Quizzes until a hard
+        // reload — which looks exactly like "the quiz didn't save".
+        invalidateResource("quizzes");
         // Notify quiz creator
         const { addNotification } = await import("@/lib/local");
         addNotification(
@@ -440,6 +445,7 @@ export default function CreateQuizPage() {
         if (qError) throw qError;
       }
 
+      invalidateResource("quizzes");
       setGeneratedCode(shareCode);
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : "Failed to publish quiz");
@@ -808,7 +814,7 @@ export default function CreateQuizPage() {
             )}
             {sourceMode === "exam" && (
               <p className="text-xs text-[#666] bg-[#f8f8f8] border border-[#e0e0e0] rounded p-3">
-                Questions come exactly as they appear on your exam paper — type, wording, and answers are preserved, so there's nothing to configure here.
+                Questions come exactly as they appear on your exam paper — type, wording, and answers are preserved, so there&apos;s nothing to configure here.
               </p>
             )}
             <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-[#333]">
