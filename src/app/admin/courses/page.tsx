@@ -45,6 +45,17 @@ export default function AdminCoursesPage() {
   const [formYear, setFormYear] = useState<number | "">("");
   const [formError, setFormError] = useState("");
 
+  // Picking a program from the create form pre-fills department, program and
+  // year, so the admin usually does not have to re-type them.
+  const onProgramChange = (value: string) => {
+    setFormProgramId(value);
+    const program = programs.find((p) => p.id === value);
+    if (!program) return;
+    setFormDept(program.department || "");
+    // A program has no year in this schema; once it does, wire it here.
+    setFormYear("");
+  };
+
   const [pending, setPending] = useState<PendingAction[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -362,7 +373,7 @@ export default function AdminCoursesPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-[#666] mb-1">Program</label>
-                <select value={formProgramId} onChange={(e) => setFormProgramId(e.target.value)} className="input-field text-sm">
+                <select value={formProgramId} onChange={(e) => onProgramChange(e.target.value)} className="input-field text-sm">
                   <option value="">No program</option>
                   {programs.map((p) => (
                     <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
@@ -372,6 +383,9 @@ export default function AdminCoursesPage() {
               <div>
                 <label className="block text-xs font-medium text-[#666] mb-1">Department</label>
                 <input type="text" value={formDept} onChange={(e) => setFormDept(e.target.value)} placeholder="e.g. Computer Science" className="input-field text-sm" />
+                <p className="text-[10px] text-[#99a] mt-0.5">
+                  Program’s department — update above if needed.
+                </p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
