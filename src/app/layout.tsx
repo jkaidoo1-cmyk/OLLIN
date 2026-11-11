@@ -41,14 +41,18 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `if ('serviceWorker' in navigator) window.addEventListener('load', function() {
               navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(function(){});
-              var refreshing = false;
-              if (navigator.serviceWorker.controller) {
-                navigator.serviceWorker.addEventListener('controllerchange', function() {
-                  if (refreshing) return;
-                  refreshing = true;
-                  window.location.reload();
-                });
-              }
+              var hadController = !!navigator.serviceWorker.controller;
+              var reloading = false;
+              navigator.serviceWorker.addEventListener('controllerchange', function() {
+                // The FIRST controllerchange is the worker claiming the page
+                // (skipWaiting + clients.claim), not an update. Reloading on it
+                // yanked the document out from under a click or a save, which
+                // showed up as a surprise refresh with half-loaded data.
+                if (!hadController) { hadController = true; return; }
+                if (reloading) return;
+                reloading = true;
+                window.location.reload();
+              });
             });`,
           }}
         />
