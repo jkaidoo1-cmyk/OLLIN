@@ -130,21 +130,27 @@ export async function POST(
         const claimedEmail = body.participant_email || null;
         const guardEmail = session?.email || claimedEmail;
         if (guardEmail) {
-          const arr = readServerAttempts();
-          let already: any = null;
-          const asArr = arr as any[];
-          for (let i = 0; i < asArr.length; i++) {
-            const a = asArr[i];
-            if (a.quiz_id === quizId
+          const asArr = readServerAttempts() as any[];
+          const completed = asArr.filter(
+            (a) => a.quiz_id === quizId
               && a.participant_email === guardEmail
-              && a.status === "completed") {
-              already = a;
-              break;
-            }
-          }
-          if (already) {
+              && a.status === "completed"
+          );
+          // Honour the quiz's own limit: this guard used to hard-code one
+          // sitting, locking students out of retakes the quiz allowed.
+          const { readServerQuizzes } = await import("@/lib/data");
+          const quizRow = readServerQuizzes().find((q) => q.id === quizId);
+          const allowed = Math.max(1, Number(quizRow?.max_attempts) || 1);
+          if (completed.length >= allowed) {
             return NextResponse.json(
-              { error: "You have already taken this quiz.", attempt_id: already.id, duplicate: true },
+              {
+                error:
+                  allowed > 1
+                    ? `You have used all ${allowed} attempts for this quiz.`
+                    : "You have already taken this quiz.",
+                attempt_id: completed[0]?.id,
+                duplicate: true,
+              },
               { status: 409 }
             );
           }

@@ -130,6 +130,7 @@ export async function createQuiz(
     course_id?: string;
     time_limit_minutes?: number | null;
     max_attempts?: number;
+    show_answers_after?: "after_each" | "after_completion" | "never";
     shuffle_questions?: boolean;
     passing_score?: number;
     questions: Array<{
@@ -161,7 +162,7 @@ export async function createQuiz(
       share_code: shareCode,
       time_limit_minutes: input.time_limit_minutes || null,
       max_attempts: input.max_attempts || 1,
-      show_answers_after: "after_completion",
+      show_answers_after: input.show_answers_after || "after_completion",
       shuffle_questions: input.shuffle_questions ?? true,
       shuffle_options: true,
       passing_score: input.passing_score || 60,
@@ -226,7 +227,7 @@ export async function createQuiz(
         share_code: shareCode,
         time_limit_minutes: input.time_limit_minutes || null,
         max_attempts: input.max_attempts || 1,
-        show_answers_after: "after_completion",
+        show_answers_after: input.show_answers_after || "after_completion",
         shuffle_questions: input.shuffle_questions ?? true,
         shuffle_options: true,
         passing_score: input.passing_score || 60,
@@ -280,7 +281,7 @@ export async function createQuiz(
       share_code: shareCode,
       time_limit_minutes: input.time_limit_minutes || null,
       max_attempts: input.max_attempts || 1,
-      show_answers_after: "after_completion",
+      show_answers_after: input.show_answers_after || "after_completion",
       shuffle_questions: input.shuffle_questions ?? true,
       shuffle_options: true,
       passing_score: input.passing_score || 60,

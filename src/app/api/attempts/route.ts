@@ -154,15 +154,27 @@ export async function POST(request: NextRequest) {
     // A logged-in student gets ONE completed attempt per quiz. Retakes would
     // let them keep their best score (and spam the leaderboard).
     if (participantEmail && status !== "in_progress") {
-      const already = readServerAttempts().find(
+      // Honour the quiz's own attempt limit instead of assuming one sitting:
+      // a quiz set to 3 attempts used to lock the student out after the first.
+      const { readServerQuizzes } = await import("@/lib/data");
+      const quiz = readServerQuizzes().find((q) => q.id === safeQuizId);
+      const allowed = Math.max(1, Number(quiz?.max_attempts) || 1);
+      const completed = readServerAttempts().filter(
         (a: any) =>
           a.quiz_id === safeQuizId &&
           a.participant_email === participantEmail &&
           a.status === "completed"
       );
-      if (already) {
+      if (completed.length >= allowed) {
         return NextResponse.json(
-          { error: "You have already taken this quiz.", attempt_id: already.id, duplicate: true },
+          {
+            error:
+              allowed > 1
+                ? `You have used all ${allowed} attempts for this quiz.`
+                : "You have already taken this quiz.",
+            attempt_id: completed[0]?.id,
+            duplicate: true,
+          },
           { status: 409 }
         );
       }
