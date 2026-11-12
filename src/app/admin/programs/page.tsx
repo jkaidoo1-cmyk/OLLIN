@@ -6,6 +6,7 @@ import { Program } from "@/lib/types";
 import { clearStaleAdminSession } from "@/lib/admin";
 import { useConfirm } from "@/components/ui/toast";
 import { SkeletonList } from "@/components/Skeleton";
+import { readCache, writeCache } from "@/lib/admin-cache";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -45,7 +46,17 @@ export default function AdminProgramsPage() {
 
   const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
 
-  useEffect(() => { fetchPrograms(); }, []);
+  // Renders from the shared cache when it is warm, so switching admin tabs no
+  // longer refetches every time. Refresh / any write is what fills it again.
+  useEffect(() => {
+    const warm = readCache<Program>("programs");
+    if (warm) {
+      setPrograms(warm.data);
+      setLoading(false);
+      return;
+    }
+    void fetchPrograms();
+  }, []);
 
   const fetchPrograms = async () => {
     setLoading(true);
@@ -56,7 +67,9 @@ export default function AdminProgramsPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
-      setPrograms(data.programs || []);
+      const list = data.programs || [];
+      setPrograms(list);
+      writeCache("programs", list);
     } catch (err) {
       // Never let a failed load look like an empty table: "No programs yet"
       // after a refresh reads as "the program I added is gone".

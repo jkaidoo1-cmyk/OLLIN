@@ -9,8 +9,9 @@ import {
   syncSavedQuizzesFromServer,
   getLocalQuizzes,
 } from "@/lib/local";
-import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, ExternalLink, Pencil } from "lucide-react";
+import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, ExternalLink, Pencil, RefreshCw } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
+import { readCache, writeCache } from "@/lib/admin-cache";
 
 export default function AdminQuizzesPage() {
   const confirmDialog = useConfirm();
@@ -23,8 +24,17 @@ export default function AdminQuizzesPage() {
 
   const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
 
+  // Renders from the shared cache when it is warm, so switching admin tabs no
+  // longer refetches every time. Any write is what fills it again.
   useEffect(() => {
-    fetchQuizzesAndCourses();
+    const warmQuizzes = readCache<any>("quizzes");
+    const warmCourses = readCache<any>("courses");
+    if (warmQuizzes && warmCourses) {
+      setQuizzes(warmQuizzes.data);
+      setCourses(warmCourses.data);
+      return;
+    }
+    void fetchQuizzesAndCourses();
   }, []);
 
   const fetchQuizzesAndCourses = async () => {
@@ -46,13 +56,16 @@ export default function AdminQuizzesPage() {
         }
       }
       setQuizzes(merged);
+      writeCache("quizzes", merged);
 
       // Fetch courses
       const resC = await fetch("/api/courses", {
         headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       const dataC = await resC.json();
-      setCourses(dataC.courses || []);
+      const courseList = dataC.courses || [];
+      setCourses(courseList);
+      writeCache("courses", courseList);
     } catch { /* ignore */ }
   };
 
@@ -134,6 +147,13 @@ export default function AdminQuizzesPage() {
           <h1 className="text-xl font-bold text-[#333]">Quizzes</h1>
           <p className="text-xs text-[#999] mt-0.5">{quizzes.length} quiz{quizzes.length !== 1 ? "zes" : ""} total</p>
         </div>
+        <button
+          onClick={() => void fetchQuizzesAndCourses()}
+          title="Reload quizzes from the server"
+          className="text-xs px-3 py-2 border border-[#e0e0e0] rounded hover:border-green-400 text-[#666] flex items-center gap-1.5 justify-center"
+        >
+          <RefreshCw className="w-3.5 h-3.5" /> Refresh
+        </button>
       </div>
 
       {error && (

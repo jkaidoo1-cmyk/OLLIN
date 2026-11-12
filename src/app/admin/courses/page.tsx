@@ -7,6 +7,7 @@ import { getSavedQuizzes, removeSavedQuiz, syncSavedQuizzesFromServer } from "@/
 import { clearStaleAdminSession } from "@/lib/admin";
 import { useConfirm } from "@/components/ui/toast";
 import { SkeletonList } from "@/components/Skeleton";
+import { readCache, writeCache } from "@/lib/admin-cache";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -110,6 +111,7 @@ export default function AdminCoursesPage() {
       if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
       const courseList = data.courses || [];
       setCourses(courseList);
+      writeCache("courses", courseList);
       // Preload quiz associations once (single fetch) so each course row shows its count
       await loadAllQuizzesForCourses(courseList);
     } catch (err) {
@@ -127,13 +129,25 @@ export default function AdminCoursesPage() {
         headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       const data = await res.json();
-      setPrograms(data.programs || []);
+      const list = data.programs || [];
+      setPrograms(list);
+      writeCache("programs", list);
     } catch { /* ignore */ }
   };
 
+  // Renders from the shared cache when it is warm, so switching admin tabs no
+  // longer refetches every time. Refresh / any write is what fills it again.
   useEffect(() => {
-    fetchCourses();
-    fetchPrograms();
+    const warmCourses = readCache<Course>("courses");
+    if (warmCourses) {
+      setCourses(warmCourses.data);
+      setLoading(false);
+    } else {
+      void fetchCourses();
+    }
+    const warmPrograms = readCache<Program>("programs");
+    if (warmPrograms) setPrograms(warmPrograms.data);
+    else void fetchPrograms();
   }, []);
 
   const handleRemoveQuizFromCourse = async (courseId: string, quizId: string) => {
