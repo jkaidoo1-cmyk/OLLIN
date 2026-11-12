@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import { recordAdminAction } from "@/lib/audit";
 import { getSessionAdmin } from "@/lib/session";
+import { isEphemeralHost } from "@/lib/server-host";
 
 // Programs start empty — everything here is created by the admin.
 const DEFAULT_PROGRAMS: unknown[] = [];
@@ -31,7 +32,10 @@ function writeLocalPrograms(programs: unknown[]) {
 // GET — list all programs
 export async function GET(request: NextRequest) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    // On a serverless host the file store is not durable, so a local-mode
+    // request must not be routed to it — that is how deployed admin data
+    // silently vanished.
+    const local = request.headers.get("x-local-mode") === "true" && !isEphemeralHost();
     if (local) {
       return NextResponse.json({ programs: readLocalPrograms() });
     }
@@ -47,7 +51,8 @@ export async function GET(request: NextRequest) {
         const knownCodes = new Set(
           programs.map((p: any) => String(p.code || "").toUpperCase())
         );
-        for (const localProgram of readLocalPrograms() as any[]) {
+        // Ephemeral host: the file is per-instance, so it must not be merged.
+        for (const localProgram of (isEphemeralHost() ? [] : readLocalPrograms()) as any[]) {
           const code = String(localProgram.code || "").toUpperCase();
           if (knownIds.has(localProgram.id) || (code && knownCodes.has(code))) continue;
           programs.push(localProgram);
@@ -55,12 +60,22 @@ export async function GET(request: NextRequest) {
         }
       } catch { /* file store optional */ }
       return NextResponse.json({ programs });
-    } catch {
-      // ANY backend failure (unconfigured, missing table, network, RLS denial)
-      // falls back to the file store. Previously only NO_BACKEND did, so a
-      // partial outage returned a 500 and the admin page showed an empty list —
-      // which read as "the program I added is gone".
-      return NextResponse.json({ programs: readLocalPrograms() });
+    } catch (err) {
+      // Where the disk persists, the file store is a real fallback.
+      if (!isEphemeralHost()) {
+        return NextResponse.json({ programs: readLocalPrograms() });
+      }
+      // Serverless: there is no durable file, so serving it would show a short
+      // per-instance list and look like the programs were deleted. Fail loudly
+      // instead — the admin page shows the message and a Retry button.
+      return NextResponse.json(
+        {
+          error: `Could not load programs from the database: ${
+            err instanceof Error ? err.message : "unknown error"
+          }`,
+        },
+        { status: 503 }
+      );
     }
   } catch (error) {
     return NextResponse.json(
@@ -73,7 +88,10 @@ export async function GET(request: NextRequest) {
 // POST — create a new program
 export async function POST(request: NextRequest) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    // On a serverless host the file store is not durable, so a local-mode
+    // request must not be routed to it — that is how deployed admin data
+    // silently vanished.
+    const local = request.headers.get("x-local-mode") === "true" && !isEphemeralHost();
     const body = await request.json();
     const { code, name, department, description } = body;
 
@@ -131,6 +149,22 @@ export async function POST(request: NextRequest) {
       else supabaseError = new Error(JSON.stringify(err));
     }
 
+    // On a serverless host the file fallback is not storage: the write lands in
+    // a per-instance filesystem (or fails read-only) and is gone before the next
+    // request — exactly how newly created programs disappeared after a refresh.
+    // Report the real failure rather than a phantom success.
+    if (isEphemeralHost()) {
+      return NextResponse.json(
+        {
+          error: `Could not save the program: ${
+            supabaseError?.message ||
+            "the database is not configured on this deployment (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)"
+          }`,
+        },
+        { status: 507 }
+      );
+    }
+
     // Supabase failed — fall back to local file
     const programs = readLocalPrograms();
     const newProgram: any = {
@@ -168,7 +202,10 @@ export async function POST(request: NextRequest) {
 // Real: update the record in Supabase (keep course code fields in sync).
 export async function PATCH(request: NextRequest) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    // On a serverless host the file store is not durable, so a local-mode
+    // request must not be routed to it — that is how deployed admin data
+    // silently vanished.
+    const local = request.headers.get("x-local-mode") === "true" && !isEphemeralHost();
     const body = await request.json();
     const id = body.id;
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
@@ -213,6 +250,18 @@ export async function PATCH(request: NextRequest) {
       else supabaseError = new Error(JSON.stringify(err));
     }
 
+    // Same rule as create: a per-instance file is not a place to store an edit.
+    if (isEphemeralHost()) {
+      return NextResponse.json(
+        {
+          error: `Could not update the program: ${
+            supabaseError?.message || "the database is not configured on this deployment"
+          }`,
+        },
+        { status: 507 }
+      );
+    }
+
     // Supabase failed — fall back to local file
     const programs = readLocalPrograms();
     const idx = programs.findIndex((p: any) => p.id === id);
@@ -238,7 +287,10 @@ export async function PATCH(request: NextRequest) {
 // DELETE — remove a program
 export async function DELETE(request: NextRequest) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    // On a serverless host the file store is not durable, so a local-mode
+    // request must not be routed to it — that is how deployed admin data
+    // silently vanished.
+    const local = request.headers.get("x-local-mode") === "true" && !isEphemeralHost();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });

@@ -8,6 +8,7 @@ import { useConfirm } from "@/components/ui/toast";
 import { SkeletonList } from "@/components/Skeleton";
 import { readCache, writeCache } from "@/lib/admin-cache";
 import { useCacheAgeLabel } from "@/lib/use-cache-age";
+import { isLocalMode } from "@/lib/local";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -45,7 +46,9 @@ export default function AdminProgramsPage() {
   const [saveError, setSaveError] = useState("");
   const [editing, setEditing] = useState<EditState | null>(null);
 
-  const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
+  // Loopback-only; on a deployed origin the file store is per-instance, so
+  // admin writes there must go to the database.
+  const isLocal = isLocalMode();
 
   // Renders from the shared cache when it is warm, so switching admin tabs no
   // longer refetches every time. Refresh / any write is what fills it again.

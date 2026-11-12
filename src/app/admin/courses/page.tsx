@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Loader2, Trash2, BookOpen, Save, X, ChevronDown, ChevronUp, Clock, Pen, AlertCircle, RefreshCw } from "lucide-react";
 import { Course, Program, Quiz } from "@/lib/types";
-import { getSavedQuizzes, removeSavedQuiz, syncSavedQuizzesFromServer } from "@/lib/local";
+import { getSavedQuizzes, removeSavedQuiz, syncSavedQuizzesFromServer, isLocalMode } from "@/lib/local";
 import { clearStaleAdminSession } from "@/lib/admin";
 import { useConfirm } from "@/components/ui/toast";
 import { SkeletonList } from "@/components/Skeleton";
@@ -64,7 +64,9 @@ export default function AdminCoursesPage() {
   const [saveError, setSaveError] = useState("");
   const [editing, setEditing] = useState<EditState | null>(null);
 
-  const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
+  // Loopback-only; on a deployed origin the file store is per-instance, so
+  // admin writes there must go to the database.
+  const isLocal = isLocalMode();
 
   // Bulk-load quizzes for every course in one pass (no per-course fetch spam)
   const loadAllQuizzesForCourses = async (courseList: Course[]) => {

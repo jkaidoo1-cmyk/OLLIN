@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Users, BookOpen, CheckCircle, BarChart3, LifeBuoy, Eraser } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
+import { isLocalMode } from "@/lib/local";
 
 export default function AdminOverviewPage() {
   const confirmDialog = useConfirm();
@@ -13,7 +14,9 @@ export default function AdminOverviewPage() {
   const [supportMsgs, setSupportMsgs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
+  // Loopback-only; on a deployed origin the file store is per-instance, so
+  // admin reads there must use the database.
+  const isLocal = isLocalMode();
 
   useEffect(() => {
     fetchOverview();

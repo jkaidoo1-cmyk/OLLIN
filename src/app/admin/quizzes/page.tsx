@@ -13,6 +13,7 @@ import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, ExternalL
 import { useConfirm, useToast } from "@/components/ui/toast";
 import { readCache, writeCache } from "@/lib/admin-cache";
 import { useCacheAgeLabel } from "@/lib/use-cache-age";
+import { isLocalMode } from "@/lib/local";
 
 export default function AdminQuizzesPage() {
   const confirmDialog = useConfirm();
@@ -23,7 +24,9 @@ export default function AdminQuizzesPage() {
   const [questionsMap, setQuestionsMap] = useState<Record<string, any[]>>({});
   const [error, setError] = useState("");
 
-  const isLocal = typeof window !== "undefined" && localStorage.getItem("ollin_local_user") !== null;
+  // Loopback-only; on a deployed origin the file store is per-instance, so
+  // admin reads there must use the database.
+  const isLocal = isLocalMode();
 
   // Renders from the shared cache when it is warm, so switching admin tabs no
   // longer refetches every time. Any write is what fills it again.

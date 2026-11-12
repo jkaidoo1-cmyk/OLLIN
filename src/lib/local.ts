@@ -96,6 +96,18 @@ const LOCAL_ATTEMPTS: QuizAttempt[] = [];
 
 export function isLocalMode(): boolean {
   if (typeof window === "undefined") return false;
+  // Local mode reads and writes files on the machine serving the request. On a
+  // deployed origin that filesystem is per-instance and read-only, so a local
+  // login there must NOT switch the app onto the file store: every program and
+  // course created in that mode disappeared on the next request, which is what
+  // made admin data look like it was being deleted. Keep it to loopback unless
+  // a deliberately file-backed deployment opts in.
+  if (process.env.NEXT_PUBLIC_OLLIN_LOCAL_MODE !== "1") {
+    const host = window.location.hostname;
+    if (host !== "localhost" && host !== "127.0.0.1" && host !== "::1" && host !== "[::1]") {
+      return false;
+    }
+  }
   return localStorage.getItem(LOCAL_USER_KEY) !== null;
 }
 
