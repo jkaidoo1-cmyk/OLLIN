@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "Could not save the account. Supabase is configured but the create request failed, and this deployment has no writable local storage.",
+              "Could not save the account — this deployment has no writable storage (and Supabase is not connected). Connect Supabase to enable persistent user management.",
             not_persisted: true,
           },
           { status: 507 }

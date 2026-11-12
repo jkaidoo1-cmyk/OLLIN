@@ -55,12 +55,12 @@ export async function GET(request: NextRequest) {
         }
       } catch { /* file store optional */ }
       return NextResponse.json({ programs });
-    } catch (err) {
-      // NO_BACKEND (Supabase unconfigured or unavailable) → file-backed storage
-      if (err instanceof Error && err.message === "NO_BACKEND") {
-        return NextResponse.json({ programs: readLocalPrograms() });
-      }
-      throw err;
+    } catch {
+      // ANY backend failure (unconfigured, missing table, network, RLS denial)
+      // falls back to the file store. Previously only NO_BACKEND did, so a
+      // partial outage returned a 500 and the admin page showed an empty list —
+      // which read as "the program I added is gone".
+      return NextResponse.json({ programs: readLocalPrograms() });
     }
   } catch (error) {
     return NextResponse.json(

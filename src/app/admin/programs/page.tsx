@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Loader2, Trash2, GraduationCap, Save, X, Pen, AlertCircle } from "lucide-react";
+import { Plus, Loader2, Trash2, GraduationCap, Save, X, Pen, AlertCircle, RefreshCw } from "lucide-react";
 import { Program } from "@/lib/types";
 import { clearStaleAdminSession } from "@/lib/admin";
 import { useConfirm } from "@/components/ui/toast";
@@ -36,6 +36,7 @@ export default function AdminProgramsPage() {
   const [formDept, setFormDept] = useState("");
   const [formDesc, setFormDesc] = useState("");
   const [formError, setFormError] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   const [pending, setPending] = useState<PendingAction[]>([]);
   const [saving, setSaving] = useState(false);
@@ -48,13 +49,21 @@ export default function AdminProgramsPage() {
 
   const fetchPrograms = async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const res = await fetch("/api/programs", {
         headers: isLocal ? { "x-local-mode": "true" } : {},
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
       setPrograms(data.programs || []);
-    } catch { /* ignore */ } finally { setLoading(false); }
+    } catch (err) {
+      // Never let a failed load look like an empty table: "No programs yet"
+      // after a refresh reads as "the program I added is gone".
+      setLoadError(
+        err instanceof Error ? `Could not load programs: ${err.message}` : "Could not load programs."
+      );
+    } finally { setLoading(false); }
   };
 
   const handleCreate = (e: React.FormEvent) => {
@@ -193,15 +202,33 @@ export default function AdminProgramsPage() {
           <h1 className="text-xl font-bold text-[#333]">Programs</h1>
           <p className="text-xs text-[#999] mt-0.5">{programs.length} programs</p>
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="btn-primary text-xs flex items-center gap-1.5">
-          <Plus className="w-3.5 h-3.5" /> Add program
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void fetchPrograms()}
+            disabled={loading}
+            title="Reload programs from the server"
+            className="text-xs px-3 py-2 border border-[#e0e0e0] rounded hover:border-green-400 text-[#666] flex items-center gap-1.5 justify-center disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
+          </button>
+          <button onClick={() => setShowForm(!showForm)} className="btn-primary text-xs flex items-center gap-1.5">
+            <Plus className="w-3.5 h-3.5" /> Add program
+          </button>
+        </div>
       </div>
 
       {saveError && (
         <div className="flex items-start gap-2 text-xs px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded mb-4">
           <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
           <span>{saveError}</span>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="flex items-start gap-2 text-xs px-3 py-2 bg-amber-50 border border-amber-200 text-amber-800 rounded mb-4">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <span className="flex-1">{loadError}</span>
+          <button onClick={() => void fetchPrograms()} className="font-medium underline shrink-0">Retry</button>
         </div>
       )}
 
@@ -280,7 +307,11 @@ export default function AdminProgramsPage() {
       {loading ? (
         <SkeletonList rows={3} rowClass="h-14" />
       ) : programs.length === 0 ? (
-        <div className="text-center py-8 text-sm text-[#999]">No programs yet.</div>
+        <div className="text-center py-8 text-sm text-[#999]">
+          {loadError
+            ? "Programs could not be loaded — press Refresh to try again."
+            : "No programs yet."}
+        </div>
       ) : (
         <div className="space-y-2">
           {programs.map((prog) => {

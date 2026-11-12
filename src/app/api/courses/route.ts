@@ -61,14 +61,14 @@ export async function GET(request: NextRequest) {
         }
       } catch { /* file store optional */ }
       return NextResponse.json({ courses });
-    } catch (err) {
-      // NO_BACKEND (Supabase unconfigured or unavailable) → file-backed storage
-      if (err instanceof Error && err.message === "NO_BACKEND") {
-        const all = readLocalCourses();
-        const courses = !programId ? all : all.filter((c: any) => c.program_id === programId || !c.program_id);
-        return NextResponse.json({ courses });
-      }
-      throw err;
+    } catch {
+      // ANY backend failure (unconfigured, missing table, network, RLS denial)
+      // falls back to the file store. Previously only NO_BACKEND did, so a
+      // partial outage returned a 500 and the admin page showed an empty list —
+      // which read as "the course I added is gone".
+      const all = readLocalCourses();
+      const courses = !programId ? all : all.filter((c: any) => c.program_id === programId || !c.program_id);
+      return NextResponse.json({ courses });
     }
   } catch (error) {
     return NextResponse.json(
