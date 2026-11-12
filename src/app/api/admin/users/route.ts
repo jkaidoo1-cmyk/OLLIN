@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "Could not save the account — this deployment has no writable storage (and Supabase is not connected). Connect Supabase to enable persistent user management.",
+              "Could not save the account — the server could not write to its user store, so nothing was created. Please try again, or connect Supabase so accounts persist.",
             not_persisted: true,
           },
           { status: 507 }
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "Could not save the account — this deployment has no writable storage (and Supabase is not connected). Connect Supabase to enable persistent user management.",
+              "Could not save the account — the server could not write to its user store, so nothing was created. Please try again, or connect Supabase so accounts persist.",
             not_persisted: true,
           },
           { status: 507 }

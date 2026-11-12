@@ -251,6 +251,9 @@ export default function AdminUsersPage() {
       setTimeout(() => clearStaleAdminSession(), 1200);
       return;
     }
+    // Show the server's own wording: it distinguishes "nothing was created"
+    // from "already exists", and guessing at it here produced a misleading
+    // "could not save" for failures that had actually persisted.
     setSaveError(msg);
   };
 
