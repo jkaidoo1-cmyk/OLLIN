@@ -8,6 +8,7 @@ import { clearStaleAdminSession } from "@/lib/admin";
 import { useConfirm } from "@/components/ui/toast";
 import { SkeletonList } from "@/components/Skeleton";
 import { readCache, writeCache } from "@/lib/admin-cache";
+import { useCacheAgeLabel } from "@/lib/use-cache-age";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -112,6 +113,7 @@ export default function AdminCoursesPage() {
       const courseList = data.courses || [];
       setCourses(courseList);
       writeCache("courses", courseList);
+      setUpdatedAt(Date.now());
       // Preload quiz associations once (single fetch) so each course row shows its count
       await loadAllQuizzesForCourses(courseList);
     } catch (err) {
@@ -137,10 +139,14 @@ export default function AdminCoursesPage() {
 
   // Renders from the shared cache when it is warm, so switching admin tabs no
   // longer refetches every time. Refresh / any write is what fills it again.
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const ageLabel = useCacheAgeLabel(updatedAt);
+
   useEffect(() => {
     const warmCourses = readCache<Course>("courses");
     if (warmCourses) {
       setCourses(warmCourses.data);
+      setUpdatedAt(warmCourses.at);
       setLoading(false);
     } else {
       void fetchCourses();
@@ -319,6 +325,7 @@ export default function AdminCoursesPage() {
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
           </button>
+          {ageLabel && <span className="text-[11px] text-[#999] mr-1">{ageLabel}</span>}
           <button onClick={() => setShowForm(!showForm)} className="btn-primary text-xs flex items-center gap-1.5">
             <Plus className="w-3.5 h-3.5" /> Add course
           </button>

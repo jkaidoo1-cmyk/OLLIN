@@ -7,6 +7,7 @@ import { clearStaleAdminSession } from "@/lib/admin";
 import { useConfirm } from "@/components/ui/toast";
 import { SkeletonList } from "@/components/Skeleton";
 import { readCache, writeCache } from "@/lib/admin-cache";
+import { useCacheAgeLabel } from "@/lib/use-cache-age";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -73,10 +74,14 @@ export default function AdminUsersPage() {
 
   // Renders from the shared cache when it is warm, so switching admin tabs no
   // longer refetches every time. Refresh / any write is what fills it again.
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const ageLabel = useCacheAgeLabel(updatedAt);
+
   useEffect(() => {
     const warmUsers = readCache<User>("users");
     if (warmUsers) {
       setUsers(warmUsers.data);
+      setUpdatedAt(warmUsers.at);
       setLoading(false);
     } else {
       void fetchUsers();
@@ -97,6 +102,7 @@ export default function AdminUsersPage() {
       const list = data.users || [];
       setUsers(list);
       writeCache("users", list);
+      setUpdatedAt(Date.now());
       setSaveError("");
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to load users");
@@ -350,6 +356,7 @@ export default function AdminUsersPage() {
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
           </button>
+          {ageLabel && <span className="text-[11px] text-[#999] mr-1">{ageLabel}</span>}
           <button
             onClick={() => setShowImport(true)}
             className="text-xs px-3 py-2 border border-[#e0e0e0] rounded hover:border-green-400 text-[#666] flex items-center gap-1.5 justify-center"

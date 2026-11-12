@@ -12,6 +12,7 @@ import {
 import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, ExternalLink, Pencil, RefreshCw } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
 import { readCache, writeCache } from "@/lib/admin-cache";
+import { useCacheAgeLabel } from "@/lib/use-cache-age";
 
 export default function AdminQuizzesPage() {
   const confirmDialog = useConfirm();
@@ -26,12 +27,16 @@ export default function AdminQuizzesPage() {
 
   // Renders from the shared cache when it is warm, so switching admin tabs no
   // longer refetches every time. Any write is what fills it again.
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const ageLabel = useCacheAgeLabel(updatedAt);
+
   useEffect(() => {
     const warmQuizzes = readCache<any>("quizzes");
     const warmCourses = readCache<any>("courses");
     if (warmQuizzes && warmCourses) {
       setQuizzes(warmQuizzes.data);
       setCourses(warmCourses.data);
+      setUpdatedAt(warmQuizzes.at);
       return;
     }
     void fetchQuizzesAndCourses();
@@ -57,6 +62,7 @@ export default function AdminQuizzesPage() {
       }
       setQuizzes(merged);
       writeCache("quizzes", merged);
+      setUpdatedAt(Date.now());
 
       // Fetch courses
       const resC = await fetch("/api/courses", {
@@ -154,6 +160,7 @@ export default function AdminQuizzesPage() {
         >
           <RefreshCw className="w-3.5 h-3.5" /> Refresh
         </button>
+        {ageLabel && <span className="text-[11px] text-[#999]">{ageLabel}</span>}
       </div>
 
       {error && (
