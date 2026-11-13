@@ -131,6 +131,36 @@ export interface SessionUser {
 async function resolveSessionUser(
   payload: SessionPayload
 ): Promise<SessionUser | null> {
+  // On a serverless host the users file is re-seeded per instance, so ids like
+  // "admin-001" / "demo-001" are stubs that match no database row. Every
+  // uuid-keyed query (notifications, attempts, quizzes) then silently matched
+  // nothing — support tickets reached the admin's row but the bell read the
+  // empty file store. Resolve such sessions to their profile by email first.
+  const UUID_RE_SESSION = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_RE_SESSION.test(payload.userId) && payload.email) {
+    const { isEphemeralHost } = await import("./server-host");
+    if (isEphemeralHost()) {
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/server");
+        const admin = await createAdminClient();
+        if (admin) {
+          const { data } = await admin
+            .from("profiles")
+            .select("id, email, role")
+            .ilike("email", payload.email)
+            .maybeSingle();
+          if (data?.id) {
+            return {
+              id: data.id,
+              email: data.email,
+              role: data.role || payload.role || "student",
+            };
+          }
+        }
+      } catch { /* fall back to the file id below */ }
+    }
+  }
+
   const users = readLocalUsers();
   const user = users.find((u) => u.id === payload.userId);
   if (user) {
