@@ -20,7 +20,9 @@ const nextConfig: NextConfig = {
     "dommatrix",
   ],
   outputFileTracingIncludes: {
-    "/api/**/*": [
+    // Only the upload route needs the parsers — tracing them into every API
+    // function makes each cold start carry ~15MB it never uses.
+    "/api/generate-questions/**/*": [
       "./node_modules/pdfjs-dist/**/*",
       "./node_modules/dommatrix/**/*",
       "./node_modules/mammoth/**/*",
