@@ -598,7 +598,8 @@ async function callGeminiAPI(
     // kills the function and the user gets no response at all.
     const remaining = deadlineAt ? deadlineAt - Date.now() : staticTimeout;
     if (remaining < 5_000) {
-      lastError = new Error("Generation ran out of time. Please try again.");
+      console.warn(`[ai] out of time before calling ${model} (budget spent)`);
+      lastError = new Error("That took too long and was stopped. Please try again.");
       break;
     }
     const attemptTimeout = Math.min(staticTimeout, remaining);

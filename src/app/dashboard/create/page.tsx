@@ -292,9 +292,10 @@ export default function CreateQuizPage() {
         });
       } catch (fetchErr) {
         if (fetchErr instanceof DOMException && fetchErr.name === "AbortError") {
-          throw new Error(
-            "Generation didn't come back in time. Try again with a shorter piece of material — if it keeps happening, the deployment may be over its hosting limit."
-          );
+          // Keep it about what the user can do; hosting limits are our problem,
+          // not theirs to reason about. Diagnostics stay in the console.
+          console.warn("[generate] request aborted after 45s without a response");
+          throw new Error("That took too long and was stopped. Please try again — a shorter piece of material is quicker.");
         }
         throw fetchErr;
       } finally {
