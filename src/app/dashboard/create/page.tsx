@@ -278,9 +278,10 @@ export default function CreateQuizPage() {
       }
 
       // Hard stop so "Generating questions…" can never spin forever when the
-      // provider or the network stalls.
+      // provider, the host or the network stalls. The hosting limit is well
+      // under this, so a longer wait only leaves the user staring at a spinner.
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 120_000);
+      const timeout = setTimeout(() => controller.abort(), 45_000);
       let res: Response;
       try {
         res = await fetch("/api/generate-questions", {
@@ -291,7 +292,9 @@ export default function CreateQuizPage() {
         });
       } catch (fetchErr) {
         if (fetchErr instanceof DOMException && fetchErr.name === "AbortError") {
-          throw new Error("Question generation timed out. Please try again.");
+          throw new Error(
+            "Generation didn't come back in time. Try again with a shorter piece of material — if it keeps happening, the deployment may be over its hosting limit."
+          );
         }
         throw fetchErr;
       } finally {
