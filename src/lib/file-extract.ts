@@ -79,8 +79,14 @@ async function extractPDF(buffer: Buffer): Promise<ExtractionResult> {
   // .../.next/dev/server/chunks/..."). Requiring the real file keeps
   // import.meta.url inside node_modules, where pdf.worker.mjs actually lives.
   const { createRequire } = await import("node:module");
+  const { pathToFileURL } = await import("node:url");
   const nodeRequire = createRequire(join(process.cwd(), "package.json"));
-  const pdfjs = nodeRequire("pdfjs-dist/legacy/build/pdf.mjs") as unknown as {
+  // Resolve to the real file, then import it: pdfjs-dist is an ES module, and
+  // require() of one throws on the Node versions serverless hosts run. The
+  // import must use the absolute path so import.meta.url still points at
+  // node_modules and the worker is found.
+  const pdfModulePath = nodeRequire.resolve("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = await import(pathToFileURL(pdfModulePath).href) as unknown as {
     getDocument: (src: Record<string, unknown>) => {
       promise: Promise<{
         numPages: number;
