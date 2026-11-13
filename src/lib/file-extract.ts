@@ -85,13 +85,25 @@ async function extractPDF(buffer: Buffer): Promise<ExtractionResult> {
   // require() of one throws on the Node versions serverless hosts run. The
   // import must use the absolute path so import.meta.url still points at
   // node_modules and the worker is found.
-  const pdfModulePath = nodeRequire.resolve("pdfjs-dist/legacy/build/pdf.mjs");
   // The bundler rewrites a literal import() into its own loader, which then
   // fails with "Cannot find module as expression is too dynamic". Building the
   // import at runtime keeps it a genuine ESM load of the file on disk.
   const importModule = new Function("s", "return import(s)") as (
     s: string
   ) => Promise<unknown>;
+
+  // pdf.js 6 assumes browser globals; serverless Node (22 on the host) has no
+  // DOMMatrix, so PDF parsing died with "DOMMatrix is not defined".
+  const globals = globalThis as unknown as Record<string, unknown>;
+  if (typeof globals.DOMMatrix === "undefined") {
+    const dommatrixPath = nodeRequire.resolve("dommatrix");
+    const dommatrixModule = (await importModule(
+      pathToFileURL(dommatrixPath).href
+    )) as { default?: unknown };
+    globals.DOMMatrix = dommatrixModule.default ?? dommatrixModule;
+  }
+
+  const pdfModulePath = nodeRequire.resolve("pdfjs-dist/legacy/build/pdf.mjs");
   const pdfjs = (await importModule(pathToFileURL(pdfModulePath).href)) as unknown as {
     getDocument: (src: Record<string, unknown>) => {
       promise: Promise<{
