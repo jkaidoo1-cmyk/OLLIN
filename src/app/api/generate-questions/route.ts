@@ -5,6 +5,10 @@ import { getSessionUser } from "@/lib/session";
 import { checkThrottle } from "@/lib/rate-limit";
 import { recordAdminAction } from "@/lib/audit";
 
+// Generation plus an optional top-up call has to fit in the host's function
+// budget; the internal deadline below is set just inside it.
+export const maxDuration = 60;
+
 /**
  * The app stores a multiple-choice answer as the option's zero-based index
  * ("0".."3") and a true/false answer as "true"/"false". Models sometimes
@@ -286,29 +290,70 @@ export async function POST(request: NextRequest) {
 
     finalText = getRelevantText(finalText, 7000);
 
+    // TEMPORARY diagnostics: stage markers written to audit_log so a deployed
+    // request can be traced without access to function logs.
+    const __t0 = Date.now();
+    const mark = async (stage: string) => {
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/server");
+        const sb = await createAdminClient();
+        await sb?.from("audit_log").insert({
+          id: `dbg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          actor_id: null,
+          actor_email: null,
+          action: "debug.generate",
+          target_type: "quiz",
+          target_id: null,
+          detail: `${stage} @${Date.now() - __t0}ms`,
+          ip: null,
+        });
+      } catch { /* diagnostics only */ }
+    };
+    await mark("start");
+
     // Call AI — keys come from the server only (Supabase / config file / env).
+    const wanted = Math.min(question_count, 200);
+    // The host kills this function around 60s, so everything — including the
+    // top-up call — has to finish inside a budget we control, or the user gets
+    // no response at all.
+    const deadlineAt = Date.now() + 50_000;
+
+    // Record per-key usage so the admin's token charts stay accurate. Awaited:
+    // a fire-and-forget write is dropped when a serverless instance freezes
+    // right after the response is sent.
+    const recordUsage = async ({
+      keyId,
+      inputTokens,
+      outputTokens,
+    }: {
+      keyId: string;
+      inputTokens: number;
+      outputTokens: number;
+    }) => {
+      try {
+        const { recordKeyUsage } = await import("@/lib/ai/key-rotation");
+        await recordKeyUsage(keyId, inputTokens, outputTokens);
+      } catch { /* non-critical */ }
+    };
+
     const { analysis, questions } = await analyzeAndGenerate(
       finalText,
-      Math.min(question_count, 200),
+      wanted,
       question_types,
       {
         fileData: isImage ? file_data : undefined,
         fileType: isImage ? file_type : undefined,
         fileName: isImage ? file_name : undefined,
         customInstructions: custom_instructions,
-        onUsage: async ({ keyId, inputTokens, outputTokens }) => {
-          // Record per-key usage so the admin's token charts stay accurate.
-          // Awaited: a fire-and-forget write is dropped when a serverless
-          // instance freezes right after the response is sent.
-          try {
-            const { recordKeyUsage } = await import("@/lib/ai/key-rotation");
-            await recordKeyUsage(keyId, inputTokens, outputTokens);
-          } catch { /* non-critical */ }
-        },
+        deadlineAt,
+        onUsage: recordUsage,
       }
     );
 
-    const validatedQuestions = (questions as Record<string, unknown>[])
+    await mark("model.done");
+
+    const acceptBatch = (batch: unknown[], subject: string) =>
+      (batch as Record<string, unknown>[])
       .filter((q) => q.question && q.correctAnswer !== undefined)
       .map((q) => {
         const isTF = q.type === "true_false";
@@ -328,7 +373,7 @@ export async function POST(request: NextRequest) {
           options: rawOptions,
           correctAnswer: normalizeAnswerKey(type, q.correctAnswer, rawOptions),
           explanation: String(q.explanation || "Based on the provided material."),
-          topic: String(q.topic || analysis.subject || "General"),
+          topic: String(q.topic || subject || "General"),
           difficulty: ["easy", "medium", "hard"].includes(q.difficulty as string)
             ? q.difficulty
             : "medium",
@@ -339,10 +384,61 @@ export async function POST(request: NextRequest) {
     // Deterministic quality gate: the prompt states the standard, this enforces
     // the part of it a script can check (banned stems, bogus options, repeats).
     const { filterLowQuality } = await import("@/lib/ai/quality");
-    const { kept: qualityChecked, dropped } = filterLowQuality(validatedQuestions);
+    // Shared across batches so a top-up cannot re-ask an earlier question.
+    const stemSeen = new Set<string>();
+    const dropped: { question: string; reason: string }[] = [];
+
+    const gate = (batch: unknown[]) => {
+      const { kept, dropped: rejected } = filterLowQuality(
+        acceptBatch(batch, analysis.subject),
+        stemSeen
+      );
+      dropped.push(...rejected);
+      return kept;
+    };
+
+    let qualityChecked = gate(questions);
+
+    // A rejected item must not silently shrink the quiz: ask once more for the
+    // shortfall, naming the points already covered so the retry adds new ones
+    // rather than rewrites of what survived.
+    if (qualityChecked.length < wanted && Date.now() < deadlineAt - 12_000) {
+      const shortfall = wanted - qualityChecked.length;
+      const covered = qualityChecked
+        .slice(-12)
+        .map((q) => `- ${q.question}`)
+        .join("\n");
+      try {
+        const retry = await analyzeAndGenerate(
+          finalText,
+          Math.min(shortfall + 2, 50),
+          question_types,
+          {
+            fileName: isImage ? file_name : undefined,
+            deadlineAt,
+            customInstructions: [
+              custom_instructions,
+              covered
+                ? `These points are already covered — write different questions:\n${covered}`
+                : "",
+            ]
+              .filter(Boolean)
+              .join("\n\n"),
+            onUsage: recordUsage,
+          }
+        );
+        qualityChecked = [...qualityChecked, ...gate(retry.questions)];
+      } catch (err) {
+        // A failed top-up is not a failed quiz: keep what passed the gate and
+        // report the real count in the response below.
+        console.error("[generate] top-up failed:", err instanceof Error ? err.message : err);
+      }
+      qualityChecked = qualityChecked.slice(0, wanted);
+    }
+
     if (dropped.length > 0) {
       console.warn(
-        `[generate] dropped ${dropped.length}/${validatedQuestions.length} low-quality items`,
+        `[generate] dropped ${dropped.length} low-quality items (kept ${qualityChecked.length}/${wanted})`,
         dropped.slice(0, 5)
       );
     }
@@ -354,6 +450,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    await mark("gate.done");
+
     await recordAdminAction(
       request,
       session,
@@ -363,8 +461,12 @@ export async function POST(request: NextRequest) {
       `Generated ${qualityChecked.length} ${question_types.join(", ")} questions from material`
     );
 
+    await mark("respond");
     return NextResponse.json({
       questions: qualityChecked,
+      // The client reports these so a short quiz is never a silent surprise.
+      requested: wanted,
+      generated: qualityChecked.length,
       analysis: {
         title: analysis.title,
         subject: analysis.subject,
