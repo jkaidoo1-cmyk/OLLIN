@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isLocalRequest } from "@/lib/server-host";
 import { getQuizById, getQuizByCode, deleteQuiz, getQuizQuestions } from "@/lib/data";
 
 // GET — get quiz by ID or share code, with questions (public, no auth required)
@@ -27,7 +28,7 @@ export async function GET(
     const norm = rawId.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
     const id = norm || rawId;
 
-    const local = request.headers.get("x-local-mode") === "true";
+    const local = isLocalRequest(request);
 
     // Try file first (fast path for local-mode data), then Supabase.
     // Public quiz lookups must check Supabase even without auth — guests join
@@ -164,7 +165,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    const local = isLocalRequest(request);
     const { id } = await params;
     // x-local-mode says which VIEW the caller uses, not which store holds the
     // quiz: the list merges file-backed rows into a Supabase-mode browser (and
@@ -200,7 +201,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    const local = isLocalRequest(request);
     const { id } = await params;
     const body = await request.json();
 

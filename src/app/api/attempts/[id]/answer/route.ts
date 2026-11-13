@@ -3,6 +3,7 @@ import { readServerAttempts, writeServerAttempts, saveAnswer, getQuizQuestions }
 import { getSessionUser } from "@/lib/session";
 import { checkThrottle } from "@/lib/rate-limit";
 import { isAnswerCorrect } from "@/lib/grading";
+import { isLocalRequest } from "@/lib/server-host";
 import type { QuizAttempt } from "@/lib/types";
 
 /** File-mode attempt rows carry an answers map (question_id → selection). */
@@ -33,7 +34,7 @@ export async function POST(
       );
     }
 
-    const local = request.headers.get("x-local-mode") === "true";
+    const local = isLocalRequest(request);
     const { id } = await params;
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object") {

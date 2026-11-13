@@ -8,6 +8,22 @@ import { createAdminClient } from "@/lib/supabase/server";
 
 const CONFIG_PATH = join(process.cwd(), ".ollin-config.json");
 
+/**
+ * File-mode writes must fail loudly. A read-only filesystem silently losing an
+ * API key is indistinguishable from saving it, and the admin only finds out
+ * when generation starts failing.
+ */
+function keyListNotSaved() {
+  return NextResponse.json(
+    {
+      error:
+        "Could not save the key list: this deployment's filesystem is read-only and Supabase is not configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY).",
+      not_persisted: true,
+    },
+    { status: 507 }
+  );
+}
+
 function generateKeyId(): string {
   return `key-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -205,7 +221,11 @@ export async function POST(request: NextRequest) {
       };
       config.api_keys.push(newKey);
       config.updated_at = new Date().toISOString();
-      try { writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch { /* read-only fs */ }
+      try {
+        writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+      } catch {
+        return keyListNotSaved();
+      }
       await recordAdminAction(request, admin, "key.add", "api_key", newKey.id, `Added ${newKey.provider} key ${maskKey(String(body.key || ""))}`);
       return NextResponse.json({ success: true, id: newKey.id });
     }
@@ -214,7 +234,11 @@ export async function POST(request: NextRequest) {
       const removedKey = config.api_keys.find((k: any) => k.id === body.id);
       config.api_keys = config.api_keys.filter((k: any) => k.id !== body.id);
       config.updated_at = new Date().toISOString();
-      try { writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch { /* read-only fs */ }
+      try {
+        writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+      } catch {
+        return keyListNotSaved();
+      }
       await recordAdminAction(request, admin, "key.remove", "api_key", body.id, `Removed ${removedKey?.provider || "key"}${removedKey?.label ? ` "${removedKey.label}"` : ""}`);
       return NextResponse.json({ success: true });
     }
@@ -227,7 +251,11 @@ export async function POST(request: NextRequest) {
         key.enabled = body.enabled === undefined ? !key.enabled : !!body.enabled;
       }
       config.updated_at = new Date().toISOString();
-      try { writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch { /* read-only fs */ }
+      try {
+        writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+      } catch {
+        return keyListNotSaved();
+      }
       await recordAdminAction(request, admin, "key.toggle", "api_key", body.id, `${key?.enabled ? "Enabled" : "Disabled"} key`);
       return NextResponse.json({ success: true, enabled: key?.enabled });
     }
@@ -239,7 +267,11 @@ export async function POST(request: NextRequest) {
         key.last_error_at = undefined;
       }
       config.updated_at = new Date().toISOString();
-      try { writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch { /* read-only fs */ }
+      try {
+        writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+      } catch {
+        return keyListNotSaved();
+      }
       await recordAdminAction(request, admin, "key.clear_error", "api_key", body.id, "Cleared key error state");
       return NextResponse.json({ success: true });
     }

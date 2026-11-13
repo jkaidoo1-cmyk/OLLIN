@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getQuizByCode, getQuizQuestions, readServerQuizzes } from "@/lib/data";
 import { serverGetLocalQuizByCode } from "@/lib/server-local";
+import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
 
 // POST — join a quiz by share code
 export async function POST(request: NextRequest) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    const local = isLocalRequest(request);
     const body = await request.json();
     const { code, participant_name } = body;
 
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
     } catch { /* Supabase optional */ }
 
     // 2. Check local file store
-    if (!quiz) {
+    if (!quiz && !isEphemeralHost()) {
       try {
         const fileQuizzes = readServerQuizzes();
         quiz = fileQuizzes.find((q) =>

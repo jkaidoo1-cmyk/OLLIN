@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createQuiz, getUserQuizzes, readServerQuizzes, writeServerQuizzes, readServerQuestions, writeServerQuestions } from "@/lib/data";
-import { getSessionUser } from "@/lib/session";
+import { getSessionUser, getSessionAdmin } from "@/lib/session";
+import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
+import { resolveQuizHostId } from "@/lib/quiz-host";
 import { recordAdminAction } from "@/lib/audit";
 import { Quiz, Question } from "@/lib/types";
 import { readFileSync } from "fs";
@@ -13,13 +15,17 @@ import { join } from "path";
 // via /api/quizzes/[id]?include=answers, which is host/admin-gated.
 export async function GET(request: NextRequest) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    const local = isLocalRequest(request);
     let quizzes: Quiz[] = [];
 
-    // Always try file store first (local data + fallback)
-    try {
-      quizzes = readServerQuizzes();
-    } catch { quizzes = []; }
+    // File store only where the filesystem persists. On a serverless host it is
+    // read-only and empty, so reading it here served zero quizzes and made the
+    // admin list look wiped.
+    if (!isEphemeralHost()) {
+      try {
+        quizzes = readServerQuizzes();
+      } catch { quizzes = []; }
+    }
 
     // Merge in Supabase quizzes (admin client — reads all published quizzes)
     if (!local) {
@@ -32,7 +38,12 @@ export async function GET(request: NextRequest) {
             .select("*")
             .order("created_at", { ascending: false });
           if (!error && data) {
-            const published = (data || []).filter((q: any) => q.status === "published");
+            // Admins also need drafts and archived rows; everyone else
+            // (including participants) only ever sees published quizzes.
+            const isAdmin = !!(await getSessionAdmin(request).catch(() => null));
+            const published = isAdmin
+              ? (data || [])
+              : (data || []).filter((q: any) => q.status === "published");
             const sbIds = new Set((published || []).map((q: any) => q.id));
             const merged = (published || []).map((q: any) => ({
               ...q,
@@ -84,7 +95,7 @@ function normalizeQuestionPayload(q: any, idx: number) {
 // host_id is ignored, so one student can't claim another teacher's quizzes.
 export async function POST(request: NextRequest) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    const local = isLocalRequest(request);
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object") {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
@@ -226,7 +237,14 @@ export async function POST(request: NextRequest) {
         // Important: published quizzes must be attributed to the actual creator.
         // Never silently assign the built-in admin id here; that makes the
         // quiz appear under the wrong account and breaks the admin-side list.
-        const hostId = session?.id || "anonymous";
+        // File/local accounts ("admin-001") are not uuids and fail the
+        // host_id cast; map them to a real profile instead of losing the quiz.
+        const hostId = await resolveQuizHostId(admin, session);
+        if (!hostId) {
+          throw new Error(
+            "No database profile available to own this quiz. Sign in with a Supabase account, or create one first."
+          );
+        }
 
         const { data: quiz, error: quizError } = await admin
           .from("quizzes")
@@ -276,6 +294,20 @@ export async function POST(request: NextRequest) {
       } catch (err) {
         if (err instanceof Error) supabaseError = err;
         else supabaseError = new Error(String(err));
+      }
+
+      // The database is the only durable store on a serverless host: a file
+      // write there "succeeds" and is gone, so report the real failure.
+      if (isEphemeralHost()) {
+        return NextResponse.json(
+          {
+            error: `Could not create the quiz: ${
+              supabaseError?.message || "database unavailable"
+            }`,
+            not_persisted: true,
+          },
+          { status: 507 }
+        );
       }
 
       // Supabase failed — fall back to local file

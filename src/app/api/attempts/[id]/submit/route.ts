@@ -4,6 +4,7 @@ import type { QuizAttempt } from "@/lib/types";
 import type { Question } from "@/lib/types";
 import { isAnswerCorrect, loose } from "@/lib/grading";
 import { getSessionUser } from "@/lib/session";
+import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
 
 /** Map a stored answer key to the option index when it is option text. */
 function answerKeyFor(question: { correct_answer?: unknown; options?: unknown }): string {
@@ -21,7 +22,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    const local = isLocalRequest(request);
     const { id } = await params;
     const body = await request.json();
     const { answers, quiz_id, participant_name, participant_email, time_taken_seconds } = body;
@@ -322,6 +323,19 @@ export async function POST(
           throw new Error(updateError?.message || "Attempt row not found in Supabase");
         }
       } catch (err) {
+        // On a serverless host the file store cannot hold the result: report the
+        // real failure instead of a 200 for a score that disappears.
+        if (isEphemeralHost()) {
+          return NextResponse.json(
+            {
+              error: `Could not save your result: ${
+                err instanceof Error ? err.message : "database unavailable"
+              }`,
+              not_persisted: true,
+            },
+            { status: 507 }
+          );
+        }
         // Supabase failed or has no such row — persist to file as fallback
         const attempts = readServerAttempts();
         const idx = attempts.findIndex((a) => a.id === attemptId);

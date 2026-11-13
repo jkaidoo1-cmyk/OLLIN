@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isLocalRequest } from "@/lib/server-host";
 import { getQuizAttempts, getQuizById, getQuizQuestions } from "@/lib/data";
 import { getSessionUser } from "@/lib/session";
 
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     // Supabase or file, depending on the caller — the old local-file-only
     // lookup returned 404 for every quiz stored in Supabase.
-    const local = request.headers.get("x-local-mode") === "true";
+    const local = isLocalRequest(request);
     const quiz = (await getQuizById(quizId, local)) || null;
     if (!quiz) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });

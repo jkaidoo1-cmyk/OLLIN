@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readServerAttempts, writeServerAttempts } from "@/lib/data";
 import { getSessionUser } from "@/lib/session";
 import { getClientIp, checkThrottle } from "@/lib/rate-limit";
+import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
 
 // ── Input clamping helpers ─────────────────────────────
 // Every client-supplied field is length/range-capped before it reaches the
@@ -45,6 +46,72 @@ export async function GET(request: NextRequest) {
   try {
     const quizId = request.nextUrl.searchParams.get("quiz_id");
     const mine = request.nextUrl.searchParams.get("mine") === "true";
+
+    // Database mode: attempts live in quiz_attempts. The file store is only a
+    // dev convenience and is empty/read-only on a serverless host, which made
+    // "My attempts" and every roster look blank on the deployment.
+    if (!isLocalRequest(request)) {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const admin = await createAdminClient();
+      if (admin) {
+        const limitRaw = parseInt(request.nextUrl.searchParams.get("limit") || "200", 10);
+        const limit = Math.min(500, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 200));
+        const session = await getSessionUser(request).catch(() => null);
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const sessionIsUuid = !!session && UUID_RE.test(session.id);
+
+        let query = admin
+          .from("quiz_attempts")
+          .select("*")
+          .order("started_at", { ascending: false })
+          .limit(limit);
+
+        if (mine) {
+          if (!session) {
+            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+          }
+          // File-mode ids are not uuids and own no rows in Postgres.
+          if (!sessionIsUuid) return NextResponse.json({ attempts: [] });
+          query = query.eq("participant_id", session.id);
+        } else if (quizId) {
+          if (!session) {
+            return NextResponse.json({ error: "Only the quiz creator or an admin can view attempts" }, { status: 403 });
+          }
+          if (session.role !== "admin") {
+            const { data: quiz } = await admin
+              .from("quizzes")
+              .select("host_id")
+              .eq("id", quizId)
+              .maybeSingle();
+            if (!quiz || quiz.host_id !== session.id) {
+              return NextResponse.json(
+                { error: "Only the quiz creator or an admin can view attempts" },
+                { status: 403 }
+              );
+            }
+          }
+          query = query.eq("quiz_id", quizId);
+        } else if (!session || session.role !== "admin") {
+          return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+        }
+
+        const { data, error } = await query;
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+        return NextResponse.json({ attempts: data || [] });
+      }
+      if (isEphemeralHost()) {
+        return NextResponse.json(
+          {
+            error:
+              "Attempts are unavailable: this deployment has no database configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY).",
+          },
+          { status: 503 }
+        );
+      }
+    }
+
     const allAttempts = readServerAttempts();
     // Response-size cap: a quiz id with thousands of rows must not be able to
     // stall the browser or the JSON serializer.
@@ -227,6 +294,68 @@ export async function POST(request: NextRequest) {
       : hasCompletionEvidence
         ? "completed"
         : "in_progress";
+
+    // Database mode: create the quiz_attempts ROW here. The submit route grades
+    // by UPDATING that row, so when only a file record existed the update
+    // matched zero rows and the score fell back to an unwritable file.
+    if (!isLocalRequest(request)) {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const admin = await createAdminClient();
+      if (admin) {
+        const session = await getSessionUser(request).catch(() => null);
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const participantId = session && UUID_RE.test(session.id) ? session.id : null;
+        const name = clampStr(participant_name, 80) || "Anonymous";
+
+        if (attemptStatus === "in_progress") {
+          const resumeQuery = admin
+            .from("quiz_attempts")
+            .select("*")
+            .eq("quiz_id", safeQuizId)
+            .eq("status", "in_progress")
+            .limit(1);
+          const { data: resumable } = participantId
+            ? await resumeQuery.eq("participant_id", participantId)
+            : await resumeQuery.eq("participant_name", name).is("participant_id", null);
+          if (resumable && resumable[0]) {
+            return NextResponse.json({ attempt: resumable[0], resumed: true });
+          }
+        }
+
+        const { data: created, error: insertError } = await admin
+          .from("quiz_attempts")
+          .insert({
+            quiz_id: safeQuizId,
+            participant_id: participantId,
+            participant_name: name,
+            total_questions: clampInt(total_questions, 0, 1000, 0),
+            status: "in_progress",
+          })
+          .select()
+          .single();
+
+        if (!insertError && created) {
+          return NextResponse.json({ attempt: created });
+        }
+        return NextResponse.json(
+          {
+            error: `Could not start the attempt: ${insertError?.message || "the database rejected the row"}`,
+            not_persisted: true,
+          },
+          { status: 507 }
+        );
+      }
+      if (isEphemeralHost()) {
+        return NextResponse.json(
+          {
+            error:
+              "Could not start the attempt — this deployment has no database configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY).",
+            not_persisted: true,
+          },
+          { status: 507 }
+        );
+      }
+    }
 
     const attempt = {
       id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

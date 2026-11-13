@@ -10,6 +10,7 @@ import { getSessionAdmin } from "@/lib/session";
 import { hashPassword } from "@/lib/local-users-store";
 import { recordAdminAction } from "@/lib/audit";
 import { revokeAllForEmail } from "@/lib/session-store";
+import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
 
 function isEmailTaken(users: any[], email: string, excludeId?: string) {
   const normalized = String(email).toLowerCase().trim();
@@ -22,7 +23,7 @@ function isEmailTaken(users: any[], email: string, excludeId?: string) {
 // GET — list all users (admin only)
 export async function GET(request: NextRequest) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    const local = isLocalRequest(request);
 
     const admin = await getSessionAdmin(request);
     if (!admin) {
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
     const { createClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
 
-    if (local || !supabase) {
+    if (local || (!supabase && !isEphemeralHost())) {
       const users = readLocalUsers().map(publicUser);
       return NextResponse.json({ users });
     }
@@ -40,6 +41,16 @@ export async function GET(request: NextRequest) {
     const { createAdminClient } = await import("@/lib/supabase/server");
     const adminClient = await createAdminClient();
     if (!adminClient) {
+      if (isEphemeralHost()) {
+        return NextResponse.json(
+          {
+            error:
+              "Users are unavailable: this deployment has no database configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY).",
+            not_persisted: true,
+          },
+          { status: 503 }
+        );
+      }
       return NextResponse.json({ users: [] });
     }
     const { data: users, error } = await adminClient
@@ -61,7 +72,7 @@ export async function GET(request: NextRequest) {
 // POST — create a new user account (admin only)
 export async function POST(request: NextRequest) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    const local = isLocalRequest(request);
     const body = await request.json();
     const { email, password, full_name, role, program_id } = body;
 
@@ -75,7 +86,7 @@ export async function POST(request: NextRequest) {
     const { createClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
 
-    if (local || !supabase) {
+    if (local || (!supabase && !isEphemeralHost())) {
       if (!(await getSessionAdmin(request))) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
@@ -220,7 +231,7 @@ export async function POST(request: NextRequest) {
 // PATCH — update a user (name, role, program, or password reset) — admin only
 export async function PATCH(request: NextRequest) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    const local = isLocalRequest(request);
     const body = await request.json();
     const userId = body.id;
 
@@ -231,7 +242,7 @@ export async function PATCH(request: NextRequest) {
     const { createClient, createAdminClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
 
-    if (local || !supabase) {
+    if (local || (!supabase && !isEphemeralHost())) {
       if (!(await getSessionAdmin(request))) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
@@ -360,7 +371,7 @@ export async function PATCH(request: NextRequest) {
 // DELETE — remove a user (admin only)
 export async function DELETE(request: NextRequest) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    const local = isLocalRequest(request);
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("id");
 

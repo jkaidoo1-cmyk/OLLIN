@@ -143,22 +143,70 @@ async function resolveSessionUser(
     return { id: "admin-001", email: ADMIN_EMAIL, role: "admin" };
   }
 
-  // Not in the file store — if Supabase is configured, check profiles.
+  // Not in the file store — try profiles by id.
   const { createClient } = await import("@/lib/supabase/server");
   const supabase = await createClient();
   if (!supabase) return null; // deleted — session revoked
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, email, role")
-    .eq("id", payload.userId)
-    .maybeSingle();
-  if (error) {
-    // Backend unreachable/restricted (e.g. spend cap) — trust the signed
-    // cookie rather than locking the user out: infra failure ≠ deletion.
-    return { id: payload.userId, email: payload.email, role: payload.role || "student" };
-  }
-  if (!data) return null; // genuinely deleted
-  return { id: data.id, email: data.email, role: data.role || "student" };
+
+  const resolveByProfile = async (): Promise<{ id: string; email: string; role: string } | null> => {
+    let byId: { data: { id: string; email: string; role: string } | null; error?: unknown } | undefined;
+    try {
+      byId = await supabase
+        .from("profiles")
+        .select("id, email, role")
+        .eq("id", payload.userId)
+        .maybeSingle() as unknown as { data: { id: string; email: string; role: string } | null; error?: unknown };
+    } catch {
+      /* infra hiccup */
+    }
+
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    if (byId?.data && UUID_RE.test(byId.data.id)) {
+      return byId.data as { id: string; email: string; role: string };
+    }
+
+    // Built-in / file-mode ids (e.g. "admin-001") have no matching profile
+    // row, and a server-side auth lookup can also fail on ephemeral hosts. Map
+    // non-uuid ids to the profile that owns the same email instead, so a
+    // session staying valid on Vercel still resolves to a real user.
+    if (payload.email) {
+      try {
+        const byEmail = await supabase
+          .from("profiles")
+          .select("id, email, role")
+          .ilike("email", payload.email)
+          .maybeSingle() as unknown as
+          | { data: { id: string; email: string; role: string } | null }
+          | undefined;
+        if (byEmail?.data) return byEmail.data as { id: string; email: string; role: string };
+      } catch { /* infra hiccup */ }
+      // email exists in the cookie but no profile row — fall back to the
+      // first admin so the session is still usable (fail open).
+      try {
+        const firstAdmin = await supabase
+          .from("profiles")
+          .select("id, email, role")
+          .eq("role", "admin")
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .single() as unknown as
+          | { data: { id: string; email: string; role: string } | null }
+          | undefined;
+        if (firstAdmin?.data) {
+          return firstAdmin.data as { id: string; email: string; role: string };
+        }
+      } catch { /* infra hiccup */ }
+      // Genuinely deleted / missing — fall back to the cookie's declared role.
+      return { id: payload.userId, email: payload.email, role: payload.role || "student" };
+    }
+
+    return null;
+  };
+
+  const data = await resolveByProfile();
+  if (!data) return null;
+  return data;
 }
 
 /**

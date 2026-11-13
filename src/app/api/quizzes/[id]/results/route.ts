@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getQuizStats, getQuizAttempts, getQuizById } from "@/lib/data";
 import { getSessionUser } from "@/lib/session";
+import { isLocalRequest } from "@/lib/server-host";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const local = request.headers.get("x-local-mode") === "true";
+    const local = isLocalRequest(request);
     const { id } = await params;
     const stats = await getQuizStats(id, local);
 
