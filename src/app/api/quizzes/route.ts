@@ -223,6 +223,17 @@ export async function POST(request: NextRequest) {
     }
 
     if (!local) {
+      // A quiz needs an owner: host_id is a profiles(uuid) reference, so
+      // creating one without a session used to fail the uuid cast and report a
+      // confusing database error. Say what is actually missing.
+      const creator = await getSessionUser(request).catch(() => null);
+      if (!creator) {
+        return NextResponse.json(
+          { error: "Please log in to create a quiz." },
+          { status: 401 }
+        );
+      }
+
       // Use admin client to create quiz in Supabase (bypasses RLS)
       let supabaseError: Error | null = null;
       let createdQuestionCount = 0;
