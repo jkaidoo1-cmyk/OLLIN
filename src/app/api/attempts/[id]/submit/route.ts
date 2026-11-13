@@ -330,7 +330,7 @@ export async function POST(
           return serverError("attempts.submit", err, {
             code: "storage_unavailable",
             message:
-              "Your score couldn't be saved because the database is unavailable. Please submit again in a moment.",
+              "Your score wasn't saved. Please submit again in a moment.",
           });
         }
         // Supabase failed or has no such row — persist to file as fallback

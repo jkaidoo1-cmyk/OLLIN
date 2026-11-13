@@ -42,10 +42,12 @@ export async function GET(request: NextRequest) {
     const adminClient = await createAdminClient();
     if (!adminClient) {
       if (isEphemeralHost()) {
+        // Configuration detail belongs in the log, not in the admin UI.
+        console.error("[admin.users] no database configured on this host");
         return NextResponse.json(
           {
-            error:
-              "Users are unavailable: this deployment has no database configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY).",
+            error: "We couldn't load users right now. Please try again shortly.",
+            code: "service_unavailable",
             not_persisted: true,
           },
           { status: 503 }

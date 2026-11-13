@@ -105,13 +105,12 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ attempts: data || [] });
       }
       if (isEphemeralHost()) {
-        return NextResponse.json(
-          {
-            error:
-              "Attempts are unavailable: this deployment has no database configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY).",
-          },
-          { status: 503 }
-        );
+        // No env-var names or "deployment has no database" for students: that
+        // is our configuration, not their problem to read or act on.
+        console.error("[attempts.list] no database configured on this host");
+        return userError("service_unavailable", {
+          message: "We couldn't load attempts right now. Please try again shortly.",
+        });
       }
     }
 
@@ -277,7 +276,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json(
             {
               error:
-                "Your attempt couldn't be saved because the database is unavailable. Nothing was recorded — please try again in a moment.",
+                "Your attempt wasn't saved. Nothing was recorded — please try again in a moment.",
               code: "storage_unavailable",
               not_persisted: true,
             },
@@ -362,7 +361,7 @@ export async function POST(request: NextRequest) {
         return serverError("attempts.create", insertError, {
           code: "storage_unavailable",
           message:
-            "Your attempt couldn't be started because the database is unavailable. Nothing was recorded — please try again in a moment.",
+            "Your attempt wasn't started. Nothing was recorded — please try again in a moment.",
         });
       }
       if (isEphemeralHost()) {
@@ -410,7 +409,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Your attempt couldn't be saved because the database is unavailable. Nothing was recorded — please try again in a moment.",
+            "Your attempt wasn't saved. Nothing was recorded — please try again in a moment.",
           code: "storage_unavailable",
           not_persisted: true,
         },

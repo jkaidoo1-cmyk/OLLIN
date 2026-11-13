@@ -154,12 +154,11 @@ export async function POST(request: NextRequest) {
     // request — exactly how newly created programs disappeared after a refresh.
     // Report the real failure rather than a phantom success.
     if (isEphemeralHost()) {
+      console.error("[programs.create] database write failed:", supabaseError?.message);
       return NextResponse.json(
         {
-          error: `Could not save the program: ${
-            supabaseError?.message ||
-            "the database is not configured on this deployment (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)"
-          }`,
+          error: "The program wasn't saved. Nothing was created — please try again in a moment.",
+          code: "storage_unavailable",
         },
         { status: 507 }
       );

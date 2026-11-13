@@ -313,7 +313,7 @@ export async function POST(request: NextRequest) {
         console.error("[quizzes.create] database write failed:", supabaseError?.message);
         return userError("storage_unavailable", {
           message:
-            "Your quiz wasn't saved because the database is unavailable. Nothing was created — please try again in a moment.",
+            "Your quiz wasn't saved. Nothing was created — please try again in a moment.",
           extra: { not_persisted: true },
         });
       }

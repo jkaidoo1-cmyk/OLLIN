@@ -15,10 +15,13 @@ const CONFIG_PATH = join(process.cwd(), ".ollin-config.json");
  * when generation starts failing.
  */
 function keyListNotSaved() {
+  // The reason (read-only filesystem, no database) is for the log; the admin
+  // only needs to know the change did not stick.
+  console.error("[config] key list not saved: no writable store configured");
   return NextResponse.json(
     {
-      error:
-        "Could not save the key list: this deployment's filesystem is read-only and Supabase is not configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY).",
+      error: "Your change wasn't saved. Please try again shortly.",
+      code: "storage_unavailable",
       not_persisted: true,
     },
     { status: 507 }

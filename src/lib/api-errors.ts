@@ -38,7 +38,7 @@ const DEFAULTS: Record<ErrorCode, { status: number; message: string }> = {
   rate_limited: { status: 429, message: "That's a lot of requests. Please wait a moment and try again." },
   storage_unavailable: {
     status: 507,
-    message: "This deployment can't save data right now. Nothing was saved — please try again shortly or contact your administrator.",
+    message: "We couldn't save that just now. Nothing was saved — please try again in a moment.",
   },
   service_unavailable: {
     status: 503,
