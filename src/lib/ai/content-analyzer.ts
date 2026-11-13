@@ -74,20 +74,25 @@ export interface AIOptions {
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "openai/gpt-oss-20b";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
-// Full flash, not the -lite variant: lite models pad a set with vague,
-// interchangeable items ("What is the primary role of…"), which is exactly the
-// slop this prompt is trying to keep out.
-const GEMINI_MODEL = "gemini-3.8-flash";
+// The only Gemini model that answers reliably from this deployment right now;
+// the full 3.x flash models hang (~60s) or return 503. Quality is therefore
+// carried by the prompt rubric and the post-generation quality gate, not by
+// model size — see exemplars.ts and quality.ts.
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
 // Fallbacks walked in order when the primary model is overloaded (503),
 // throttled (429) or retired (404). Google rotates model availability often.
 const GEMINI_FALLBACK_MODELS = [
-  "gemini-3.5-flash",
-  "gemini-3.7-flash",
   "gemini-flash-latest",
-  "gemini-3.5-flash-lite",
+  "gemini-3.5-flash",
+  "gemini-3.8-flash",
+  "gemini-flash-lite-latest",
 ];
 // A stalled provider must not hang the request (and the UI spinner) forever.
-const AI_REQUEST_TIMEOUT_MS = 75_000;
+const AI_REQUEST_TIMEOUT_MS = 45_000;
+// Fallback models are only worth a short wait: if a model is unreachable it
+// tends to hang until the socket times out, and four 45s attempts would blow
+// the serverless budget long before any answer arrives.
+const AI_FALLBACK_TIMEOUT_MS = 20_000;
 
 // ─── Token Estimation ───────────────────────────────────
 
@@ -550,6 +555,8 @@ async function callGeminiAPI(
   let lastError: Error | null = null;
 
   for (const model of models) {
+    const attemptTimeout =
+      model === GEMINI_MODEL ? AI_REQUEST_TIMEOUT_MS : AI_FALLBACK_TIMEOUT_MS;
     try {
       const response = await fetch(GEMINI_API_URL, {
         method: "POST",
@@ -557,7 +564,7 @@ async function callGeminiAPI(
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(attemptTimeout),
         body: JSON.stringify({
           model,
           messages: [

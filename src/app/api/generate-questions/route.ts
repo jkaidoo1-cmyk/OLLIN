@@ -336,7 +336,18 @@ export async function POST(request: NextRequest) {
       })
       .filter((q) => q.correctAnswer !== "");
 
-    if (validatedQuestions.length === 0) {
+    // Deterministic quality gate: the prompt states the standard, this enforces
+    // the part of it a script can check (banned stems, bogus options, repeats).
+    const { filterLowQuality } = await import("@/lib/ai/quality");
+    const { kept: qualityChecked, dropped } = filterLowQuality(validatedQuestions);
+    if (dropped.length > 0) {
+      console.warn(
+        `[generate] dropped ${dropped.length}/${validatedQuestions.length} low-quality items`,
+        dropped.slice(0, 5)
+      );
+    }
+
+    if (qualityChecked.length === 0) {
       return NextResponse.json(
         { error: "Could not generate questions from this material. Please try different content." },
         { status: 422 }
@@ -349,11 +360,11 @@ export async function POST(request: NextRequest) {
       "quiz.generate",
       "quiz",
       null,
-      `Generated ${validatedQuestions.length} ${question_types.join(", ")} questions from material`
+      `Generated ${qualityChecked.length} ${question_types.join(", ")} questions from material`
     );
 
     return NextResponse.json({
-      questions: validatedQuestions,
+      questions: qualityChecked,
       analysis: {
         title: analysis.title,
         subject: analysis.subject,
