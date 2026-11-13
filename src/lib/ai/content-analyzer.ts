@@ -74,10 +74,18 @@ export interface AIOptions {
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "openai/gpt-oss-20b";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
-const GEMINI_MODEL = "gemini-3.5-flash-lite";
+// Full flash, not the -lite variant: lite models pad a set with vague,
+// interchangeable items ("What is the primary role of…"), which is exactly the
+// slop this prompt is trying to keep out.
+const GEMINI_MODEL = "gemini-3.8-flash";
 // Fallbacks walked in order when the primary model is overloaded (503),
 // throttled (429) or retired (404). Google rotates model availability often.
-const GEMINI_FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-flash-latest"];
+const GEMINI_FALLBACK_MODELS = [
+  "gemini-3.5-flash",
+  "gemini-3.7-flash",
+  "gemini-flash-latest",
+  "gemini-3.5-flash-lite",
+];
 // A stalled provider must not hang the request (and the UI spinner) forever.
 const AI_REQUEST_TIMEOUT_MS = 75_000;
 
@@ -171,7 +179,9 @@ export function buildDeepAnalysisAndQuestionPrompt(
     ? `\n\nAdditional instructions: ${customInstructions}`
     : "";
 
-  return `You are an expert exam writer. Write ${questionCount} ${typeDesc} questions that test real understanding of the material below.${instructionsBlock}
+  return `You write exam questions for a graded university course. A wrong answer key or an ambiguous item is a serious defect, so write only what the material supports.
+
+Write ${questionCount} ${typeDesc} questions on the material below.${instructionsBlock}
 
 Material:
 ${textBlock}
@@ -179,15 +189,19 @@ ${textBlock}
 ${QUESTION_STANDARD}
 
 Rules:
-- Every question must be answerable from this material alone, with exactly one correct answer.
-- Ask about concepts, causes, processes and definitions — not trivia or wording.
-- Do not repeat a question or test the same fact twice.
-- question: one complete, self-contained sentence. No markdown, no "According to the text".
-- multiple_choice: exactly 4 distinct options of similar length, no "A)"/numbers, no "All of the above".
+- Every item must be answerable from this material alone and have exactly one correct answer.
+- Test understanding, not recall of phrasing: prefer "what happens if…", "why does…", "which value/step/condition…" built on a short scenario taken from the material, over definitions and slogan questions.
+- Do not repeat a fact, paraphrase a previous stem, or write two items that a student would answer from the same sentence.
+- Do NOT pad. If the material cannot support ${questionCount} distinct, non-trivial items, return fewer. Generic filler items are worse than a shorter quiz.
+- Never invent facts, numbers or terminology the material does not contain.
+- question: one complete, self-contained sentence. No markdown, no "According to the text", no "Which of the following".
+- multiple_choice: exactly 4 distinct options of similar length and grammatical form; no "A)"/numbering; no "All of the above"/"None of the above"; no option that is also true; no option far longer or vaguer than the rest.
+- Vary the position of the correct option across items — do not put most keys at the same index.
 - correctAnswer: the ZERO-BASED INDEX of the correct option as a string: "0", "1", "2" or "3".
 - answerKey: the EXACT TEXT of the correct option — this is the ground truth, never leave it empty.
-- true_false: options ["True","False"] and correctAnswer is "true" or "false".
-- explanation: max 15 words, why the answer is right.
+- true_false: options ["True","False"], correctAnswer "true" or "false"; avoid trick absolutes ("always", "never") unless the material states them.
+- explanation: max 15 words, the reason the answer is right — not a pointer to the text.
+- Final check before answering: drop any item that the material does not clearly settle, or whose distractors are obviously wrong.
 
 Examples of the standard expected (other subjects — match this quality, do not reuse their content):
 ${QUESTION_EXEMPLARS}
