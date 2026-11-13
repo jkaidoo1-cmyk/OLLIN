@@ -12,10 +12,17 @@ const nextConfig: NextConfig = {
    * guarantees — without it the deployed route fails with
    * "Cannot find module 'pdfjs-dist/legacy/build/pdf.mjs'" from /var/task.
    */
-  serverExternalPackages: ["pdfjs-dist", "mammoth", "pdf2json", "pdf-lib"],
+  serverExternalPackages: [
+    "pdfjs-dist",
+    "mammoth",
+    "pdf2json",
+    "pdf-lib",
+    "dommatrix",
+  ],
   outputFileTracingIncludes: {
     "/api/**/*": [
       "./node_modules/pdfjs-dist/**/*",
+      "./node_modules/dommatrix/**/*",
       "./node_modules/mammoth/**/*",
       "./node_modules/pdf2json/**/*",
     ],
