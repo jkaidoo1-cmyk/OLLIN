@@ -100,6 +100,28 @@ const AI_REQUEST_TIMEOUT_MS = 45_000;
 // the serverless budget long before any answer arrives.
 const AI_FALLBACK_TIMEOUT_MS = 20_000;
 
+/**
+ * fetch with a timeout that leaves no armed timer behind.
+ *
+ * AbortSignal.timeout() keeps its timer live until it fires. Serverless hosts
+ * hand the response back only once the invocation is idle, so a 45s timeout can
+ * hold a response that was ready in 3s — and the request dies at the platform
+ * limit with nothing delivered. Clearing the timer in `finally` avoids that.
+ */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(1_000, timeoutMs));
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ─── Token Estimation ───────────────────────────────────
 
 function estimateTokens(text: string): number {
@@ -495,17 +517,14 @@ async function callGroqAPI(
   const maxTok = mode === "complete"
     ? 4096
     : Math.min(4096, Math.max(1800, 320 + questionCount * 130));
-  const response = await fetch(GROQ_API_URL, {
+  const response = await fetchWithTimeout(
+    GROQ_API_URL,
+    {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    signal: AbortSignal.timeout(
-      deadlineAt
-        ? Math.max(5_000, Math.min(AI_REQUEST_TIMEOUT_MS, deadlineAt - Date.now()))
-        : AI_REQUEST_TIMEOUT_MS
-    ),
     body: JSON.stringify({
       model: GROQ_MODEL,
       messages: [
@@ -514,8 +533,12 @@ async function callGroqAPI(
       ],
       temperature: 0.3,
       max_tokens: maxTok,
-    }),
-  });
+      }),
+    },
+    deadlineAt
+      ? Math.max(5_000, Math.min(AI_REQUEST_TIMEOUT_MS, deadlineAt - Date.now()))
+      : AI_REQUEST_TIMEOUT_MS
+  );
 
   if (!response.ok) {
     const errText = await response.text();
@@ -580,13 +603,14 @@ async function callGeminiAPI(
     }
     const attemptTimeout = Math.min(staticTimeout, remaining);
     try {
-      const response = await fetch(GEMINI_API_URL, {
+      const response = await fetchWithTimeout(
+        GEMINI_API_URL,
+        {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        signal: AbortSignal.timeout(attemptTimeout),
         body: JSON.stringify({
           model,
           messages: [
@@ -595,8 +619,10 @@ async function callGeminiAPI(
           ],
           temperature: 0.3,
           max_tokens: maxTok,
-        }),
-      });
+          }),
+        },
+        attemptTimeout
+      );
 
       if (!response.ok) {
         const errText = await response.text();
