@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAllKeys } from "@/lib/ai/key-rotation";
 import { getSessionAdmin } from "@/lib/session";
 import { recordAdminAction } from "@/lib/audit";
+import { serverError, userError } from "@/lib/api-errors";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -52,7 +53,7 @@ async function sbReadKeys(): Promise<any[] | null> {
 // GET — read current key list + usage stats — admin only
 export async function GET(request: NextRequest) {
   if (!(await getSessionAdmin(request))) {
-    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    return userError("forbidden");
   }
   try {
     const sbKeys = await sbReadKeys();
@@ -108,10 +109,9 @@ export async function GET(request: NextRequest) {
         : "Keys are stored on the server.",
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load settings" },
-      { status: 500 }
-    );
+    return serverError("config.load", error, {
+      message: "We couldn't load the API key settings. Refresh the page and try again.",
+    });
   }
 }
 
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
   const admin = await getSessionAdmin(request);
   try {
     if (!admin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+      return userError("forbidden");
     }
     const body = await request.json();
     const action = body.action;
@@ -291,9 +291,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to update settings" },
-      { status: 500 }
-    );
+    return serverError("config.update", error, {
+      message: "We couldn't save that change to the API keys. Please try again.",
+    });
   }
 }

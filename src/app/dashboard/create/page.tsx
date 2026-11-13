@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { generateQuizCode } from "@/lib/utils";
+import { statusMessage, toUserMessage } from "@/lib/client-errors";
 import { isLocalMode, addLocalQuiz, getLocalUser } from "@/lib/local";
 import { cleanText } from "@/lib/utils";
 import { invalidateResource } from "@/lib/prefetch";
@@ -105,7 +106,7 @@ export default function CreateQuizPage() {
         if (isLocalMode()) headers["x-local-mode"] = "true";
         const res = await fetch(`/api/quizzes/${encodeURIComponent(id)}?include=answers`, { headers });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || "Could not load this quiz for editing.");
+        if (!res.ok) throw new Error(data.error || statusMessage(res.status));
         const qz = data.quiz;
         const qs: any[] = data.questions || [];
         setEditShareCode(qz.share_code || "");
@@ -299,7 +300,7 @@ export default function CreateQuizPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to generate questions");
+        throw new Error(data.error || statusMessage(res.status));
       }
 
       const data = await res.json();
@@ -317,7 +318,7 @@ export default function CreateQuizPage() {
         setQuizTitle(data.analysis.title);
       }
     } catch (err) {
-      setGenerateError(err instanceof Error ? err.message : "Something went wrong");
+      setGenerateError(toUserMessage(err, "We couldn't generate questions. Please try again."));
     } finally {
       setGenerating(false);
     }

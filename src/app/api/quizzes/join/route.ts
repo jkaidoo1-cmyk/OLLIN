@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getQuizByCode, getQuizQuestions, readServerQuizzes } from "@/lib/data";
 import { serverGetLocalQuizByCode } from "@/lib/server-local";
 import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
+import { serverError } from "@/lib/api-errors";
 
 // POST — join a quiz by share code
 export async function POST(request: NextRequest) {
@@ -131,9 +132,8 @@ export async function POST(request: NextRequest) {
       questions,
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to join quiz" },
-      { status: 500 }
-    );
+    return serverError("quizzes.join", error, {
+      message: "We couldn't open this quiz. Check the code and try again.",
+    });
   }
 }

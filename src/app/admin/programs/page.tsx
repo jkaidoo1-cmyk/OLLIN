@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Plus, Loader2, Trash2, GraduationCap, Save, X, Pen, AlertCircle, RefreshCw } from "lucide-react";
 import { Program } from "@/lib/types";
 import { clearStaleAdminSession } from "@/lib/admin";
+import { statusMessage } from "@/lib/client-errors";
 import { useConfirm } from "@/components/ui/toast";
 import { SkeletonList } from "@/components/Skeleton";
 import { readCache, writeCache } from "@/lib/admin-cache";
@@ -74,7 +75,7 @@ export default function AdminProgramsPage() {
         headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
+      if (!res.ok) throw new Error(data.error || statusMessage(res.status));
       const list = data.programs || [];
       setPrograms(list);
       writeCache("programs", list);
@@ -151,7 +152,7 @@ export default function AdminProgramsPage() {
     });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
-      throw new Error(d.error || `Failed (${res.status})`);
+      throw new Error(d.error || statusMessage(res.status));
     }
   };
 

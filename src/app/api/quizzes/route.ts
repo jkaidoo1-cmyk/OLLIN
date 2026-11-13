@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createQuiz, getUserQuizzes, readServerQuizzes, writeServerQuizzes, readServerQuestions, writeServerQuestions } from "@/lib/data";
 import { getSessionUser, getSessionAdmin } from "@/lib/session";
 import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
+import { serverError, userError } from "@/lib/api-errors";
 import { resolveQuizHostId } from "@/lib/quiz-host";
 import { recordAdminAction } from "@/lib/audit";
 import { Quiz, Question } from "@/lib/types";
@@ -60,10 +61,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ quizzes: quizzes.map(stripQuestionData) });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to fetch quizzes" },
-      { status: 500 }
-    );
+    return serverError("quizzes.list", error, {
+      message: "We couldn't load your quizzes. Refresh the page and try again.",
+    });
   }
 }
 
@@ -310,15 +310,12 @@ export async function POST(request: NextRequest) {
       // The database is the only durable store on a serverless host: a file
       // write there "succeeds" and is gone, so report the real failure.
       if (isEphemeralHost()) {
-        return NextResponse.json(
-          {
-            error: `Could not create the quiz: ${
-              supabaseError?.message || "database unavailable"
-            }`,
-            not_persisted: true,
-          },
-          { status: 507 }
-        );
+        console.error("[quizzes.create] database write failed:", supabaseError?.message);
+        return userError("storage_unavailable", {
+          message:
+            "Your quiz wasn't saved because the database is unavailable. Nothing was created — please try again in a moment.",
+          extra: { not_persisted: true },
+        });
       }
 
       // Supabase failed — fall back to local file
@@ -403,11 +400,9 @@ export async function POST(request: NextRequest) {
       code: result.code,
     });
   } catch (error) {
-    console.error("Quiz creation error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to create quiz" },
-      { status: 500 }
-    );
+    return serverError("quizzes.create", error, {
+      message: "We couldn't create the quiz. Nothing was saved — please try again.",
+    });
   }
 }
 

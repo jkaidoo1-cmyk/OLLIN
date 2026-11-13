@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Plus, Loader2, Trash2, BookOpen, Save, X, ChevronDown, ChevronUp, Clock, Pen, AlertCircle, RefreshCw } from "lucide-react";
 import { Course, Program, Quiz } from "@/lib/types";
 import { getSavedQuizzes, removeSavedQuiz, syncSavedQuizzesFromServer, isLocalMode } from "@/lib/local";
+import { statusMessage } from "@/lib/client-errors";
 import { clearStaleAdminSession } from "@/lib/admin";
 import { useConfirm } from "@/components/ui/toast";
 import { SkeletonList } from "@/components/Skeleton";
@@ -111,7 +112,7 @@ export default function AdminCoursesPage() {
         headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
+      if (!res.ok) throw new Error(data.error || statusMessage(res.status));
       const courseList = data.courses || [];
       setCourses(courseList);
       writeCache("courses", courseList);
@@ -243,7 +244,7 @@ export default function AdminCoursesPage() {
     });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
-      throw new Error(d.error || `Failed (${res.status})`);
+      throw new Error(d.error || statusMessage(res.status));
     }
   };
 

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Loader2, Plus, Trash2, Power, PowerOff, Key, AlertCircle, Info, XCircle } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
 import { SkeletonList } from "@/components/Skeleton";
+import { statusMessage } from "@/lib/client-errors";
 
 interface ApiKeyEntry {
   id: string;
@@ -68,7 +69,7 @@ export default function AdminSettingsPage() {
       body: JSON.stringify(body),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Request failed");
+    if (!res.ok) throw new Error(data.error || statusMessage(res.status));
     return data;
   };
 

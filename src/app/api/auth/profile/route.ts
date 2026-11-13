@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
 import { readLocalUsers, writeLocalUsers } from "@/lib/local-users-store";
+import { serverError } from "@/lib/api-errors";
 
 /**
  * PATCH /api/auth/profile — a logged-in user updates their own profile.
@@ -101,7 +102,9 @@ export async function PATCH(request: NextRequest) {
       if (admin) {
         const { error } = await admin.from("profiles").update(updates).eq("id", session.id);
         if (error) {
-          return NextResponse.json({ error: error.message }, { status: 500 });
+          return serverError("profile.update", error, {
+            message: "Your profile change wasn't saved. Please try again.",
+          });
         }
         return NextResponse.json({ message: "Profile updated" });
       }

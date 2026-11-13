@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readServerAttempts, writeServerAttempts } from "@/lib/data";
 import { getSessionUser } from "@/lib/session";
 import { getClientIp, checkThrottle } from "@/lib/rate-limit";
+import { serverError, userError } from "@/lib/api-errors";
 import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
 
 // ── Input clamping helpers ─────────────────────────────
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
 
         if (mine) {
           if (!session) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+            return userError("auth_required");
           }
           // File-mode ids are not uuids and own no rows in Postgres.
           if (!sessionIsUuid) return NextResponse.json({ attempts: [] });
@@ -92,12 +93,14 @@ export async function GET(request: NextRequest) {
           }
           query = query.eq("quiz_id", quizId);
         } else if (!session || session.role !== "admin") {
-          return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+          return userError("forbidden");
         }
 
         const { data, error } = await query;
         if (error) {
-          return NextResponse.json({ error: error.message }, { status: 500 });
+          return serverError("attempts.list", error, {
+            message: "We couldn't load the attempts. Refresh the page and try again.",
+          });
         }
         return NextResponse.json({ attempts: data || [] });
       }
@@ -121,7 +124,7 @@ export async function GET(request: NextRequest) {
     if (mine) {
       const session = await getSessionUser(request);
       if (!session) {
-        return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+        return userError("auth_required");
       }
       const myAttempts = allAttempts
         .filter((a: any) => a.participant_email === session.email)
@@ -156,10 +159,7 @@ export async function GET(request: NextRequest) {
     // participants only get their own via ?mine=true.
     const sessionAll = await getSessionUser(request);
     if (!sessionAll || sessionAll.role !== "admin") {
-      return NextResponse.json(
-        { error: "Admin access required" },
-        { status: 403 }
-      );
+              return userError("forbidden");
     }
     return NextResponse.json({ attempts: allAttempts.slice(0, limit) });
   } catch (error) {
@@ -271,7 +271,12 @@ export async function POST(request: NextRequest) {
         }
         if (!persistAttempts(attemptsNow, resumable.id)) {
           return NextResponse.json(
-            { error: "Could not save your attempt — this deployment has no writable storage (and Supabase is not connected).", not_persisted: true },
+            {
+              error:
+                "Your attempt couldn't be saved because the database is unavailable. Nothing was recorded — please try again in a moment.",
+              code: "storage_unavailable",
+              not_persisted: true,
+            },
             { status: 507 }
           );
         }
@@ -391,7 +396,12 @@ export async function POST(request: NextRequest) {
     else attemptsList.push(attempt);
     if (!persistAttempts(attemptsList, attempt.id)) {
       return NextResponse.json(
-        { error: "Could not save your attempt — this deployment has no writable storage (and Supabase is not connected).", not_persisted: true },
+        {
+          error:
+            "Your attempt couldn't be saved because the database is unavailable. Nothing was recorded — please try again in a moment.",
+          code: "storage_unavailable",
+          not_persisted: true,
+        },
         { status: 507 }
       );
     }

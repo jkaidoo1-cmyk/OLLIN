@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { UserPlus, Loader2, Trash2, Shield, GraduationCap, Mail, Eye, EyeOff, Save, X, AlertCircle, Pencil, Upload, FileText, RefreshCw } from "lucide-react";
 import { Program } from "@/lib/types";
 import { clearStaleAdminSession } from "@/lib/admin";
+import { statusMessage } from "@/lib/client-errors";
 import { useConfirm } from "@/components/ui/toast";
 import { SkeletonList } from "@/components/Skeleton";
 import { readCache, writeCache } from "@/lib/admin-cache";
@@ -101,7 +102,7 @@ export default function AdminUsersPage() {
         headers: isLocal ? { "x-local-mode": "true" } : {},
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load users");
+      if (!res.ok) throw new Error(data.error || statusMessage(res.status));
       const list = data.users || [];
       setUsers(list);
       writeCache("users", list);
@@ -236,7 +237,7 @@ export default function AdminUsersPage() {
       });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.error || "Failed to create user");
+        throw new Error(d.error || statusMessage(res.status));
       }
     } else if (action.type === "update") {
       const res = await fetch("/api/admin/users", {
@@ -253,7 +254,7 @@ export default function AdminUsersPage() {
       });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.error || "Failed to update user");
+        throw new Error(d.error || statusMessage(res.status));
       }
     } else if (action.type === "delete") {
       const res = await fetch(`/api/admin/users?id=${action.userId}`, {
@@ -262,7 +263,7 @@ export default function AdminUsersPage() {
       });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.error || "Failed to delete user");
+        throw new Error(d.error || statusMessage(res.status));
       }
     }
   };
@@ -721,7 +722,7 @@ export default function AdminUsersPage() {
                         body: JSON.stringify({ csv: csvText }),
                       });
                       const data = await res.json();
-                      if (!res.ok) throw new Error(data.error || "Import failed");
+                      if (!res.ok) throw new Error(data.error || statusMessage(res.status));
                       setImportResult(data);
                       fetchUsers();
                     } catch (err) {
