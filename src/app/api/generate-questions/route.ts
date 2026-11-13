@@ -4,10 +4,20 @@ import { extractTextFromBase64, getRelevantText } from "@/lib/file-extract";
 import { getSessionUser } from "@/lib/session";
 import { checkThrottle } from "@/lib/rate-limit";
 import { recordAdminAction } from "@/lib/audit";
+import { keepAliveResponse } from "@/lib/keep-alive";
 
 // Generation plus an optional top-up call has to fit in the host's function
 // budget; the internal deadline below is set just inside it.
 export const maxDuration = 60;
+
+/**
+ * The host drops a response that stays silent for more than a few seconds, and
+ * generation takes 5-50s, so every answer goes out through the keep-alive
+ * stream instead of a bare JSON body. The work itself is unchanged.
+ */
+export async function POST(request: NextRequest) {
+  return keepAliveResponse(() => handle(request));
+}
 
 /**
  * The app stores a multiple-choice answer as the option's zero-based index
@@ -62,7 +72,7 @@ function normalizeAnswerKey(
   return "";
 }
 
-export async function POST(request: NextRequest) {
+async function handle(request: NextRequest) {
   try {
     // AI calls spend real money/tokens — only logged-in users may trigger
     // them, and abusive request rates are throttled per IP.

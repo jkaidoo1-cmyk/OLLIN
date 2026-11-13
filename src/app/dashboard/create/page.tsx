@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { generateQuizCode } from "@/lib/utils";
-import { statusMessage, toUserMessage } from "@/lib/client-errors";
+import { readApiResult, statusMessage, toUserMessage } from "@/lib/client-errors";
 import { isLocalMode, addLocalQuiz, getLocalUser } from "@/lib/local";
 import { cleanText } from "@/lib/utils";
 import { invalidateResource } from "@/lib/prefetch";
@@ -277,24 +277,41 @@ export default function CreateQuizPage() {
         body.material_text = materialText;
       }
 
-      // Hard stop so "Generating questions…" can never spin forever when the
-      // provider, the host or the network stalls. The hosting limit is well
-      // under this, so a longer wait only leaves the user staring at a spinner.
+      // The server streams heartbeats while it works and ends with the real
+      // status, so the timer covers the whole exchange rather than just the
+      // headers. It is a backstop for a connection that goes silent altogether;
+      // the server finishes well before it.
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 45_000);
-      let res: Response;
+      const timeout = setTimeout(() => controller.abort(), 75_000);
+      let data: {
+        questions?: GeneratedQ[];
+        requested?: number;
+        generated?: number;
+        analysis?: { title?: string };
+      };
       try {
-        res = await fetch("/api/generate-questions", {
+        const res = await fetch("/api/generate-questions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
           signal: controller.signal,
         });
+        const result = await readApiResult<{
+          questions?: GeneratedQ[];
+          requested?: number;
+          generated?: number;
+          analysis?: { title?: string };
+          error?: string;
+        }>(res);
+        if (result.status >= 400) {
+          throw new Error(result.body.error || statusMessage(result.status));
+        }
+        data = result.body;
       } catch (fetchErr) {
         if (fetchErr instanceof DOMException && fetchErr.name === "AbortError") {
           // Keep it about what the user can do; hosting limits are our problem,
           // not theirs to reason about. Diagnostics stay in the console.
-          console.warn("[generate] request aborted after 45s without a response");
+          console.warn("[generate] request aborted after 75s without finishing");
           throw new Error("That took too long and was stopped. Please try again — a shorter piece of material is quicker.");
         }
         throw fetchErr;
@@ -302,13 +319,7 @@ export default function CreateQuizPage() {
         clearTimeout(timeout);
       }
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || statusMessage(res.status));
-      }
-
-      const data = await res.json();
-      setQuestions(data.questions);
+      setQuestions(data.questions ?? []);
       if (
         typeof data.requested === "number" &&
         typeof data.generated === "number" &&

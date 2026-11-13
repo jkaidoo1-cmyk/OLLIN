@@ -68,3 +68,56 @@ export async function readApiError(res: Response, fallback?: string): Promise<st
   const base = body.error || fallback || statusMessage(res.status);
   return body.hint ? `${base} ${body.hint}` : base;
 }
+
+export interface ApiResult<T = Record<string, unknown>> {
+  status: number;
+  body: T;
+}
+
+/**
+ * Read a response that may be plain JSON or the keep-alive stream used by
+ * endpoints that do slow work (see `lib/keep-alive.ts`): blank heartbeat lines
+ * first, then one final `{ status, body }` line. Both shapes come back as the
+ * same `{ status, body }`, so callers test the status once, wherever it lives.
+ */
+export async function readApiResult<T = Record<string, unknown>>(
+  res: Response
+): Promise<ApiResult<T>> {
+  const contentType = res.headers.get("content-type") || "";
+  if (!res.body || !contentType.includes("ndjson")) {
+    let body: T;
+    try {
+      body = (await res.json()) as T;
+    } catch {
+      body = {} as T;
+    }
+    return { status: res.status, body };
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let lastLine = "";
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline = buffer.indexOf("\n");
+    while (newline >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (line) lastLine = line;
+      newline = buffer.indexOf("\n");
+    }
+  }
+
+  const tail = buffer.trim();
+  if (tail) lastLine = tail;
+  if (!lastLine) {
+    throw new Error("The server stopped before it finished. Please try again.");
+  }
+
+  const envelope = JSON.parse(lastLine) as { status?: number; body?: T };
+  return { status: envelope.status ?? 200, body: (envelope.body ?? {}) as T };
+}
