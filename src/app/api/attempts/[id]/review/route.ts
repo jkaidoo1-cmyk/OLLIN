@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readServerAttempts } from "@/lib/data";
 import { getSessionUser } from "@/lib/session";
 import { getQuizQuestions } from "@/lib/data";
+import { serverError } from "@/lib/api-errors";
 
 /**
  * GET /api/attempts/[id]/review — question-by-question review for ONE attempt.
@@ -58,9 +59,8 @@ export async function GET(
       })),
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load review" },
-      { status: 500 }
-    );
+    return serverError("attempts.review", error, {
+      message: "We couldn't load the answer review. Refresh the page and try again.",
+    });
   }
 }

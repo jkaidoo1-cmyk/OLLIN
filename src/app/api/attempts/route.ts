@@ -203,11 +203,15 @@ export async function POST(request: NextRequest) {
     } = body;
 
     if (!quiz_id || typeof quiz_id !== "string") {
-      return NextResponse.json({ error: "quiz_id is required" }, { status: 400 });
+      return userError("invalid_request", {
+        message: "We couldn't tell which quiz this attempt belongs to. Reopen the quiz link and try again.",
+      });
     }
     const safeQuizId = quiz_id.trim().slice(0, 120);
     if (!safeQuizId) {
-      return NextResponse.json({ error: "quiz_id is required" }, { status: 400 });
+      return userError("invalid_request", {
+        message: "We couldn't tell which quiz this attempt belongs to. Reopen the quiz link and try again.",
+      });
     }
 
     // Record who took the quiz when logged in (session cookie may be present)
@@ -342,23 +346,31 @@ export async function POST(request: NextRequest) {
         if (!insertError && created) {
           return NextResponse.json({ attempt: created });
         }
-        return NextResponse.json(
-          {
-            error: `Could not start the attempt: ${insertError?.message || "the database rejected the row"}`,
-            not_persisted: true,
-          },
-          { status: 507 }
-        );
+
+        // A foreign-key failure means the quiz id is stale (deleted, or a
+        // bogus link) — that is a "not found", not a storage outage, and the
+        // user must not be shown the raw Postgres constraint text.
+        const raw = insertError?.message || "";
+        if (/foreign key|violates/i.test(raw)) {
+          console.error("[attempts.create] quiz lookup failed:", raw);
+          return userError("not_found", {
+            message:
+              "We couldn't start this attempt because the quiz no longer exists. Ask the quiz owner for a fresh link.",
+            extra: { not_persisted: true },
+          });
+        }
+        return serverError("attempts.create", insertError, {
+          code: "storage_unavailable",
+          message:
+            "Your attempt couldn't be started because the database is unavailable. Nothing was recorded — please try again in a moment.",
+        });
       }
       if (isEphemeralHost()) {
-        return NextResponse.json(
-          {
-            error:
-              "Could not start the attempt — this deployment has no database configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY).",
-            not_persisted: true,
-          },
-          { status: 507 }
-        );
+        return userError("storage_unavailable", {
+          message:
+            "This quiz can't record attempts right now because no database is connected. Please try again later or contact your administrator.",
+          extra: { not_persisted: true },
+        });
       }
     }
 
@@ -408,10 +420,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ attempt });
   } catch (error) {
-    console.error("Attempt save error:", error);
-    return NextResponse.json(
-      { error: "Failed to save attempt" },
-      { status: 500 }
-    );
+    return serverError("attempts.create", error, {
+      message: "Your attempt wasn't saved. Please try again — your answers stay on screen.",
+    });
   }
 }

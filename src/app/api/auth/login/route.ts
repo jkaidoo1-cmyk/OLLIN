@@ -3,6 +3,7 @@ import { readLocalUsers, publicUser, verifyPassword, hashPassword } from "@/lib/
 import { createSessionCookie } from "@/lib/session";
 import { ADMIN_PASSWORD } from "@/lib/local-constants";
 import { checkRateLimit, recordFailure, recordSuccess } from "@/lib/rate-limit";
+import { serverError } from "@/lib/api-errors";
 
 export async function POST(request: NextRequest) {
   try {
@@ -113,7 +114,8 @@ export async function POST(request: NextRequest) {
     );
     return res;
   } catch (error) {
-    console.error("Login error:", error);
-    return NextResponse.json({ error: "Login failed" }, { status: 500 });
+    return serverError("auth.login", error, {
+      message: "We couldn't sign you in. Please try again in a moment.",
+    });
   }
 }

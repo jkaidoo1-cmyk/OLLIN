@@ -5,6 +5,7 @@ import type { Question } from "@/lib/types";
 import { isAnswerCorrect, loose } from "@/lib/grading";
 import { getSessionUser } from "@/lib/session";
 import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
+import { serverError } from "@/lib/api-errors";
 
 /** Map a stored answer key to the option index when it is option text. */
 function answerKeyFor(question: { correct_answer?: unknown; options?: unknown }): string {
@@ -326,15 +327,11 @@ export async function POST(
         // On a serverless host the file store cannot hold the result: report the
         // real failure instead of a 200 for a score that disappears.
         if (isEphemeralHost()) {
-          return NextResponse.json(
-            {
-              error: `Could not save your result: ${
-                err instanceof Error ? err.message : "database unavailable"
-              }`,
-              not_persisted: true,
-            },
-            { status: 507 }
-          );
+          return serverError("attempts.submit", err, {
+            code: "storage_unavailable",
+            message:
+              "Your score couldn't be saved because the database is unavailable. Please submit again in a moment.",
+          });
         }
         // Supabase failed or has no such row — persist to file as fallback
         const attempts = readServerAttempts();
@@ -347,9 +344,9 @@ export async function POST(
 
     return NextResponse.json({ attempt, answers: graded, answer_key, explanations });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to submit attempt" },
-      { status: 500 }
-    );
+    return serverError("attempts.submit", error, {
+      message:
+        "We couldn't submit your answers. They're still on screen — please try again.",
+    });
   }
 }

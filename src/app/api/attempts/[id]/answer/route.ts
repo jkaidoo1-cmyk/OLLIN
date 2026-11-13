@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/session";
 import { checkThrottle } from "@/lib/rate-limit";
 import { isAnswerCorrect } from "@/lib/grading";
 import { isLocalRequest } from "@/lib/server-host";
+import { serverError } from "@/lib/api-errors";
 import type { QuizAttempt } from "@/lib/types";
 
 /** File-mode attempt rows carry an answers map (question_id → selection). */
@@ -88,9 +89,9 @@ export async function POST(
 
     return NextResponse.json({ success: true, is_correct: isCorrect });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to save answer" },
-      { status: 500 }
-    );
+    return serverError("attempts.answer", error, {
+      message:
+        "That answer didn't reach the server. Your choice is kept on this page — it will be graded when you submit.",
+    });
   }
 }
