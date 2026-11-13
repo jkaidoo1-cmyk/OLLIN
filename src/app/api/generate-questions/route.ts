@@ -5,6 +5,10 @@ import { getSessionUser } from "@/lib/session";
 import { checkThrottle } from "@/lib/rate-limit";
 import { recordAdminAction } from "@/lib/audit";
 
+// Generation plus an optional top-up call has to fit in the host's function
+// budget; the internal deadline below is set just inside it.
+export const maxDuration = 60;
+
 /**
  * The app stores a multiple-choice answer as the option's zero-based index
  * ("0".."3") and a true/false answer as "true"/"false". Models sometimes
@@ -288,6 +292,10 @@ export async function POST(request: NextRequest) {
 
     // Call AI — keys come from the server only (Supabase / config file / env).
     const wanted = Math.min(question_count, 200);
+    // The host kills this function around 60s, so everything — including the
+    // top-up call — has to finish inside a budget we control, or the user gets
+    // no response at all.
+    const deadlineAt = Date.now() + 50_000;
 
     // Record per-key usage so the admin's token charts stay accurate. Awaited:
     // a fire-and-forget write is dropped when a serverless instance freezes
@@ -316,6 +324,7 @@ export async function POST(request: NextRequest) {
         fileType: isImage ? file_type : undefined,
         fileName: isImage ? file_name : undefined,
         customInstructions: custom_instructions,
+        deadlineAt,
         onUsage: recordUsage,
       }
     );
@@ -370,7 +379,7 @@ export async function POST(request: NextRequest) {
     // A rejected item must not silently shrink the quiz: ask once more for the
     // shortfall, naming the points already covered so the retry adds new ones
     // rather than rewrites of what survived.
-    if (qualityChecked.length < wanted) {
+    if (qualityChecked.length < wanted && Date.now() < deadlineAt - 12_000) {
       const shortfall = wanted - qualityChecked.length;
       const covered = qualityChecked
         .slice(-12)
@@ -383,6 +392,7 @@ export async function POST(request: NextRequest) {
           question_types,
           {
             fileName: isImage ? file_name : undefined,
+            deadlineAt,
             customInstructions: [
               custom_instructions,
               covered

@@ -61,6 +61,12 @@ export interface AIOptions {
   fileType?: string;
   fileName?: string;
   customInstructions?: string;
+  /**
+   * Absolute epoch ms by which this call must be done. The caller sets it from
+   * the platform's function budget, so a slow model (or a second, top-up call)
+   * is cut off while there is still time to answer the request.
+   */
+  deadlineAt?: number;
   /** Receives the winning key's id + token usage after a successful call. */
   onUsage?: (usage: {
     keyId: string;
@@ -239,7 +245,7 @@ export async function analyzeAndGenerate(
   for (const p of providers) {
     try {
       const { result, keyId } = await tryWithRotation(
-        (apiKey) => callAIProvider(p, materialText, questionCount, questionTypes, apiKey, options.fileData, options.fileType, options.fileName, options.customInstructions),
+        (apiKey) => callAIProvider(p, materialText, questionCount, questionTypes, apiKey, options.fileData, options.fileType, options.fileName, options.customInstructions, "generate", options.deadlineAt),
         p
       );
       // Surface usage so the caller (generate route) can record it per key.
@@ -295,12 +301,13 @@ async function callAIProvider(
   fileType?: string,
   fileName?: string,
   customInstructions?: string,
-  mode: "generate" | "exam" | "complete" = "generate"
+  mode: "generate" | "exam" | "complete" = "generate",
+  deadlineAt?: number
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
   if (provider === "gemini") {
-    return callGeminiAPI(materialText, questionCount, questionTypes, apiKey, fileData, fileType, fileName, customInstructions, mode);
+    return callGeminiAPI(materialText, questionCount, questionTypes, apiKey, fileData, fileType, fileName, customInstructions, mode, deadlineAt);
   }
-  return callGroqAPI(materialText, questionCount, questionTypes, apiKey, fileData, fileType, fileName, customInstructions, mode);
+  return callGroqAPI(materialText, questionCount, questionTypes, apiKey, fileData, fileType, fileName, customInstructions, mode, deadlineAt);
 }
 
 // ─── Exam Extraction Entry Point ─────────────────────────
@@ -327,7 +334,7 @@ export async function extractFromExam(
   for (const p of providers) {
     try {
       const { result, keyId } = await tryWithRotation(
-        (apiKey) => callAIProvider(p, examText, 0, [], apiKey, options.fileData, options.fileType, options.fileName, options.customInstructions, "exam"),
+        (apiKey) => callAIProvider(p, examText, 0, [], apiKey, options.fileData, options.fileType, options.fileName, options.customInstructions, "exam", options.deadlineAt),
         p
       );
       const usage = (result as { __usage?: { inputTokens: number; outputTokens: number } }).__usage;
@@ -442,7 +449,8 @@ export async function completeQuestions(
             undefined,
             undefined,
             undefined,
-            "complete"
+            "complete",
+            options.deadlineAt
           ),
         p
       );
@@ -473,7 +481,8 @@ async function callGroqAPI(
   fileType?: string,
   fileName?: string,
   customInstructions?: string,
-  mode: "generate" | "exam" | "complete" = "generate"
+  mode: "generate" | "exam" | "complete" = "generate",
+  deadlineAt?: number
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
   const prompt = mode === "exam"
     ? buildExamExtractionPrompt(materialText, fileName, customInstructions)
@@ -492,7 +501,11 @@ async function callGroqAPI(
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(
+      deadlineAt
+        ? Math.max(5_000, Math.min(AI_REQUEST_TIMEOUT_MS, deadlineAt - Date.now()))
+        : AI_REQUEST_TIMEOUT_MS
+    ),
     body: JSON.stringify({
       model: GROQ_MODEL,
       messages: [
@@ -532,7 +545,8 @@ async function callGeminiAPI(
   fileType?: string,
   fileName?: string,
   customInstructions?: string,
-  mode: "generate" | "exam" | "complete" = "generate"
+  mode: "generate" | "exam" | "complete" = "generate",
+  deadlineAt?: number
 ): Promise<{ analysis: ContentAnalysis; questions: unknown[] }> {
   const prompt = mode === "exam"
     ? buildExamExtractionPrompt(materialText, fileName, customInstructions)
@@ -555,8 +569,16 @@ async function callGeminiAPI(
   let lastError: Error | null = null;
 
   for (const model of models) {
-    const attemptTimeout =
+    const staticTimeout =
       model === GEMINI_MODEL ? AI_REQUEST_TIMEOUT_MS : AI_FALLBACK_TIMEOUT_MS;
+    // Never wait past the caller's deadline: overshooting it means the platform
+    // kills the function and the user gets no response at all.
+    const remaining = deadlineAt ? deadlineAt - Date.now() : staticTimeout;
+    if (remaining < 5_000) {
+      lastError = new Error("Generation ran out of time. Please try again.");
+      break;
+    }
+    const attemptTimeout = Math.min(staticTimeout, remaining);
     try {
       const response = await fetch(GEMINI_API_URL, {
         method: "POST",
