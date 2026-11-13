@@ -76,6 +76,7 @@ export default function CreateQuizPage() {
   const [questions, setQuestions] = useState<GeneratedQ[]>([]);
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
+  const [generateNotice, setGenerateNotice] = useState("");
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
 
   // Publishing
@@ -254,6 +255,7 @@ export default function CreateQuizPage() {
     if (!materialText.trim()) return;
     setGenerating(true);
     setGenerateError("");
+    setGenerateNotice("");
 
     try {
       const body: Record<string, unknown> = {
@@ -302,6 +304,15 @@ export default function CreateQuizPage() {
 
       const data = await res.json();
       setQuestions(data.questions);
+      if (
+        typeof data.requested === "number" &&
+        typeof data.generated === "number" &&
+        data.generated < data.requested
+      ) {
+        setGenerateNotice(
+          `Your material supported ${data.generated} of the ${data.requested} questions you asked for. Add more material, or ask for fewer questions.`
+        );
+      }
       if (data.analysis && !quizTitle && data.analysis.title) {
         setQuizTitle(data.analysis.title);
       }
@@ -900,6 +911,12 @@ export default function CreateQuizPage() {
         {generateError && (
           <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded flex items-center gap-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0" /> {generateError}
+          </div>
+        )}
+
+        {generateNotice && (
+          <div className="p-3 bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" /> {generateNotice}
           </div>
         )}
 

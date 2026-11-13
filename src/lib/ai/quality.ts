@@ -135,8 +135,7 @@ export function filterLowQuality<T extends {
   options?: unknown;
   correctAnswer?: string;
   explanation?: string;
-}>(items: T[]): { kept: T[]; dropped: QualityDrop[] } {
-  const stemSeen = new Set<string>();
+}>(items: T[], stemSeen: Set<string> = new Set<string>()): { kept: T[]; dropped: QualityDrop[] } {
   const kept: T[] = [];
   const dropped: QualityDrop[] = [];
 
