@@ -290,27 +290,6 @@ export async function POST(request: NextRequest) {
 
     finalText = getRelevantText(finalText, 7000);
 
-    // TEMPORARY diagnostics: stage markers written to audit_log so a deployed
-    // request can be traced without access to function logs.
-    const __t0 = Date.now();
-    const mark = async (stage: string) => {
-      try {
-        const { createAdminClient } = await import("@/lib/supabase/server");
-        const sb = await createAdminClient();
-        await sb?.from("audit_log").insert({
-          id: `dbg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          actor_id: null,
-          actor_email: null,
-          action: "debug.generate",
-          target_type: "quiz",
-          target_id: null,
-          detail: `${stage} @${Date.now() - __t0}ms`,
-          ip: null,
-        });
-      } catch { /* diagnostics only */ }
-    };
-    await mark("start");
-
     // Call AI — keys come from the server only (Supabase / config file / env).
     const wanted = Math.min(question_count, 200);
     // The host kills this function around 60s, so everything — including the
@@ -349,8 +328,6 @@ export async function POST(request: NextRequest) {
         onUsage: recordUsage,
       }
     );
-
-    await mark("model.done");
 
     const acceptBatch = (batch: unknown[], subject: string) =>
       (batch as Record<string, unknown>[])
@@ -450,8 +427,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await mark("gate.done");
-
     await recordAdminAction(
       request,
       session,
@@ -461,7 +436,6 @@ export async function POST(request: NextRequest) {
       `Generated ${qualityChecked.length} ${question_types.join(", ")} questions from material`
     );
 
-    await mark("respond");
     return NextResponse.json({
       questions: qualityChecked,
       // The client reports these so a short quiz is never a silent surprise.
