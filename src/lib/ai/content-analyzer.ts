@@ -62,7 +62,11 @@ export interface AIOptions {
   fileName?: string;
   customInstructions?: string;
   /** Receives the winning key's id + token usage after a successful call. */
-  onUsage?: (usage: { keyId: string; inputTokens: number; outputTokens: number }) => void;
+  onUsage?: (usage: {
+    keyId: string;
+    inputTokens: number;
+    outputTokens: number;
+  }) => void | Promise<void>;
 }
 
 // ─── API Configuration ────────────────────────────────
@@ -221,7 +225,7 @@ export async function analyzeAndGenerate(
       );
       // Surface usage so the caller (generate route) can record it per key.
       const usage = (result as { __usage?: { inputTokens: number; outputTokens: number } }).__usage;
-      options.onUsage?.({ keyId, inputTokens: usage?.inputTokens || 0, outputTokens: usage?.outputTokens || 0 });
+      await options.onUsage?.({ keyId, inputTokens: usage?.inputTokens || 0, outputTokens: usage?.outputTokens || 0 });
       delete (result as { __usage?: unknown }).__usage;
       return result;
     } catch (err) {
@@ -308,7 +312,7 @@ export async function extractFromExam(
         p
       );
       const usage = (result as { __usage?: { inputTokens: number; outputTokens: number } }).__usage;
-      options.onUsage?.({ keyId, inputTokens: usage?.inputTokens || 0, outputTokens: usage?.outputTokens || 0 });
+      await options.onUsage?.({ keyId, inputTokens: usage?.inputTokens || 0, outputTokens: usage?.outputTokens || 0 });
       delete (result as { __usage?: unknown }).__usage;
       return result;
     } catch (err) {
@@ -424,7 +428,7 @@ export async function completeQuestions(
         p
       );
       const usage = (result as { __usage?: { inputTokens: number; outputTokens: number } }).__usage;
-      options.onUsage?.({
+      await options.onUsage?.({
         keyId,
         inputTokens: usage?.inputTokens || 0,
         outputTokens: usage?.outputTokens || 0,

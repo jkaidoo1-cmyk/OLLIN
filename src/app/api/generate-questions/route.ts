@@ -134,10 +134,13 @@ export async function POST(request: NextRequest) {
         fileType: isImage ? file_type : undefined,
         fileName: isImage ? file_name : undefined,
         customInstructions: custom_instructions,
-        onUsage: ({ keyId, inputTokens, outputTokens }) => {
-          import("@/lib/ai/key-rotation").then(({ recordKeyUsage }) =>
-            recordKeyUsage(keyId, inputTokens, outputTokens)
-          ).catch(() => { /* non-critical */ });
+        onUsage: async ({ keyId, inputTokens, outputTokens }) => {
+          // Awaited: a fire-and-forget write is dropped when a serverless
+          // instance freezes right after the response is sent.
+          try {
+            const { recordKeyUsage } = await import("@/lib/ai/key-rotation");
+            await recordKeyUsage(keyId, inputTokens, outputTokens);
+          } catch { /* non-critical */ }
         },
       });
 
@@ -216,7 +219,7 @@ export async function POST(request: NextRequest) {
         try {
           const { completeQuestions } = await import("@/lib/ai/content-analyzer");
           completed = await completeQuestions(stats.pending, material_text, {
-            onUsage: ({ keyId, inputTokens, outputTokens }) => {
+            onUsage: async ({ keyId, inputTokens, outputTokens }) => {
               import("@/lib/ai/key-rotation").then(({ recordKeyUsage }) =>
                 recordKeyUsage(keyId, inputTokens, outputTokens)
               ).catch(() => { /* non-critical */ });
@@ -293,11 +296,14 @@ export async function POST(request: NextRequest) {
         fileType: isImage ? file_type : undefined,
         fileName: isImage ? file_name : undefined,
         customInstructions: custom_instructions,
-        onUsage: ({ keyId, inputTokens, outputTokens }) => {
+        onUsage: async ({ keyId, inputTokens, outputTokens }) => {
           // Record per-key usage so the admin's token charts stay accurate.
-          import("@/lib/ai/key-rotation").then(({ recordKeyUsage }) =>
-            recordKeyUsage(keyId, inputTokens, outputTokens)
-          ).catch(() => { /* non-critical */ });
+          // Awaited: a fire-and-forget write is dropped when a serverless
+          // instance freezes right after the response is sent.
+          try {
+            const { recordKeyUsage } = await import("@/lib/ai/key-rotation");
+            await recordKeyUsage(keyId, inputTokens, outputTokens);
+          } catch { /* non-critical */ }
         },
       }
     );
