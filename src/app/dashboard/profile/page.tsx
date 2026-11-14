@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AtSign, ChevronDown, ChevronRight, Download, Eye, EyeOff, GraduationCap, KeyRound, LifeBuoy, Loader2, LogOut, UserRound } from "lucide-react";
+import { BrandSpinner } from "@/components/Logo";
 import { useToast } from "@/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { isLocalMode, disableLocalMode, clearLocalUser, getLocalUser } from "@/lib/local";
@@ -195,9 +196,14 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <div className="pt-2">
+        {/* The brand mark is the loading state — the ring turns around its own
+            centre dot, so the wait looks like the app rather than a generic
+            spinner and the word "Loading…". */}
         <div className="app-card py-12 text-center">
-          <Loader2 className="w-8 h-8 text-[var(--ink-faint)] mx-auto mb-3 animate-spin" />
-          <p className="text-sm text-[var(--ink-muted)]">Loading…</p>
+          <span className="inline-flex justify-center w-full mb-3">
+            <BrandSpinner className="brand-spinner-lg" />
+          </span>
+          <span className="sr-only">Loading your profile</span>
         </div>
       </div>
     );

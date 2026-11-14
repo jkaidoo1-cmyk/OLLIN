@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizByCode, getLocalQuestions, getLocalUser } from "@/lib/local";
 import { Quiz, Question, QuizAttempt } from "@/lib/types";
 import { Clock, Send, CheckCircle, AlertCircle, User } from "lucide-react";
-import { BrandMark } from "@/components/Logo";
+import { BrandMark, BrandSpinner } from "@/components/Logo";
 import { useToast } from "@/components/ui/toast";
 import { formatTime } from "@/lib/utils";
 
@@ -483,7 +483,7 @@ export default function QuizPage() {
           </div>
         </header>
         <div className="flex-1 flex items-center justify-center">
-          <div className="w-8 h-8 border-2 border-[#006633] border-t-transparent rounded-full animate-spin" />
+          <BrandSpinner className="brand-spinner-lg" />
         </div>
       </div>
     );
@@ -522,7 +522,7 @@ export default function QuizPage() {
           </div>
         </header>
         <div className="flex-1 flex items-center justify-center">
-          <div className="w-8 h-8 border-2 border-[#006633] border-t-transparent rounded-full animate-spin" />
+          <BrandSpinner className="brand-spinner-lg" />
         </div>
       </div>
     );
