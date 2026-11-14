@@ -260,10 +260,13 @@ export default function ProfilePage() {
           </div>
         </div>
         <div className="relative flex flex-wrap gap-1.5 mt-4">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 text-white text-xs font-medium">
-            <GraduationCap className="w-3 h-3" />
-            Year {year}
-          </span>
+          {/* An admin has no class year — showing "Year 1" was noise. */}
+          {me.role !== "admin" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 text-white text-xs font-medium">
+              <GraduationCap className="w-3 h-3" />
+              Year {year}
+            </span>
+          )}
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 text-white text-xs font-medium capitalize">
             <AtSign className="w-3 h-3" />
             {me.role}
@@ -278,7 +281,8 @@ export default function ProfilePage() {
 
       {/* ── Settings list ── */}
       <div className="list-card divide-y divide-[#f0f0f0]">
-        {/* Year row — expands to the picker */}
+        {/* Year row — expands to the picker. Students only. */}
+        {me.role !== "admin" && (
         <div>
           <button
             type="button"
@@ -322,6 +326,7 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
+        )}
 
         {/* Password row — expands to the form */}
         <div>
