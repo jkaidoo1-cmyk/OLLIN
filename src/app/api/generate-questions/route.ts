@@ -72,6 +72,16 @@ function normalizeAnswerKey(
   return "";
 }
 
+/** Fisher–Yates: a real shuffle, so position carries no information. */
+function shuffled<T>(items: T[]): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 async function handle(request: NextRequest) {
   try {
     // AI calls spend real money/tokens — only logged-in users may trigger
@@ -485,6 +495,21 @@ async function handle(request: NextRequest) {
         dropped.slice(0, 5)
       );
     }
+
+    // ── Option order ─────────────────────────────────────────
+    // The model has a slot habit: 22 of the 36 stored multiple-choice keys sat
+    // at index 1 and only 2 at index 3, so "always pick B" scored over half.
+    // The flag says options are shuffled, but nothing ever did it — do it here,
+    // on the stored data, and re-point the key at the option it names.
+    qualityChecked = qualityChecked.map((q) => {
+      if (q.type !== "multiple_choice" || !Array.isArray(q.options) || q.options.length < 2) {
+        return q;
+      }
+      const correctText = q.options[Number(q.correctAnswer)];
+      if (correctText === undefined) return q;
+      const order = shuffled(q.options);
+      return { ...q, options: order, correctAnswer: String(order.indexOf(correctText)) };
+    });
 
     const tfFinal = qualityChecked.filter((q) => q.type === "true_false");
     if (tfFinal.length > 0) {
