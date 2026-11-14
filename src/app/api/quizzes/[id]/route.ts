@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLocalRequest } from "@/lib/server-host";
 import { getQuizById, getQuizByCode, deleteQuiz, getQuizQuestions } from "@/lib/data";
+import { serverError } from "@/lib/api-errors";
 
 // GET — get quiz by ID or share code, with questions (public, no auth required)
 // Resolve the requester's session (null for guests)
@@ -176,21 +177,25 @@ export async function DELETE(
       (await getQuizById(id, local)) ||
       (await getQuizById(id, !local).catch(() => null));
     if (!quiz) {
-      return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
+      // DELETE is idempotent: a quiz that is already gone is the state the
+      // caller asked for, so asking twice is a success rather than a 404.
+      return NextResponse.json({ success: true, alreadyDeleted: true });
     }
     if (!(await canManage(quiz, request))) {
       return NextResponse.json({ error: "Not allowed" }, { status: 403 });
     }
     // Delete everywhere it exists — a leftover copy in the other store brings
-    // the quiz straight back on the next list.
+    // the quiz straight back on the next list. Only the store that actually
+    // holds a copy is touched, and a real failure is reported instead of being
+    // swallowed: a silent Supabase failure was how "deleted" quizzes reappeared.
     await deleteQuiz(id, true);
-    await deleteQuiz(id, false).catch(() => { /* Supabase optional */ });
+    const inSupabase = await getQuizById(id, false).catch(() => null);
+    if (inSupabase) await deleteQuiz(id, false);
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to delete quiz" },
-      { status: 500 }
-    );
+    return serverError("quizzes.delete", error, {
+      message: "We couldn't delete that quiz. Please try again.",
+    });
   }
 }
 

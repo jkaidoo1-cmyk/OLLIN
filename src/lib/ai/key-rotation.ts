@@ -199,20 +199,24 @@ export async function recordKeyUsage(
     const { createAdminClient } = await import("@/lib/supabase/server");
     const supabase = await createAdminClient();
     if (supabase) {
-      // Read current values, then increment (row may be file-mode only)
+      // Read current values, then increment (row may be file-mode only).
+      // `provider` is needed to price the request: callers report tokens but
+      // not a model, so the key decides the rate.
       const { data: row } = await supabase
         .from("api_keys")
-        .select("total_requests, total_input_tokens, total_output_tokens, estimated_cost_usd")
+        .select("provider, total_requests, total_input_tokens, total_output_tokens, estimated_cost_usd")
         .eq("id", keyId)
         .single();
       if (row) {
+        const { estimateCostUsd } = await import("./pricing");
+        const cost = costUsd ?? estimateCostUsd(inputTokens, outputTokens, String(row.provider || "gemini"));
         const { error } = await supabase
           .from("api_keys")
           .update({
             total_requests: Number(row.total_requests || 0) + 1,
             total_input_tokens: Number(row.total_input_tokens || 0) + inputTokens,
             total_output_tokens: Number(row.total_output_tokens || 0) + outputTokens,
-            estimated_cost_usd: Number(row.estimated_cost_usd || 0) + (costUsd || 0),
+            estimated_cost_usd: Number(row.estimated_cost_usd || 0) + cost,
             last_used_at: new Date().toISOString(),
           })
           .eq("id", keyId);
@@ -228,10 +232,12 @@ export async function recordKeyUsage(
     const config = JSON.parse(readFileSync(configPath, "utf-8"));
     const key = config.api_keys?.find((k: { id: string }) => k.id === keyId);
     if (!key) return;
+    const { estimateCostUsd } = await import("./pricing");
+    const cost = costUsd ?? estimateCostUsd(inputTokens, outputTokens, String(key.provider || "gemini"));
     key.total_requests = (key.total_requests || 0) + 1;
     key.total_input_tokens = (key.total_input_tokens || 0) + inputTokens;
     key.total_output_tokens = (key.total_output_tokens || 0) + outputTokens;
-    key.estimated_cost_usd = (key.estimated_cost_usd || 0) + (costUsd || 0);
+    key.estimated_cost_usd = (key.estimated_cost_usd || 0) + cost;
     key.last_used_at = new Date().toISOString();
     config.updated_at = new Date().toISOString();
     try {

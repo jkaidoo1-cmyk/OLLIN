@@ -445,7 +445,31 @@ export async function deleteQuiz(
   }
 
   const supabase = await getServerSupabase();
-  await supabase.from("quizzes").delete().eq("id", id);
+
+  // Children first. questions, quiz_attempts and saved_quizzes reference this
+  // quiz, so deleting the parent alone trips a foreign key and the row survives
+  // — and because the result used to be discarded, the API answered "success"
+  // while the quiz came back on the next refresh. Every step is idempotent: a
+  // row that is already gone simply matches nothing.
+  const { data: attempts } = await supabase
+    .from("quiz_attempts")
+    .select("id")
+    .eq("quiz_id", id);
+  const attemptIds = (attempts || []).map((a: { id: string }) => a.id);
+  if (attemptIds.length > 0) {
+    await supabase.from("attempt_answers").delete().in("attempt_id", attemptIds);
+    const { error: attemptsError } = await supabase
+      .from("quiz_attempts")
+      .delete()
+      .eq("quiz_id", id);
+    if (attemptsError) throw new Error(attemptsError.message);
+  }
+  // Optional tables — a deployment without them is not a delete failure.
+  await supabase.from("questions").delete().eq("quiz_id", id);
+  await supabase.from("saved_quizzes").delete().eq("quiz_id", id);
+
+  const { error } = await supabase.from("quizzes").delete().eq("id", id);
+  if (error) throw new Error(error.message);
 }
 
 // ─── Question Operations ───────────────────────────────

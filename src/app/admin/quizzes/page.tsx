@@ -23,6 +23,7 @@ export default function AdminQuizzesPage() {
   const [courses, setCourses] = useState<any[]>([]);
   const [questionsMap, setQuestionsMap] = useState<Record<string, any[]>>({});
   const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   // Loopback-only; on a deployed origin the file store is per-instance, so
   // admin reads there must use the database.
@@ -40,12 +41,17 @@ export default function AdminQuizzesPage() {
       setQuizzes(warmQuizzes.data);
       setCourses(warmCourses.data);
       setUpdatedAt(warmQuizzes.at);
+      // Paint from the cache, then revalidate anyway. Returning here made the
+      // cached list authoritative for the whole tab, so a quiz deleted in the
+      // meantime kept coming back on every reload.
+      void fetchQuizzesAndCourses();
       return;
     }
     void fetchQuizzesAndCourses();
   }, []);
 
   const fetchQuizzesAndCourses = async () => {
+    setRefreshing(true);
     try {
       await syncSavedQuizzesFromServer();
 
@@ -75,7 +81,9 @@ export default function AdminQuizzesPage() {
       const courseList = dataC.courses || [];
       setCourses(courseList);
       writeCache("courses", courseList);
-    } catch { /* ignore */ }
+    } catch { /* ignore */ } finally {
+      setRefreshing(false);
+    }
   };
 
   // Load questions for a quiz from the server file (or local fallback)
@@ -134,10 +142,14 @@ export default function AdminQuizzesPage() {
         toast.error(d.error || "Failed to delete quiz");
         return;
       }
-      // Remove from local cache too
-      const remaining = getLocalQuizzes().filter((q) => q.id !== quiz.id);
-      localStorage.setItem("ollin_local_quizzes", JSON.stringify(remaining));
-      setQuizzes((prev) => prev.filter((q) => q.id !== quiz.id));
+      // Remove from every client-side copy: the local quiz store, the rendered
+      // list, and the session cache the page paints from on reload. A stale
+      // entry in any of them is a quiz that comes back from the dead.
+      const remainingLocal = getLocalQuizzes().filter((q) => q.id !== quiz.id);
+      localStorage.setItem("ollin_local_quizzes", JSON.stringify(remainingLocal));
+      const remaining = quizzes.filter((q) => q.id !== quiz.id);
+      setQuizzes(remaining);
+      writeCache("quizzes", remaining);
       toast.success(`"${quiz.title}" deleted`);
       if (expandedId === quiz.id) setExpandedId(null);
       // Remove from saved-to-course associations
@@ -158,10 +170,11 @@ export default function AdminQuizzesPage() {
         </div>
         <button
           onClick={() => void fetchQuizzesAndCourses()}
+          disabled={refreshing}
           title="Reload quizzes from the server"
-          className="text-xs px-3 py-2 border border-[#e0e0e0] rounded hover:border-green-400 text-[#666] flex items-center gap-1.5 justify-center"
+          className="text-xs px-3 py-2 border border-[#e0e0e0] rounded hover:border-green-400 text-[#666] flex items-center gap-1.5 justify-center disabled:opacity-60"
         >
-          <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} /> Refresh
         </button>
         {ageLabel && <span className="text-[11px] text-[#999]">{ageLabel}</span>}
       </div>
