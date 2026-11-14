@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AtSign, ChevronDown, ChevronRight, Download, Eye, EyeOff, GraduationCap, KeyRound, LifeBuoy, Loader2, LogOut, UserRound } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { useRouter } from "next/navigation";
-import { isLocalMode, disableLocalMode, getLocalUser } from "@/lib/local";
+import { isLocalMode, disableLocalMode, clearLocalUser, getLocalUser } from "@/lib/local";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -140,14 +140,21 @@ export default function ProfilePage() {
   };
 
   const handleLogout = async () => {
-    if (isLocalMode()) {
-      try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
-      disableLocalMode();
-      router.push("/");
-      return;
-    }
-    if (supabase) await supabase.auth.signOut();
+    // Every place the browser can be remembered has to be cleared, or the next
+    // page reload signs the user straight back in. The session this app
+    // actually authenticates with is the server cookie, so the API call is what
+    // really logs out — Supabase's own session and the local user key are
+    // extras that used to be left behind.
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch { /* offline — the cookie may survive, but nothing else will */ }
+    if (isLocalMode()) disableLocalMode();
+    clearLocalUser();
+    try {
+      if (supabase) await supabase.auth.signOut();
+    } catch { /* no Supabase session to end */ }
     router.push("/");
+    router.refresh();
   };
 
   const changePassword = async (e: React.FormEvent) => {

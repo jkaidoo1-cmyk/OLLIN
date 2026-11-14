@@ -157,6 +157,20 @@ export function disableLocalMode(): void {
   localStorage.removeItem(LOCAL_QUIZZES_KEY);
 }
 
+/**
+ * Forget who is signed in without touching their local quizzes.
+ *
+ * Signing out has to clear every place a user can be remembered. This is the
+ * key that made a logged-out browser look signed in again after leaving local
+ * mode, so logout clears it on every host, not only on loopback.
+ */
+export function clearLocalUser(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(LOCAL_USER_KEY);
+  } catch { /* storage blocked */ }
+}
+
 export function getLocalQuizzes(): Quiz[] {
   const stored = localStorage.getItem(LOCAL_QUIZZES_KEY);
   return stored ? JSON.parse(stored) : LOCAL_QUIZZES;

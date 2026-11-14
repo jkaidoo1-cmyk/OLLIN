@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
 import { isAdmin, clearStaleAdminSession } from "@/lib/admin";
 import { BrandMark } from "@/components/Logo";
-import { isLocalMode, disableLocalMode } from "@/lib/local";
+import { isLocalMode, disableLocalMode, clearLocalUser } from "@/lib/local";
 
 const adminNav = [
   { href: "/admin", label: "Overview" },
@@ -53,16 +53,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [router]);
 
   const handleLogout = async () => {
-    if (isLocalMode()) {
-      disableLocalMode();
-      router.push("/");
-      return;
-    }
-    if (isRealAdmin) {
-      try {
-        await fetch("/api/auth/logout", { method: "POST" });
-      } catch { /* ignore */ }
-    }
+    // The server cookie is the session this app authenticates with, so it is
+    // revoked for every kind of admin — a local user key alone would leave a
+    // signed-in browser behind.
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch { /* offline — nothing else stays behind either */ }
+    if (isLocalMode()) disableLocalMode();
+    clearLocalUser();
     router.push("/");
     router.refresh();
   };
