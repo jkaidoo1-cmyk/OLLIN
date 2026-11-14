@@ -38,7 +38,12 @@ export function BrandSpinner({ className = "" }: { className?: string }) {
             <rect x="-8" y="-2.5" width="14.2" height="6" transform="translate(5.5 19) rotate(135)" fill="#000"/>
           </mask>
         </defs>
-        <circle cx="12" cy="12" r="8.8" stroke="currentColor" strokeWidth="2.9" strokeLinecap="round" mask={`url(#bs-${maskId})`} opacity="0.9"/>
+        {/* Only the notched ring turns; the centre dot holds still, so the mark
+            reads as the logo spinning around its own core. The mask rides along
+            with the ring, which keeps the gap where the logo has it. */}
+        <g className="brand-spinner-ring">
+          <circle cx="12" cy="12" r="8.8" stroke="currentColor" strokeWidth="2.9" strokeLinecap="round" mask={`url(#bs-${maskId})`} opacity="0.9"/>
+        </g>
         <circle cx="12" cy="12" r="3.2" fill="#3CC46F"/>
       </svg>
     </span>

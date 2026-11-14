@@ -209,8 +209,19 @@ a:hover { text-decoration: none; }
   width: 1rem;
   height: 1rem;
   color: var(--primary-strong);
+}
+
+/* The ring turns around the centre dot rather than the whole mark turning with
+   it — the dot is the logo's fixed core. `view-box` makes the origin the SVG's
+   own centre, whatever size the spinner is rendered at. */
+.brand-spinner-ring {
+  transform-box: view-box;
   transform-origin: center;
   animation: brand-spinner-rotate 1.5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-spinner-ring { animation: none; }
 }
 .brand-spinner svg {
   width: 100%;
