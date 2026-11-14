@@ -12,7 +12,9 @@
  * vanish. Offline users see the offline page instead of a broken quiz.
  */
 
-const CACHE = "ollin-v7";
+// Bumped with offline.html: the offline page is precached, so a stale cache
+// would keep serving the version without the retry states.
+const CACHE = "ollin-v8";
 
 // New logo mark — bumping the cache so browsers can't serve the old assets.
 const LOGO_URLS = ["/logo-ink.png", "/logo.png", "/icon-192.png", "/icon-512.png", "/icon-maskable.png", "/favicon.ico", "/logo-mark.svg"];

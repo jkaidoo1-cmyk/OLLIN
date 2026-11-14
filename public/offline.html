@@ -67,6 +67,14 @@
       width: 100%;
     }
     button:hover { filter: brightness(0.97); }
+    button:disabled { filter: brightness(0.97); cursor: default; }
+    .status {
+      margin: 12px 0 0;
+      font-size: 0.8rem;
+      color: var(--muted);
+      min-height: 1.1em;
+    }
+    .status.busy { color: var(--brand); }
   </style>
 </head>
 <body>
@@ -80,7 +88,55 @@
     </div>
     <h1>You're offline</h1>
     <p>OLLIN needs a connection to load quizzes and save results. Check your internet and try again.</p>
-    <button onclick="location.reload()">Retry</button>
+    <button id="retry" type="button">Retry</button>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
   </div>
+
+  <script>
+    (function () {
+      var button = document.getElementById("retry");
+      var status = document.getElementById("status");
+      // A reload takes this page away, so the last attempt is remembered and
+      // reported here when the retry lands back on it still offline.
+      var KEY = "ollin-offline-retry";
+
+      function say(text, busy) {
+        status.textContent = text;
+        status.className = "status" + (busy ? " busy" : "");
+      }
+
+      function reloadAfter(text) {
+        say(text, true);
+        button.disabled = true;
+        button.textContent = "Retrying…";
+        try { sessionStorage.setItem(KEY, "1"); } catch (e) { /* storage blocked */ }
+        // Let the state paint before the navigation replaces the page.
+        setTimeout(function () { location.reload(); }, 400);
+      }
+
+      try {
+        if (sessionStorage.getItem(KEY) === "1") {
+          sessionStorage.removeItem(KEY);
+          say(navigator.onLine ? "Still loading — the connection may be slow." : "Still offline — check your internet and retry.", false);
+        }
+      } catch (e) { /* storage blocked */ }
+
+      button.addEventListener("click", function () {
+        if (navigator.onLine === false) {
+          reloadAfter("Still offline — trying again…");
+        } else {
+          reloadAfter("Trying again…");
+        }
+      });
+
+      // Back online: no need to press anything.
+      window.addEventListener("online", function () {
+        say("You're back online — reloading…", true);
+        button.disabled = true;
+        try { sessionStorage.removeItem(KEY); } catch (e) { /* storage blocked */ }
+        location.reload();
+      });
+    })();
+  </script>
 </body>
 </html>
