@@ -19,16 +19,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const supabase = createClient();
 
   useEffect(() => {
-    // The quiz edit page is the one dashboard route admins may use —
-    // it's how they edit quizzes from the admin Quizzes list.
+    // Two dashboard routes are legitimately used by admins: the quiz edit page
+    // (reached from the admin Quizzes list) and their own profile — the only
+    // screen with password change and preferences. Redirecting off the profile
+    // left admin accounts no way to change their password at all.
     const isEditPage = typeof window !== "undefined" && window.location.search.includes("edit=");
+    const adminMayStay = isEditPage || pathname === "/dashboard/profile";
     const getUser = async () => {
       if (isLocalMode()) {
         const localUser = getLocalUser();
         if (localUser) {
           // Admins administrate — they don't use the student dashboard.
           // (Exception: the quiz edit page, reached from the admin panel.)
-          if (isAdmin() && !isEditPage) {
+          if (isAdmin() && !adminMayStay) {
             router.replace("/admin");
             return;
           }
@@ -49,7 +52,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const meData = await meRes.json();
         if (meRes.ok && meData.user) {
           // Admins go to the admin console (except on the quiz edit page).
-          if (meData.user.role === "admin" && !isEditPage) {
+          if (meData.user.role === "admin" && !adminMayStay) {
             router.replace("/admin");
             return;
           }
