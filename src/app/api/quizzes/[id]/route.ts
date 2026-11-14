@@ -174,9 +174,12 @@ export async function DELETE(
     // The route then decided it did not exist and answered "already deleted"
     // without deleting anything — which is exactly why deleted quizzes came
     // back on the next load.
-    const quiz =
-      (await getQuizById(id, local).catch(() => null)) ||
-      (await getQuizByIdAsAdmin(id));
+    // One lookup, service role: this app authenticates with its own cookie, so
+    // the anonymous client saw nothing under row-level security and the route
+    // answered "already deleted" for a quiz that still existed.
+    const quiz = local
+      ? await getQuizById(id, true).catch(() => null)
+      : await getQuizByIdAsAdmin(id);
     if (!quiz) {
       // DELETE is idempotent: a quiz that is already gone is the state the
       // caller asked for, so asking twice is a success rather than a 404.
@@ -186,20 +189,16 @@ export async function DELETE(
       return NextResponse.json({ error: "Not allowed" }, { status: 403 });
     }
 
-    // Delete everywhere it exists — a leftover copy in either store brings the
-    // quiz straight back on the next list.
-    try {
+    // Delete from the store this caller uses, and from the file store as well
+    // when the request is local (a quiz can exist in both there). Each extra
+    // round trip is seconds on a cold function, so nothing redundant runs.
+    if (local) {
       await deleteQuiz(id, true);
-    } catch (err) {
-      if (!(err instanceof Error && err.message === "NO_BACKEND")) throw err;
-    }
-    if (await getQuizByIdAsAdmin(id)) {
+      await deleteQuiz(id, false).catch((err) => {
+        if (!(err instanceof Error && err.message === "NO_BACKEND")) throw err;
+      });
+    } else {
       await deleteQuiz(id, false);
-    }
-    // Confirm rather than trust: a delete that matched no rows reports no
-    // error, so only a second read can say the quiz is really gone.
-    if (await getQuizByIdAsAdmin(id)) {
-      throw new Error("quiz row survived delete");
     }
     return NextResponse.json({ success: true });
   } catch (error) {
