@@ -406,7 +406,9 @@ export default function QuizDetailPage() {
                           {attempt.participant_name || "Anonymous Participant"}
                         </p>
                         <p className="text-xs text-slate-400">
-                          {attempt.correct_answers}/{attempt.total_questions} correct
+                          {attempt.total_questions
+                            ? `${attempt.correct_answers}/${attempt.total_questions} correct`
+                            : `${attempt.correct_answers} correct`}
                           {attempt.time_taken_seconds ? ` · ${Math.floor(attempt.time_taken_seconds / 60)}m ${attempt.time_taken_seconds % 60}s` : ""}
                         </p>
                       </div>

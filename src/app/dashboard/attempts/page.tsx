@@ -152,7 +152,13 @@ export default function MyAttemptsPage() {
                       )}
                     </p>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-[#999]">
-                      <span>{a.correct_answers}/{a.total_questions} correct</span>
+                      {/* Older rows can carry a zero total; a bare count reads
+                          better than "29/0". */}
+                      <span>
+                        {a.total_questions
+                          ? `${a.correct_answers}/${a.total_questions} correct`
+                          : `${a.correct_answers} correct`}
+                      </span>
                       {a.time_taken_seconds != null && (
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />

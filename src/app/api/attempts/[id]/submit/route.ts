@@ -363,6 +363,10 @@ export async function POST(
           .update({
             completed_at: now,
             time_taken_seconds: durationSeconds,
+            // The count comes from the questions actually graded. It used to be
+            // whatever the in-progress row was created with — often 0 — so a
+            // finished attempt read "29/0 correct".
+            total_questions: total,
             correct_answers: correct,
             score_percentage: scorePercentage,
             marks_earned: marksEarned,
