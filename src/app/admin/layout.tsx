@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
 import { isAdmin, clearStaleAdminSession } from "@/lib/admin";
-import { BrandMark } from "@/components/Logo";
+import { BrandMark, BrandSpinner } from "@/components/Logo";
 import { isLocalMode, disableLocalMode, clearLocalUser } from "@/lib/local";
 
 const adminNav = [
@@ -67,8 +67,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-sm text-[#666]">Loading...</div>
+      // The brand mark doubles as the loading state, so the admin shell waits
+      // with the logo spinning rather than a bare word.
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
+        <BrandSpinner className="brand-spinner-lg" />
+        <span className="sr-only">Loading the admin panel</span>
       </div>
     );
   }
