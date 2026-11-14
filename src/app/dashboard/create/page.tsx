@@ -31,6 +31,9 @@ interface GeneratedQ {
   difficulty?: string;
 }
 
+/** Placeholder titles produced when the model gives no title of its own. */
+const GENERIC_TITLES = new Set(["material analysis", "untitled quiz", "quiz"]);
+
 export default function CreateQuizPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -42,6 +45,10 @@ export default function CreateQuizPage() {
   // Material
   const [materialText, setMaterialText] = useState("");
   const [materialTitle, setMaterialTitle] = useState("");
+
+  // Names the analyzer invents when the model supplies none. Prefilling the
+  // title field with one is how a quiz gets saved under a name nobody chose,
+  // so they are treated as "no title" everywhere.
   const [materialFile, setMaterialFile] = useState<File | null>(null);
   const [materialType, setMaterialType] = useState<"paste" | "file">("file");
   const [sourceMode, setSourceMode] = useState<"material" | "exam">("material");
@@ -49,6 +56,12 @@ export default function CreateQuizPage() {
   const [materialFileType, setMaterialFileType] = useState("");
   const [extracting, setExtracting] = useState(false);
   const [extractWarning, setExtractWarning] = useState("");
+
+  const resolvedTitle = () => {
+    const typed = quizTitle.trim();
+    if (typed && !GENERIC_TITLES.has(typed.toLowerCase())) return typed;
+    return materialTitle || fallbackQuizTitle();
+  };
 
   // Named fallback so no quiz is ever saved as the generic "Untitled Quiz" —
   // derived from the first question's text (or the material/exam context).
@@ -329,8 +342,9 @@ export default function CreateQuizPage() {
           `Your material supported ${data.generated} of the ${data.requested} questions you asked for. Add more material, or ask for fewer questions.`
         );
       }
-      if (data.analysis && !quizTitle && data.analysis.title) {
-        setQuizTitle(data.analysis.title);
+      const suggested = (data.analysis?.title || "").trim();
+      if (!quizTitle && suggested && !GENERIC_TITLES.has(suggested.toLowerCase())) {
+        setQuizTitle(suggested);
       }
     } catch (err) {
       setGenerateError(toUserMessage(err, "We couldn't generate questions. Please try again."));
@@ -358,7 +372,8 @@ export default function CreateQuizPage() {
       if (isLocalMode()) {
         const localQuiz: Quiz = {
           id: editId || `local-quiz-${Date.now()}`,
-          host_id: currentUserId,            title: quizTitle || materialTitle || fallbackQuizTitle(),
+          host_id: currentUserId,
+          title: resolvedTitle(),
           description: null,
           share_code: shareCode || `SELF-${Date.now()}`,
           time_limit_minutes: timeLimit || null,
@@ -437,7 +452,7 @@ export default function CreateQuizPage() {
           .from("quizzes")
           .insert({
             host_id: userData.user.id,
-            title: quizTitle || materialTitle || fallbackQuizTitle(),
+            title: resolvedTitle(),
             description: null,
             share_code: shareCode,
             time_limit_minutes: timeLimit || null,
