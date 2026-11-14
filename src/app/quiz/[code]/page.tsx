@@ -306,6 +306,10 @@ export default function QuizPage() {
     // in_progress row) is authoritative over anything the client claims —
     // a refreshed page would otherwise report a fresh start time.
     const startedAt = attempt?.started_at || joinedAtRef.current || new Date().toISOString();
+    // Stamped at the click, before the request goes anywhere: the server records
+    // this as when the quiz was handed in, so a slow connection doesn't turn an
+    // on-time submission into a late one.
+    const submittedAt = new Date().toISOString();
     const timeTaken = quiz.time_limit_minutes
       ? quiz.time_limit_minutes * 60 - (timeLeft || 0)
       : null;
@@ -324,6 +328,7 @@ export default function QuizPage() {
           participant_email: currentUser?.email || null,
           time_taken_seconds: timeTaken,
           started_at: startedAt,
+          submitted_at: submittedAt,
           answers: questions.map((q) => ({
             question_id: q.id,
             selected_answer: answers[q.id] || "",

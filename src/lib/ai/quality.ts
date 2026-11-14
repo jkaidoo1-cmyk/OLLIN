@@ -51,6 +51,25 @@ function norm(s: string): string {
 const MAX_LENGTH_RATIO = 2.2;
 
 /**
+ * A shared run of this many characters means two stems ask the same thing.
+ *
+ * Rewording defeats both an exact match and a prefix match: "Which market
+ * structure features a single supplier controlling the entire output…" and
+ * "What market structure characterizes an industry featuring a single supplier
+ * controlling the entire…" are one question, but they only agree from the
+ * middle. Five-odd words of identical wording inside a stem is specific enough
+ * to call them the same; a shared topic alone does not reach this length.
+ */
+const DUPLICATE_PHRASE_CHARS = 32;
+
+/**
+ * `stemSeen` holds normalized stems, plus one key per phrase window, prefixed so
+ * a window can never be mistaken for a stem. Keeping both in the set the caller
+ * already passes means the filters stay independent per generation request.
+ */
+const PHRASE_KEY = "~";
+
+/**
  * Returns the reason an item fails, or null when it is acceptable.
  * `stemSeen` carries normalized stems within one batch so repeats are caught.
  */
@@ -78,8 +97,20 @@ export function qualityIssue(
     if (stemSeen.has(key)) return "duplicate stem";
     // Near-duplicates: the same opening clause usually means the same fact.
     for (const seen of stemSeen) {
+      if (seen.startsWith(PHRASE_KEY)) continue;
       if (seen.length > 40 && key.length > 40 && seen.slice(0, 40) === key.slice(0, 40)) {
         return "near-duplicate stem";
+      }
+    }
+    // Reworded duplicates: any identical run anywhere in the two stems.
+    if (key.length >= DUPLICATE_PHRASE_CHARS) {
+      for (let i = 0; i + DUPLICATE_PHRASE_CHARS <= key.length; i++) {
+        if (stemSeen.has(PHRASE_KEY + key.slice(i, i + DUPLICATE_PHRASE_CHARS))) {
+          return "repeats an earlier question in other words";
+        }
+      }
+      for (let i = 0; i + DUPLICATE_PHRASE_CHARS <= key.length; i++) {
+        stemSeen.add(PHRASE_KEY + key.slice(i, i + DUPLICATE_PHRASE_CHARS));
       }
     }
     stemSeen.add(key);

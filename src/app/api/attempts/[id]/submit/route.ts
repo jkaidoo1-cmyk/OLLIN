@@ -35,6 +35,31 @@ export async function POST(
       );
     }
 
+    // A submission is final. A second click or a replayed request must not
+    // rewrite a completed attempt's score, answers or timestamps.
+    const existingAttempt = readServerAttempts().find((a) => a.id === id);
+    if (existingAttempt?.status === "completed") {
+      return NextResponse.json(
+        {
+          error: "This attempt has already been submitted.",
+          duplicate: true,
+          attempt_id: id,
+        },
+        { status: 409 }
+      );
+    }
+
+    // The participant's submission time is when they pressed Submit, not when
+    // the request reached the server: a slow connection must not cost anyone
+    // time or shift their entry on the leaderboard. The claim is bounded — it
+    // can never be in the future, and never before the attempt started.
+    const nowMs = Date.now();
+    const claimedSubmitMs =
+      typeof body.submitted_at === "string" ? Date.parse(body.submitted_at) : NaN;
+    const submitMs = Number.isFinite(claimedSubmitMs)
+      ? Math.min(claimedSubmitMs, nowMs)
+      : nowMs;
+
     // ── Server-side time-window enforcement ──────────────────
     // The UI hides the quiz outside its window; the server must also refuse
     // submissions outside it (clients can be manipulated).
@@ -103,7 +128,9 @@ export async function POST(
           // Earliest credible start wins — extra time is never granted.
           const startedMs = candidates.length ? Math.min(...candidates) : NaN;
           if (!Number.isNaN(startedMs) && startedMs > 0) {
-            const elapsedSec = (Date.now() - startedMs) / 1000;
+            // Measured to the click, so a slow submit is judged on the time the
+            // participant actually took — and never on the trip to the server.
+            const elapsedSec = (submitMs - startedMs) / 1000;
             if (elapsedSec > limitSec + GRACE_SECONDS) {
               return NextResponse.json(
                 { error: "Time is up for this quiz. Your answers could not be submitted." },
@@ -247,7 +274,7 @@ export async function POST(
       answer_key[q.id] = answerKeyFor(q);
       explanations[q.id] = q.explanation ?? null;
     }
-    const now = new Date().toISOString();
+    const now = new Date(submitMs).toISOString();
     // Ownership and timing come from the server, not the client's claims: an
     // unverified participant_email let anyone file an attempt (and its score)
     // under someone else's name, and started_at was overwritten with the
@@ -259,6 +286,15 @@ export async function POST(
     const startedAt =
       priorAttempt?.started_at ||
       (Number.isFinite(claimedStartMs) ? new Date(claimedStartMs).toISOString() : now);
+    // Duration is start → click, so it matches the time actually spent.
+    const elapsedFromStart = (submitMs - Date.parse(startedAt)) / 1000;
+    const durationSeconds =
+      Number.isFinite(elapsedFromStart) && elapsedFromStart >= 0
+        ? Math.round(elapsedFromStart)
+        : typeof time_taken_seconds === "number"
+        ? time_taken_seconds
+        : 600;
+
     const attempt: QuizAttempt = {
       id: attemptId,
       quiz_id: resolvedQuizId,
@@ -267,7 +303,7 @@ export async function POST(
       participant_name: participant_name ?? "Anonymous",
       started_at: startedAt,
       completed_at: now,
-      time_taken_seconds: time_taken_seconds ?? 600,
+      time_taken_seconds: durationSeconds,
       total_questions: total,
       correct_answers: correct,
       score_percentage: scorePercentage,
@@ -291,6 +327,24 @@ export async function POST(
         const admin = await createAdminClient();
         if (!admin) throw new Error("Supabase unavailable");
 
+        // The stored row is authoritative: an attempt that is already complete
+        // is left untouched.
+        const { data: currentRow } = await admin
+          .from("quiz_attempts")
+          .select("status")
+          .eq("id", attemptId)
+          .maybeSingle();
+        if (currentRow?.status === "completed") {
+          return NextResponse.json(
+            {
+              error: "This attempt has already been submitted.",
+              duplicate: true,
+              attempt_id: attemptId,
+            },
+            { status: 409 }
+          );
+        }
+
         if (graded.length > 0) {
           const inserts = graded.map((g) => ({
             attempt_id: attemptId,
@@ -308,7 +362,7 @@ export async function POST(
           .from("quiz_attempts")
           .update({
             completed_at: now,
-            time_taken_seconds: time_taken_seconds ?? 600,
+            time_taken_seconds: durationSeconds,
             correct_answers: correct,
             score_percentage: scorePercentage,
             marks_earned: marksEarned,
