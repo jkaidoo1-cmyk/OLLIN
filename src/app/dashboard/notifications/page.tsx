@@ -124,6 +124,7 @@ export default function NotificationsPage() {
                     onClick={() => handleDelete(notif.id)}
                     className="p-1 rounded hover:bg-red-50 text-[#999] hover:text-red-500 transition-colors flex-shrink-0"
                     title="Delete notification"
+                    aria-label="Delete notification"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

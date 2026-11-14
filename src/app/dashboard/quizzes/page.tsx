@@ -110,6 +110,17 @@ export default function MyQuizzesPage() {
       setQuizzes((prev) => prev.filter((q) => q.id !== quiz.id));
       // Keep the warmed list in step, or a later visit resurrects the row.
       invalidateResource("quizzes");
+      // Confirm the quiz is really gone before claiming it is. A success
+      // response that deleted nothing is how a removed quiz came back.
+      let stillThere = false;
+      try {
+        const check = await fetch(`/api/quizzes/${quiz.id}`, { cache: "no-store" });
+        stillThere = check.ok;
+      } catch { /* offline: trust the response */ }
+      if (stillThere) {
+        toast.error("The quiz is still on the server — it wasn't deleted. Please try again.");
+        return;
+      }
       toast.success(`"${quiz.title}" deleted`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete quiz");

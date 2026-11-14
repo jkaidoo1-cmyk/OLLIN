@@ -51,7 +51,8 @@ export default function AdminQuizzesPage() {
     void fetchQuizzesAndCourses();
   }, []);
 
-  const fetchQuizzesAndCourses = async () => {
+  const fetchQuizzesAndCourses = async (): Promise<any[] | null> => {
+    setError("");
     try {
       await syncSavedQuizzesFromServer();
 
@@ -81,7 +82,13 @@ export default function AdminQuizzesPage() {
       const courseList = dataC.courses || [];
       setCourses(courseList);
       writeCache("courses", courseList);
-    } catch { /* ignore */ }
+      return merged;
+    } catch {
+      // A failed load used to look identical to "no quizzes yet", which reads
+      // as "my quizzes were deleted". Say what happened instead.
+      setError("We couldn't load the quiz list. Check your connection, then press Refresh.");
+      return null;
+    }
   };
 
   // Load questions for a quiz from the server file (or local fallback)
@@ -148,6 +155,13 @@ export default function AdminQuizzesPage() {
       const remaining = quizzes.filter((q) => q.id !== quiz.id);
       setQuizzes(remaining);
       writeCache("quizzes", remaining);
+      // Report success only once a re-read agrees the row is gone. A delete
+      // that lied was the whole reason quizzes came back after a reload.
+      const fresh = await fetchQuizzesAndCourses();
+      if (fresh && fresh.some((q: any) => q.id === quiz.id)) {
+        toast.error("The quiz is still on the server — it wasn't deleted. Please try again.");
+        return;
+      }
       toast.success(`"${quiz.title}" deleted`);
       if (expandedId === quiz.id) setExpandedId(null);
       // Remove from saved-to-course associations
@@ -184,8 +198,14 @@ export default function AdminQuizzesPage() {
       {quizzes.length === 0 ? (
         <div className="bg-white border border-[#e0e0e0] rounded-lg p-12 text-center">
           <BookOpen className="w-8 h-8 text-[#ccc] mx-auto mb-3" />
-          <p className="text-sm text-[#666]">No quizzes have been created yet.</p>
-          <p className="text-xs text-[#999] mt-1">Quizzes will appear here once students create them.</p>
+          <p className="text-sm text-[#666]">
+            {error ? "Quiz list unavailable." : "No quizzes have been created yet."}
+          </p>
+          <p className="text-xs text-[#999] mt-1">
+            {error
+              ? "Press Refresh once you're back online."
+              : "Quizzes will appear here once students create them."}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -226,23 +246,26 @@ export default function AdminQuizzesPage() {
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="p-1.5 rounded hover:bg-blue-50 text-[#999] hover:text-blue-600 transition-colors"
+                      className="p-2 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded hover:bg-blue-50 text-[#999] hover:text-blue-600 transition-colors"
                       title="Open quiz"
+                      aria-label={`Open ${quiz.title} in a new tab`}
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                     <a
                       href={`/dashboard/create?edit=${quiz.id}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="p-1.5 rounded hover:bg-green-50 text-[#999] hover:text-green-600 transition-colors"
+                      className="p-2 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded hover:bg-green-50 text-[#999] hover:text-green-600 transition-colors"
                       title="Edit quiz"
+                      aria-label={`Edit ${quiz.title}`}
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </a>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDelete(quiz); }}
-                      className="p-1.5 rounded hover:bg-red-50 text-[#999] hover:text-red-500 transition-colors"
+                      className="p-2 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded hover:bg-red-50 text-[#999] hover:text-red-500 transition-colors"
                       title="Delete quiz"
+                      aria-label={`Delete ${quiz.title}`}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

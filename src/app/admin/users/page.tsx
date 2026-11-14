@@ -632,8 +632,9 @@ export default function AdminUsersPage() {
                   {!isPendingAdd && !isPendingDelete && (
                     <button
                       onClick={() => handleStartEdit(user)}
-                      className="p-1.5 rounded hover:bg-slate-100 text-[#999] hover:text-[#333] transition-colors"
+                      className="p-2 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded hover:bg-slate-100 text-[#999] hover:text-[#333] transition-colors"
                       title="Edit user"
+                      aria-label={`Edit ${user.full_name || user.email}`}
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
@@ -641,8 +642,9 @@ export default function AdminUsersPage() {
                   {user.role !== "admin" && !isPendingAdd && !isPendingUpdate && !isPendingDelete && (
                     <button
                       onClick={() => handleDelete(user.id)}
-                      className="p-1.5 rounded hover:bg-red-50 text-[#999] hover:text-red-500 transition-colors"
+                      className="p-2 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded hover:bg-red-50 text-[#999] hover:text-red-500 transition-colors"
                       title="Delete user"
+                      aria-label={`Delete ${user.full_name || user.email}`}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

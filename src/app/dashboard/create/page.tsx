@@ -89,6 +89,21 @@ export default function CreateQuizPage() {
   // Questions
   const [questions, setQuestions] = useState<GeneratedQ[]>([]);
   const [generating, setGenerating] = useState(false);
+  // Seconds spent generating. A spinner alone reads as "frozen" on a ten-second
+  // wait; a counter proves the request is alive.
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!generating) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const started = Date.now();
+    const id = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - started) / 1000));
+    }, 500);
+    return () => clearInterval(id);
+  }, [generating]);
   const [generateError, setGenerateError] = useState("");
   const [generateNotice, setGenerateNotice] = useState("");
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
@@ -930,14 +945,29 @@ export default function CreateQuizPage() {
         <button
           onClick={handleGenerate}
           disabled={(!materialText.trim() && !(materialFileBase64 && materialFileType)) || generating}
-          className="btn-primary w-full py-2.5 text-sm flex items-center justify-center gap-2"
+          className="btn-primary w-full min-h-[48px] py-2.5 text-sm flex items-center justify-center gap-2 disabled:opacity-60"
         >
           {generating ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> {sourceMode === "exam" ? "Extracting exam..." : "Generating questions..."}</>
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {sourceMode === "exam" ? "Extracting exam..." : "Generating questions..."}
+              <span className="tabular-nums opacity-80">{elapsedSeconds}s</span>
+            </>
           ) : (
             sourceMode === "exam" ? "Extract questions from exam" : "Generate questions"
           )}
         </button>
+
+        {generating && (
+          <p className="text-[11px] text-[var(--ink-faint)] text-center -mt-2">
+            {elapsedSeconds < 5
+              ? "Reading your material…"
+              : elapsedSeconds < 12
+                ? "Writing and checking questions…"
+                : "Almost done — longer material takes a little more time."}
+            {" "}Keep this tab open.
+          </p>
+        )}
 
         {generateError && (
           <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded flex items-center gap-2">
@@ -1013,6 +1043,8 @@ export default function CreateQuizPage() {
                                         : "border-[#ccc] text-[#999]"
                                     }`}
                                     title="Mark as correct"
+                                    aria-label={`Mark option ${String.fromCharCode(65 + oi)} of question ${idx + 1} as the correct answer`}
+                                    aria-pressed={String(oi) === q.correctAnswer}
                                   >
                                     {String.fromCharCode(65 + oi)}
                                   </button>
@@ -1132,18 +1164,22 @@ export default function CreateQuizPage() {
               </button>
             )}
 
-            {/* Publish */}
-            <button
-              onClick={handlePublish}
-              disabled={publishing || questions.length === 0}
-              className="btn-primary w-full py-2.5 text-sm flex items-center justify-center gap-2"
-            >
-              {publishing ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Publishing...</>
-              ) : (
-                `Publish quiz (${questions.length} questions)`
-              )}
-            </button>
+            {/* Publish — sticks near the bottom of the viewport like the quiz
+                player's Submit, so the action never scrolls away on a long
+                list of questions. */}
+            <div className="sticky bottom-[calc(72px_+_env(safe-area-inset-bottom))] sm:bottom-3 z-10 -mx-1 px-1 pt-2 pb-2 bg-[var(--background)] backdrop-blur">
+              <button
+                onClick={handlePublish}
+                disabled={publishing || questions.length === 0}
+                className="btn-primary w-full min-h-[48px] py-2.5 text-sm flex items-center justify-center gap-2 shadow-lg disabled:opacity-60"
+              >
+                {publishing ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Publishing...</>
+                ) : (
+                  `Publish quiz (${questions.length} questions)`
+                )}
+              </button>
+            </div>
           </div>
         )}
       </div>

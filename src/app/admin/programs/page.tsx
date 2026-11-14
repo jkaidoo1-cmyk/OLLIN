@@ -380,12 +380,13 @@ export default function AdminProgramsPage() {
                           dept: prog.department || "",
                           desc: prog.description || "",
                         })}
-                        className="p-1.5 rounded hover:bg-amber-50 text-[#999] hover:text-amber-600 transition-colors"
+                        className="p-2 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded hover:bg-amber-50 text-[#999] hover:text-amber-600 transition-colors"
                         title="Edit"
+                        aria-label={`Edit ${prog.name}`}
                       >
                         <Pen className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => handleDelete(prog.id)} className="p-1.5 rounded hover:bg-red-50 text-[#999] hover:text-red-500 transition-colors" title="Delete">
+                      <button onClick={() => handleDelete(prog.id)} className="p-2 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded hover:bg-red-50 text-[#999] hover:text-red-500 transition-colors" title="Delete" aria-label={`Delete ${prog.name}`}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </>
