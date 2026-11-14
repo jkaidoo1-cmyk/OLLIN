@@ -954,12 +954,28 @@ export default function CreateQuizPage() {
         {/* Generated questions */}
         {questions.length > 0 && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-[var(--ink)]">{questions.length} questions generated</h2>
-              <span className="text-xs text-[#999]">Edit or delete as needed</span>
-            </div>
+            {/* The paper itself is only worth showing when it is going to other
+                people. "Just me" and "All of us" publish straight from here,
+                so they get a count instead of the full question preview. */}
+            {quizMode === "host" ? (
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-[var(--ink)]">{questions.length} questions generated</h2>
+                <span className="text-xs text-[#999]">Edit or delete as needed</span>
+              </div>
+            ) : (
+              <div className="app-card">
+                <h2 className="text-sm font-bold text-[var(--ink)]">
+                  {questions.length} questions ready
+                </h2>
+                <p className="text-xs text-[#666] mt-1">
+                  {quizMode === "self"
+                    ? "Saved to your own quizzes — start it whenever you like."
+                    : "Published for everyone — you and anyone with the code can take it."}
+                </p>
+              </div>
+            )}
 
-            {questions.map((q, idx) => (
+            {quizMode === "host" && questions.map((q, idx) => (
               <div key={idx} className="app-card">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -1107,12 +1123,14 @@ export default function CreateQuizPage() {
             ))}
 
             {/* Add question manually */}
-            <button
-              onClick={addManualQuestion}
-              className="w-full py-2 border border-dashed border-[#ccc] rounded-lg text-xs font-medium text-[#666] hover:border-green-400 hover:text-green-600 transition-colors"
-            >
-              + Add question manually
-            </button>
+            {quizMode === "host" && (
+              <button
+                onClick={addManualQuestion}
+                className="w-full py-2 border border-dashed border-[#ccc] rounded-lg text-xs font-medium text-[#666] hover:border-green-400 hover:text-green-600 transition-colors"
+              >
+                + Add question manually
+              </button>
+            )}
 
             {/* Publish */}
             <button
