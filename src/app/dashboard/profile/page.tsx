@@ -194,17 +194,12 @@ export default function ProfilePage() {
   };
 
   if (loading) {
+    // The brand mark is the loading state, centred in the content area. A card
+    // around a lone spinner read as a broken panel rather than a wait.
     return (
-      <div className="pt-2">
-        {/* The brand mark is the loading state — the ring turns around its own
-            centre dot, so the wait looks like the app rather than a generic
-            spinner and the word "Loading…". */}
-        <div className="app-card py-12 text-center">
-          <span className="inline-flex justify-center w-full mb-3">
-            <BrandSpinner className="brand-spinner-lg" />
-          </span>
-          <span className="sr-only">Loading your profile</span>
-        </div>
+      <div className="min-h-[60vh] flex items-center justify-center" aria-busy="true">
+        <BrandSpinner className="brand-spinner-lg" />
+        <span className="sr-only">Loading your profile</span>
       </div>
     );
   }
