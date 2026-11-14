@@ -75,5 +75,6 @@ export const QUESTION_EXEMPLARS = `{"questions":[
 "the hash function stops distributing keys above 90% occupancy",
 "memory reclamation stalls the table while it grows"],"correctAnswer":"1","answerKey":"collision chains and probe sequences grow longer as slots fill","explanation":"Fewer free slots means more collisions per lookup."},
 {"type":"true_false","question":"In TCP, a sender reduces its congestion window after detecting packet loss.","options":["True","False"],"correctAnswer":"true","answerKey":"True","explanation":"Loss is read as congestion, so the sender backs off."},
+{"type":"true_false","question":"A TCP receiver acknowledges segments in the order it reassembles them, so the sender must retransmit every segment whose acknowledgement arrives out of sequence.","options":["True","False"],"correctAnswer":"false","answerKey":"False","explanation":"Cumulative acknowledgements tolerate reordering; only loss triggers retransmission."},
 {"type":"fill_blank","question":"The enzyme that unwinds the DNA double helix ahead of replication is called ______.","correctAnswer":"helicase","answerKey":"helicase","explanation":"Helicase breaks the hydrogen bonds between base pairs."}
 ]}`;

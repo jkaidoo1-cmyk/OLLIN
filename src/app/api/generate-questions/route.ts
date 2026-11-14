@@ -423,11 +423,75 @@ async function handle(request: NextRequest) {
       qualityChecked = qualityChecked.slice(0, wanted);
     }
 
+    // ── True/false balance ───────────────────────────────────
+    // Models drift hard towards true statements (32 of the 33 stored true/false
+    // items were keyed "true"), and a set of all-true items can be answered
+    // without reading. A statement cannot simply be re-keyed — that would make
+    // the answer wrong — so the missing side is requested explicitly and a
+    // surplus item from the other side is dropped in its place.
+    const tfItems = qualityChecked.filter((q) => q.type === "true_false");
+    if (tfItems.length >= 2 && Date.now() < deadlineAt - 15_000) {
+      const wantFalse = Math.ceil(tfItems.length / 2);
+      const haveFalse = tfItems.filter((q) => q.correctAnswer === "false").length;
+      if (haveFalse < wantFalse) {
+        const need = wantFalse - haveFalse;
+        const covered = qualityChecked
+          .slice(-12)
+          .map((q) => `- ${q.question}`)
+          .join("\n");
+        try {
+          const retry = await analyzeAndGenerate(finalText, need, ["true_false"], {
+            fileName: isImage ? file_name : undefined,
+            deadlineAt,
+            customInstructions: [
+              custom_instructions,
+              `Write only statements that are FALSE — claims the material clearly contradicts. Do not negate a true statement and do not write anything that is actually correct. Every item's correctAnswer must be "false".`,
+              covered ? `These points are already covered — write different ones:\n${covered}` : "",
+            ]
+              .filter(Boolean)
+              .join("\n\n"),
+            onUsage: recordUsage,
+          });
+          const added = gate(retry.questions).filter(
+            (q) => q.type === "true_false" && q.correctAnswer === "false"
+          );
+          if (added.length > 0) {
+            // Keep the count the same: each new false item replaces a true one.
+            let toRemove = Math.min(need, added.length);
+            qualityChecked = [
+              ...added.slice(0, toRemove),
+              ...qualityChecked.filter((q) => {
+                if (toRemove > 0 && q.type === "true_false" && q.correctAnswer !== "false") {
+                  toRemove--;
+                  return false;
+                }
+                return true;
+              }),
+            ];
+          }
+        } catch (err) {
+          // A failed balancing pass must not lose the quiz: keep what passed.
+          console.error(
+            "[generate] true/false balancing failed:",
+            err instanceof Error ? err.message : err
+          );
+        }
+      }
+    }
+
     if (dropped.length > 0) {
       console.warn(
         `[generate] dropped ${dropped.length} low-quality items (kept ${qualityChecked.length}/${wanted})`,
         dropped.slice(0, 5)
       );
+    }
+
+    const tfFinal = qualityChecked.filter((q) => q.type === "true_false");
+    if (tfFinal.length > 0) {
+      const falseCount = tfFinal.filter((q) => q.correctAnswer === "false").length;
+      if (falseCount === 0 && tfFinal.length > 1) {
+        console.warn(`[generate] true/false set is all-true (${tfFinal.length} items)`);
+      }
     }
 
     if (qualityChecked.length === 0) {

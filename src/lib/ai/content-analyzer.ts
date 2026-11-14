@@ -232,7 +232,7 @@ Rules:
 - Vary the position of the correct option across items — do not put most keys at the same index.
 - correctAnswer: the ZERO-BASED INDEX of the correct option as a string: "0", "1", "2" or "3".
 - answerKey: the EXACT TEXT of the correct option — this is the ground truth, never leave it empty.
-- true_false: options ["True","False"], correctAnswer "true" or "false"; avoid trick absolutes ("always", "never") unless the material states them.
+- true_false: options ["True","False"], correctAnswer "true" or "false". Balance the answers: close to half of your true/false items must be FALSE. A false item is a plausible but incorrect claim (wrong value, cause, order or term) the material contradicts — never a negated true statement, a trick absolute ("always", "never"), or a swapped word that gives itself away. Avoid trick absolutes unless the material states them.
 - explanation: max 15 words, the reason the answer is right — not a pointer to the text.
 - Final check before answering: drop any item that the material does not clearly settle, or whose distractors are obviously wrong.
 
