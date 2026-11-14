@@ -13,6 +13,7 @@ import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, ExternalL
 import { useConfirm, useToast } from "@/components/ui/toast";
 import { readCache, writeCache } from "@/lib/admin-cache";
 import { useCacheAgeLabel } from "@/lib/use-cache-age";
+import { useRefreshSpin } from "@/lib/use-refresh-spin";
 import { isLocalMode } from "@/lib/local";
 
 export default function AdminQuizzesPage() {
@@ -23,7 +24,7 @@ export default function AdminQuizzesPage() {
   const [courses, setCourses] = useState<any[]>([]);
   const [questionsMap, setQuestionsMap] = useState<Record<string, any[]>>({});
   const [error, setError] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
+  const refreshSpin = useRefreshSpin();
 
   // Loopback-only; on a deployed origin the file store is per-instance, so
   // admin reads there must use the database.
@@ -51,7 +52,6 @@ export default function AdminQuizzesPage() {
   }, []);
 
   const fetchQuizzesAndCourses = async () => {
-    setRefreshing(true);
     try {
       await syncSavedQuizzesFromServer();
 
@@ -81,9 +81,7 @@ export default function AdminQuizzesPage() {
       const courseList = dataC.courses || [];
       setCourses(courseList);
       writeCache("courses", courseList);
-    } catch { /* ignore */ } finally {
-      setRefreshing(false);
-    }
+    } catch { /* ignore */ }
   };
 
   // Load questions for a quiz from the server file (or local fallback)
@@ -169,12 +167,12 @@ export default function AdminQuizzesPage() {
           <p className="text-xs text-[#999] mt-0.5">{quizzes.length} quiz{quizzes.length !== 1 ? "zes" : ""} total</p>
         </div>
         <button
-          onClick={() => void fetchQuizzesAndCourses()}
-          disabled={refreshing}
+          onClick={() => void refreshSpin.run(() => fetchQuizzesAndCourses())}
+          disabled={refreshSpin.spinning}
           title="Reload quizzes from the server"
           className="text-xs px-3 py-2 border border-[#e0e0e0] rounded hover:border-green-400 text-[#666] flex items-center gap-1.5 justify-center disabled:opacity-60"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} /> Refresh
+          <RefreshCw className={`w-3.5 h-3.5 ${refreshSpin.spinning ? "animate-spin" : ""}`} /> Refresh
         </button>
         {ageLabel && <span className="text-[11px] text-[#999]">{ageLabel}</span>}
       </div>

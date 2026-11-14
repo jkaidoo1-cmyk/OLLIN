@@ -373,6 +373,30 @@ export async function getQuizByCode(
   return data;
 }
 
+/**
+ * Look a quiz up with the service role, bypassing row-level security.
+ *
+ * Necessary wherever authentication is the app's own session cookie rather
+ * than a Supabase session: the cookie-scoped client is anonymous to Postgres,
+ * so a host's own quiz reads as "not found".
+ */
+export async function getQuizByIdAsAdmin(id: string): Promise<Quiz | null> {
+  try {
+    const { createAdminClient } = await import("@/lib/supabase/server");
+    const admin = await createAdminClient();
+    if (!admin) return null;
+    const { data, error } = await admin
+      .from("quizzes")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) return null;
+    return data as Quiz | null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getQuizById(
   id: string,
   local?: boolean
@@ -444,7 +468,12 @@ export async function deleteQuiz(
     return;
   }
 
-  const supabase = await getServerSupabase();
+  // Service role, not the cookie-scoped client: this app's login is a signed
+  // session cookie, so Supabase sees an anonymous request and row-level
+  // security hides the quiz — a delete "succeeds" having matched nothing.
+  const { createAdminClient } = await import("@/lib/supabase/server");
+  const supabase = await createAdminClient();
+  if (!supabase) throw new Error("NO_BACKEND");
 
   // Children first. questions, quiz_attempts and saved_quizzes reference this
   // quiz, so deleting the parent alone trips a foreign key and the row survives

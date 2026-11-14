@@ -10,6 +10,7 @@ import { useConfirm } from "@/components/ui/toast";
 import { SkeletonList } from "@/components/Skeleton";
 import { readCache, writeCache } from "@/lib/admin-cache";
 import { useCacheAgeLabel } from "@/lib/use-cache-age";
+import { useRefreshSpin } from "@/lib/use-refresh-spin";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -35,6 +36,9 @@ export default function AdminCoursesPage() {
   const confirmDialog = useConfirm();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
+  // Refresh spin is held visible for a minimum time: a cached fetch used to
+  // finish so fast the icon barely moved.
+  const refreshSpin = useRefreshSpin();
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
   const [courseQuizzes, setCourseQuizzes] = useState<Record<string, Quiz[]>>({});
 
@@ -321,12 +325,12 @@ export default function AdminCoursesPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => { void fetchCourses(); void fetchPrograms(); }}
-            disabled={loading}
+            onClick={() => void refreshSpin.run(async () => { await fetchCourses(); await fetchPrograms(); })}
+            disabled={refreshSpin.spinning}
             title="Reload courses from the server"
             className="text-xs px-3 py-2 border border-[#e0e0e0] rounded hover:border-green-400 text-[#666] flex items-center gap-1.5 justify-center disabled:opacity-50"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshSpin.spinning ? "animate-spin" : ""}`} /> Refresh
           </button>
           {ageLabel && <span className="text-[11px] text-[#999] mr-1">{ageLabel}</span>}
           <button onClick={() => setShowForm(!showForm)} className="btn-primary text-xs flex items-center gap-1.5">

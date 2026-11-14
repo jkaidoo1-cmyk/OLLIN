@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { UserPlus, Loader2, Trash2, Shield, GraduationCap, Mail, Eye, EyeOff, Save, X, AlertCircle, Pencil, Upload, FileText, RefreshCw } from "lucide-react";
+import { UserPlus, UserRound, Loader2, Trash2, Shield, GraduationCap, Mail, Eye, EyeOff, Save, X, AlertCircle, Pencil, Upload, FileText, RefreshCw } from "lucide-react";
 import { Program } from "@/lib/types";
 import { clearStaleAdminSession } from "@/lib/admin";
 import { statusMessage } from "@/lib/client-errors";
@@ -9,6 +9,7 @@ import { useConfirm } from "@/components/ui/toast";
 import { SkeletonList } from "@/components/Skeleton";
 import { readCache, writeCache } from "@/lib/admin-cache";
 import { useCacheAgeLabel } from "@/lib/use-cache-age";
+import { useRefreshSpin } from "@/lib/use-refresh-spin";
 import { isLocalMode } from "@/lib/local";
 
 /** True when the server rejected the admin session itself. */
@@ -43,6 +44,9 @@ export default function AdminUsersPage() {
   const confirmDialog = useConfirm();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  // Refresh spins on its own timer so a fast, cached reload still reads as
+  // "I did something".
+  const refreshSpin = useRefreshSpin();
 
   // Create form
   const [showForm, setShowForm] = useState(false);
@@ -353,12 +357,12 @@ export default function AdminUsersPage() {
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
           <button
-            onClick={() => { void fetchUsers(); void fetchPrograms(); }}
-            disabled={loading}
+            onClick={() => void refreshSpin.run(async () => { await fetchUsers(); await fetchPrograms(); })}
+            disabled={refreshSpin.spinning}
             title="Reload accounts from the server"
             className="text-xs px-3 py-2 border border-[#e0e0e0] rounded hover:border-green-400 text-[#666] flex items-center gap-1.5 justify-center disabled:opacity-50"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshSpin.spinning ? "animate-spin" : ""}`} /> Refresh
           </button>
           {ageLabel && <span className="text-[11px] text-[#999] mr-1">{ageLabel}</span>}
           <button
@@ -601,8 +605,9 @@ export default function AdminUsersPage() {
                   "border-[#e0e0e0]"
                 }`}
               >
-                <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-sm font-bold text-slate-600 flex-shrink-0">
-                  {user.full_name?.charAt(0) || "?"}
+                {/* Neutral avatar, matching the profile screen. */}
+                <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 flex-shrink-0">
+                  <UserRound className="w-4 h-4" aria-hidden />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[#333] truncate">{user.full_name}</p>

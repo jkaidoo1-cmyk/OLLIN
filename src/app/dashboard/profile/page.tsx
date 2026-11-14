@@ -232,7 +232,6 @@ export default function ProfilePage() {
     }
   };
 
-  const initial = (me.full_name || me.email).charAt(0).toUpperCase();
   const year = me.current_year || 1;
   const pwLen = newPw.length;
   const pwScore = pwLen === 0 ? 0 : pwLen < 6 ? 1 : pwLen < 10 ? 2 : 3;
@@ -255,8 +254,10 @@ export default function ProfilePage() {
         <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/5" aria-hidden />
         <div className="absolute -bottom-14 -left-6 w-36 h-36 rounded-full bg-white/5" aria-hidden />
         <div className="relative flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-2xl font-bold text-[var(--primary-strong)] shrink-0 shadow-sm">
-            {initial}
+          {/* Neutral avatar: a person silhouette reads the same for every
+              account, where a lone initial looked like a typo. */}
+          <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-[var(--primary-strong)] shrink-0 shadow-sm">
+            <UserRound className="w-8 h-8" strokeWidth={2} aria-hidden />
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="text-lg font-bold text-white truncate">{me.full_name || "Student"}</h2>

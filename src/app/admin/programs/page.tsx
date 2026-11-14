@@ -9,6 +9,7 @@ import { useConfirm } from "@/components/ui/toast";
 import { SkeletonList } from "@/components/Skeleton";
 import { readCache, writeCache } from "@/lib/admin-cache";
 import { useCacheAgeLabel } from "@/lib/use-cache-age";
+import { useRefreshSpin } from "@/lib/use-refresh-spin";
 import { isLocalMode } from "@/lib/local";
 
 /** True when the server rejected the admin session itself. */
@@ -33,6 +34,9 @@ export default function AdminProgramsPage() {
   const confirmDialog = useConfirm();
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
+  // Refresh gets its own spin: `loading` is the first-paint skeleton, and a
+  // cached reload can finish before a frame of rotation is visible.
+  const refreshSpin = useRefreshSpin();
 
   const [showForm, setShowForm] = useState(false);
   const [formCode, setFormCode] = useState("");
@@ -227,12 +231,12 @@ export default function AdminProgramsPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => void fetchPrograms()}
-            disabled={loading}
+            onClick={() => void refreshSpin.run(() => fetchPrograms())}
+            disabled={refreshSpin.spinning}
             title="Reload programs from the server"
             className="text-xs px-3 py-2 border border-[#e0e0e0] rounded hover:border-green-400 text-[#666] flex items-center gap-1.5 justify-center disabled:opacity-50"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshSpin.spinning ? "animate-spin" : ""}`} /> Refresh
           </button>
           {ageLabel && <span className="text-[11px] text-[#999] mr-1">{ageLabel}</span>}
           <button onClick={() => setShowForm(!showForm)} className="btn-primary text-xs flex items-center gap-1.5">

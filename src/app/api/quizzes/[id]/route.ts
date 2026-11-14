@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLocalRequest } from "@/lib/server-host";
-import { getQuizById, getQuizByCode, deleteQuiz, getQuizQuestions } from "@/lib/data";
+import { getQuizById, getQuizByIdAsAdmin, getQuizByCode, deleteQuiz, getQuizQuestions } from "@/lib/data";
 import { serverError } from "@/lib/api-errors";
 
 // GET — get quiz by ID or share code, with questions (public, no auth required)
@@ -168,14 +168,15 @@ export async function DELETE(
   try {
     const local = isLocalRequest(request);
     const { id } = await params;
-    // x-local-mode says which VIEW the caller uses, not which store holds the
-    // quiz: the list merges file-backed rows into a Supabase-mode browser (and
-    // vice-versa), so deleting a quiz that lives in the other store used to
-    // answer "Quiz not found" for a row the user could see. Resolve against
-    // BOTH stores before claiming it doesn't exist.
+    // Resolve with the service role. This app authenticates with its own
+    // session cookie, which Postgres does not know about, so the cookie-scoped
+    // client is anonymous and row-level security hid the caller's own quiz.
+    // The route then decided it did not exist and answered "already deleted"
+    // without deleting anything — which is exactly why deleted quizzes came
+    // back on the next load.
     const quiz =
-      (await getQuizById(id, local)) ||
-      (await getQuizById(id, !local).catch(() => null));
+      (await getQuizById(id, local).catch(() => null)) ||
+      (await getQuizByIdAsAdmin(id));
     if (!quiz) {
       // DELETE is idempotent: a quiz that is already gone is the state the
       // caller asked for, so asking twice is a success rather than a 404.
@@ -184,13 +185,22 @@ export async function DELETE(
     if (!(await canManage(quiz, request))) {
       return NextResponse.json({ error: "Not allowed" }, { status: 403 });
     }
-    // Delete everywhere it exists — a leftover copy in the other store brings
-    // the quiz straight back on the next list. Only the store that actually
-    // holds a copy is touched, and a real failure is reported instead of being
-    // swallowed: a silent Supabase failure was how "deleted" quizzes reappeared.
-    await deleteQuiz(id, true);
-    const inSupabase = await getQuizById(id, false).catch(() => null);
-    if (inSupabase) await deleteQuiz(id, false);
+
+    // Delete everywhere it exists — a leftover copy in either store brings the
+    // quiz straight back on the next list.
+    try {
+      await deleteQuiz(id, true);
+    } catch (err) {
+      if (!(err instanceof Error && err.message === "NO_BACKEND")) throw err;
+    }
+    if (await getQuizByIdAsAdmin(id)) {
+      await deleteQuiz(id, false);
+    }
+    // Confirm rather than trust: a delete that matched no rows reports no
+    // error, so only a second read can say the quiz is really gone.
+    if (await getQuizByIdAsAdmin(id)) {
+      throw new Error("quiz row survived delete");
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     return serverError("quizzes.delete", error, {
