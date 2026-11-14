@@ -11,6 +11,17 @@ import { BrandMark } from "@/components/Logo";
 import { useToast } from "@/components/ui/toast";
 import { formatTime } from "@/lib/utils";
 
+/**
+ * True/false answers are stored as "true"/"false" and typed answers as their
+ * text; only the first needs prettifying for display.
+ */
+const answerText = (value: string | null | undefined): string => {
+  if (value === null || value === undefined || value === "") return "—";
+  if (value === "true") return "True";
+  if (value === "false") return "False";
+  return String(value);
+};
+
 export default function QuizPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -746,7 +757,7 @@ export default function QuizPage() {
                         // True/false questions have no options array — show the
                         // picked and correct answers as text.
                         <div className="space-y-1 mb-2">
-                          {[["Your answer", item.selected === "true" ? "True" : item.selected === "false" ? "False" : "—", !!item.isCorrect], ["Correct answer", item.question.correct_answer === "true" ? "True" : item.question.correct_answer === "false" ? "False" : String(item.question.correct_answer), true]].map(([label, value, good]) => (
+                          {[["Your answer", answerText(item.selected), !!item.isCorrect], ["Correct answer", answerText(item.question.correct_answer), true]].map(([label, value, good]) => (
                             <div key={label as string} className={`text-xs px-3 py-1.5 rounded border ${
                               good ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-700"
                             }`}>
@@ -820,7 +831,22 @@ export default function QuizPage() {
                 <p className="text-[15px] sm:text-sm font-medium text-[#333] leading-snug">{q.question_text}</p>
               </div>
 
-              {q.options ? (
+              {/* Branch on the question's type, not on whether it happens to
+                  carry options: a fill-in-the-blank or short-answer question has
+                  none, and used to fall through to the True/False buttons. */}
+              {q.question_type === "short_answer" || q.question_type === "fill_blank" ? (
+                <div className="sm:ml-9">
+                  <input
+                    type="text"
+                    value={answers[q.id] || ""}
+                    onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                    placeholder="Type your answer"
+                    aria-label={`Answer for question ${idx + 1}`}
+                    autoComplete="off"
+                    className="input-field w-full min-h-[44px] text-[15px] sm:text-sm"
+                  />
+                </div>
+              ) : q.options && q.options.length > 0 ? (
                 <div className="space-y-2.5 sm:ml-9">
                   {q.options.map((opt, optIdx) => {
                     const isSelected = answers[q.id] === String(optIdx);
@@ -855,8 +881,8 @@ export default function QuizPage() {
                   })}
                 </div>
               ) : (
-                // True/false questions have no options array — render the two
-                // canonical answers (stored as "true"/"false").
+                // Whatever is left is true/false — render the two canonical
+                // answers (stored as "true"/"false").
                 <div className="flex gap-2.5 sm:ml-9">
                   {["true", "false"].map((val) => {
                     const isSelected = answers[q.id] === val;
