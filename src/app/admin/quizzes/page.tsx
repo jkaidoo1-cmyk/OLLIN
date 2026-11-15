@@ -232,6 +232,21 @@ export default function AdminQuizzesPage() {
                           <Clock className="w-3 h-3" /> {quiz.time_limit_minutes}m
                         </span>
                       )}
+                      {/* Whether students can find it under Test quizzes. */}
+                      {(() => {
+                        const inTest = courses.filter((c: any) => isQuizSavedToCourse(quiz.id, c.id)).length;
+                        return (
+                          <span
+                            className={
+                              inTest > 0
+                                ? "text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200"
+                                : "text-[11px] px-2 py-0.5 rounded-full bg-[#f4f4f4] text-[#888] border border-[#e5e5e5]"
+                            }
+                          >
+                            {inTest > 0 ? `In Test quizzes (${inTest})` : "Not in Test quizzes"}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
@@ -282,10 +297,16 @@ export default function AdminQuizzesPage() {
                   <div className="border-t border-[#e0e0e0] bg-[#f8f8f8] p-4">
                     {/* Save to course section */}
                     <div className="mb-4 p-3 bg-white border border-[#e0e0e0] rounded">
-                      <p className="text-xs font-semibold text-[#666] mb-2">Save to course</p>
+                      <p className="text-xs font-semibold text-[#666] mb-2">Add to Test quizzes</p>
                       <p className="text-[10px] text-[#999] mb-2">
-                        Select a course to make this quiz available for students to take.
+                        Tap a course to put this quiz on the Test quizzes page for the students of that
+                        course. Tap again to remove it.
                       </p>
+                      {courses.length === 0 && (
+                        <p className="text-[10px] text-[#999]">
+                          No courses yet — add one under Courses, then come back here.
+                        </p>
+                      )}
                       <div className="flex flex-wrap gap-2">
                         {courses.map((course: any) => {
                           const saved = isQuizSavedToCourse(quiz.id, course.id);

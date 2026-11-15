@@ -119,6 +119,9 @@ export default function CreateQuizPage() {
   const [editCreatedAt, setEditCreatedAt] = useState<string>("");
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState("");
+  // Editing opens on the questions that already exist; the upload/AI panel is
+  // opt-in, otherwise the page looks like a brand-new quiz.
+  const [builderOpen, setBuilderOpen] = useState(false);
 
   // Edit mode: load the quiz (with answers — server checks host/admin) and
   // prefill every field so saving writes back to the same quiz.
@@ -619,9 +622,25 @@ export default function CreateQuizPage() {
   return (
     <div className="pt-2">
       <div className="mb-5">
-        <h1 className="greeting">Create quiz</h1>
-        <p className="greeting-sub">Upload material, configure, and publish.</p>
+        <h1 className="greeting">{editId ? "Edit quiz" : "Create quiz"}</h1>
+        <p className="greeting-sub">
+          {editId
+            ? `Change anything below, then save — the quiz keeps its code${editShareCode ? ` (${editShareCode})` : ""} and attempts.`
+            : "Upload material, configure, and publish."}
+        </p>
       </div>
+
+      {editLoading && questions.length === 0 && (
+        <p className="text-xs text-[var(--ink-faint)] mb-3" aria-live="polite">
+          Loading this quiz…
+        </p>
+      )}
+
+      {editError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" /> {editError}
+        </div>
+      )}
 
       <div className="space-y-4">
         {/* Course */}
@@ -642,6 +661,10 @@ export default function CreateQuizPage() {
           )}
         </div>
 
+        {/* Builder tools — hidden while editing until asked for, so the page
+            opens on the saved quiz rather than an empty uploader. */}
+        {(!editId || builderOpen) && (
+        <>
         {/* Material */}
         <div className="app-card">
           <label className="block text-sm font-bold mb-3 text-[var(--ink)]">Study material</label>
@@ -980,6 +1003,18 @@ export default function CreateQuizPage() {
             <AlertCircle className="w-4 h-4 flex-shrink-0" /> {generateNotice}
           </div>
         )}
+        </>
+        )}
+
+        {editId && !builderOpen && (
+          <button
+            type="button"
+            onClick={() => setBuilderOpen(true)}
+            className="w-full py-2.5 border border-dashed border-[#ccc] rounded-lg text-xs font-medium text-[#666] hover:border-green-400 hover:text-green-600 transition-colors"
+          >
+            + Generate more questions from material
+          </button>
+        )}
 
         {/* Generated questions */}
         {questions.length > 0 && (
@@ -989,7 +1024,9 @@ export default function CreateQuizPage() {
                 so they get a count instead of the full question preview. */}
             {quizMode === "host" ? (
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold text-[var(--ink)]">{questions.length} questions generated</h2>
+                <h2 className="text-sm font-bold text-[var(--ink)]">
+                  {editId ? `${questions.length} question${questions.length === 1 ? "" : "s"}` : `${questions.length} questions generated`}
+                </h2>
                 <span className="text-xs text-[#999]">Edit or delete as needed</span>
               </div>
             ) : (
@@ -1174,7 +1211,9 @@ export default function CreateQuizPage() {
                 className="btn-primary w-full min-h-[48px] py-2.5 text-sm flex items-center justify-center gap-2 shadow-lg disabled:opacity-60"
               >
                 {publishing ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Publishing...</>
+                  <><Loader2 className="w-4 h-4 animate-spin" /> {editId ? "Saving..." : "Publishing..."}</>
+                ) : editId ? (
+                  `Save changes (${questions.length} questions)`
                 ) : (
                   `Publish quiz (${questions.length} questions)`
                 )}
