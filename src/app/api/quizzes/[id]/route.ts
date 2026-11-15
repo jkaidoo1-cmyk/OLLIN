@@ -296,7 +296,9 @@ export async function PUT(
       const existingIds: string[] = (existingQs || []).map((r: any) => r.id);
 
       const rows = questions.map((q: any, i: number) => ({
-        ...(existingIds[i] ? { id: existingIds[i] } : {}),
+        // The column has no database default, so new questions need their own
+        // id (the upsert used to fail with a not-null violation).
+        id: existingIds[i] || crypto.randomUUID(),
         quiz_id: quiz.id,
         question_text: q.question_text || q.question,
         question_type: q.question_type || q.type,
