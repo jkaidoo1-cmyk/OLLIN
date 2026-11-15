@@ -459,50 +459,55 @@ export default function CreateQuizPage() {
         return;
       }
 
-      // Real Supabase
-      const { createClient } = await import("@/lib/supabase/client");
-      const supabase = createClient();
-      if (supabase) {
-        const { data: userData } = await supabase.auth.getUser();
-        if (!userData.user) { router.push("/login"); return; }
+      // Deployed: save through the app API with the app's own session.
+      //
+      // This used to insert straight into Supabase from the browser after
+      // checking Supabase auth, which signed-in users do not have — so saving
+      // bounced them to /login, and an edit inserted a duplicate quiz instead
+      // of updating the existing one.
+      const quizPayload = {
+        id: editId || undefined,
+        title: resolvedTitle(),
+        description: null,
+        share_code: shareCode,
+        time_limit_minutes: timeLimit || null,
+        show_answers_after: "after_completion",
+        shuffle_questions: shuffleQuestions,
+        shuffle_options: true,
+        passing_score: 60,
+        course_id: selectedCourseId || null,
+        starts_at: startsAt ? new Date(startsAt).toISOString() : null,
+        ends_at: endsAt ? new Date(endsAt).toISOString() : null,
+        status: "published",
+        created_at: editCreatedAt || undefined,
+      };
 
-        const { data: quiz, error: quizError } = await supabase
-          .from("quizzes")
-          .insert({
-            host_id: userData.user.id,
+      const res = await fetch(
+        editId ? `/api/quizzes/${encodeURIComponent(editId)}` : "/api/quizzes",
+        {
+          method: editId ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             title: resolvedTitle(),
-            description: null,
-            share_code: shareCode,
-            time_limit_minutes: timeLimit || null,
-            show_answers_after: "after_completion",
-            shuffle_questions: shuffleQuestions,
-            shuffle_options: true,
-            passing_score: 60,
-            course_id: selectedCourseId || null,
-            starts_at: startsAt ? new Date(startsAt).toISOString() : null,
-            ends_at: endsAt ? new Date(endsAt).toISOString() : null,
-            status: "published",
-          })
-          .select()
-          .single();
-
-        if (quizError) throw quizError;
-
-        const questionInserts = questions.map((q, idx) => ({
-          quiz_id: quiz.id,
-          question_text: q.question,
-          question_type: q.type,
-          options: q.options || null,
-          correct_answer: q.correctAnswer,
-          explanation: q.explanation,
-          topic: q.topic || null,
-          difficulty: (q.difficulty || "medium") as "easy" | "medium" | "hard",
-          marks: 1,
-          order_index: idx,
-        }));
-
-        const { error: qError } = await supabase.from("questions").insert(questionInserts);
-        if (qError) throw qError;
+            quiz: quizPayload,
+            questions: questions.map((q, idx) => ({
+              question_text: q.question,
+              question_type: q.type,
+              options: q.options || null,
+              correct_answer: q.correctAnswer,
+              explanation: q.explanation,
+              topic: q.topic || null,
+              difficulty: q.difficulty || "medium",
+              marks: 1,
+              order_index: idx,
+            })),
+          }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (res.status === 401) { router.push("/login"); return; }
+        throw new Error(err.error || "Failed to save quiz");
       }
 
       invalidateResource("quizzes");

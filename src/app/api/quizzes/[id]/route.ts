@@ -251,6 +251,83 @@ export async function PUT(
       updated_at: new Date().toISOString(),
     };
 
+    // Deployed (database) mode: persist to Supabase. On a serverless host the
+    // file store is read-only and per-instance, so writing it here reported
+    // success while the quiz stayed exactly as it was.
+    if (!local) {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const admin = await createAdminClient();
+      if (!admin) {
+        return NextResponse.json(
+          { error: "We couldn't save your changes right now. Please try again shortly." },
+          { status: 503 }
+        );
+      }
+
+      const { error: quizErr } = await admin
+        .from("quizzes")
+        .update({
+          title: quiz.title,
+          description: quiz.description,
+          time_limit_minutes: quiz.time_limit_minutes,
+          shuffle_questions: quiz.shuffle_questions,
+          passing_score: quiz.passing_score,
+          starts_at: quiz.starts_at,
+          ends_at: quiz.ends_at,
+          course_id: quiz.course_id,
+          status: quiz.status,
+          updated_at: quiz.updated_at,
+        })
+        .eq("id", quiz.id);
+      if (quizErr) {
+        return serverError("quiz.update", quizErr, {
+          message: "We couldn't save your changes. Please try again.",
+        });
+      }
+
+      // Update questions in place: attempt answers reference question ids, so
+      // replacing the rows would break the history of everyone who has taken
+      // this quiz. Existing rows keep their ids; new ones are inserted.
+      const { data: existingQs } = await admin
+        .from("questions")
+        .select("id")
+        .eq("quiz_id", quiz.id)
+        .order("order_index");
+      const existingIds: string[] = (existingQs || []).map((r: any) => r.id);
+
+      const rows = questions.map((q: any, i: number) => ({
+        ...(existingIds[i] ? { id: existingIds[i] } : {}),
+        quiz_id: quiz.id,
+        question_text: q.question_text || q.question,
+        question_type: q.question_type || q.type,
+        options: q.options || null,
+        correct_answer: q.correct_answer ?? q.correctAnswer,
+        ...(q.answer_key !== undefined ? { answer_key: q.answer_key } : {}),
+        explanation: q.explanation ?? null,
+        topic: q.topic || null,
+        difficulty: q.difficulty || "medium",
+        marks: q.marks ?? 1,
+        order_index: q.order_index ?? i,
+      }));
+
+      const { error: saveErr } = await admin
+        .from("questions")
+        .upsert(rows, { onConflict: "id" });
+      if (saveErr) {
+        return serverError("quiz.update.questions", saveErr, {
+          message: "We saved the quiz but not its questions. Please try again.",
+        });
+      }
+
+      // Drop questions removed in the editor (the ones beyond the new count).
+      if (existingIds.length > rows.length) {
+        const removed = existingIds.slice(rows.length);
+        await admin.from("questions").delete().in("id", removed);
+      }
+
+      return NextResponse.json({ quiz, success: true });
+    }
+
     const quizzes = readServerQuizzes();
     const idx = quizzes.findIndex((q) => q.id === quiz.id);
     if (idx >= 0) quizzes[idx] = quiz as any;
