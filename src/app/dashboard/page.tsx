@@ -97,13 +97,17 @@ export default function DashboardPage() {
 
       // "My quizzes" are the ones this session hosts. One list request, then
       // one batched attempts request — not a request per quiz.
+      // The layout already warmed this list on mount, so this usually resolves
+      // without another 1-2s round trip.
       let quizList: Quiz[] = [];
       try {
-        const res = await fetch("/api/quizzes");
-        if (res.ok) {
+        const list = await warmResource<Quiz[]>("quizzes", async () => {
+          const res = await fetch("/api/quizzes");
+          if (!res.ok) return [];
           const data = await res.json();
-          quizList = (data.quizzes || []).filter((q: Quiz) => q.host_id === me!.id);
-        }
+          return (data.quizzes || []) as Quiz[];
+        });
+        quizList = list.filter((q) => q.host_id === me!.id);
       } catch { /* render the empty state rather than a redirect */ }
       setQuizzes(quizList);
       setAllAttempts(await fetchAttemptsFor(quizList));
