@@ -83,9 +83,14 @@ export default function DashboardPage() {
       // signing in looked like the site hanging and then looping.
       let me: { id: string; email?: string; full_name?: string | null } | null = null;
       try {
-        const res = await fetch("/api/auth/me");
-        const data = await res.json();
-        if (res.ok && data.user) me = data.user;
+        // The layout asks the same question on mount; the warm cache means this
+        // resolves without a second round trip.
+        const data = await warmResource<{ ok: boolean; user?: any }>("me", async () => {
+          const res = await fetch("/api/auth/me");
+          const body = await res.json().catch(() => ({}));
+          return { ok: res.ok, ...body };
+        });
+        if (data?.ok && data.user) me = data.user;
       } catch { /* offline — treated as signed out below */ }
 
       if (!me) {

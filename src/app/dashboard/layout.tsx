@@ -9,7 +9,7 @@ import { isLocalMode, getLocalUser, getUnreadCount, getLocalQuizzes } from "@/li
 import { isAdmin } from "@/lib/admin";
 import { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
-import { warmAll } from "@/lib/prefetch";
+import { warmAll, warmResource } from "@/lib/prefetch";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -48,9 +48,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       // Use the app's session cookie (works in both local and Supabase mode).
       try {
-        const meRes = await fetch("/api/auth/me");
-        const meData = await meRes.json();
-        if (meRes.ok && meData.user) {
+        // Shared with the dashboard page, which needs the same answer — one
+        // request per page load instead of two 1-2s round trips.
+        const meData = await warmResource<{ ok: boolean; user?: any }>("me", async () => {
+          const res = await fetch("/api/auth/me");
+          const data = await res.json().catch(() => ({}));
+          return { ok: res.ok, ...data };
+        });
+        if (meData?.ok && meData.user) {
           // Admins go to the admin console (except on the quiz edit page).
           if (meData.user.role === "admin" && !adminMayStay) {
             router.replace("/admin");
