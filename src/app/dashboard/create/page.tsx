@@ -576,12 +576,14 @@ export default function CreateQuizPage() {
           <CheckCircle className="w-8 h-8" />
         </div>
         <h1 className="greeting">
-          {isSelfStudy ? "Quiz ready" : "Quiz published"}
+          {editId ? "Changes saved" : isSelfStudy ? "Quiz ready" : "Quiz published"}
         </h1>
         <p className="greeting-sub mb-6">
-          {isSelfStudy
-            ? "Your quiz is ready. Start whenever you want."
-            : "Share this code with your classmates."}
+          {editId
+            ? "Your quiz is updated. Its code and existing attempts are unchanged."
+            : isSelfStudy
+              ? "Your quiz is ready. Start whenever you want."
+              : "Share this code with your classmates."}
         </p>
 
         {!isSelfStudy && (
