@@ -4,6 +4,7 @@ import type { QuizAttempt } from "@/lib/types";
 import type { Question } from "@/lib/types";
 import { isAnswerCorrect, loose } from "@/lib/grading";
 import { getSessionUser } from "@/lib/session";
+import { checkThrottle } from "@/lib/rate-limit";
 import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
 import { serverError } from "@/lib/api-errors";
 
@@ -37,6 +38,27 @@ export async function POST(
         { error: "answers array is required" },
         { status: 400 }
       );
+    }
+
+    // Practice submissions are graded from the answer key, so they hand it
+    // back. That must never be available to an anonymous caller: otherwise
+    // anyone could POST for a quiz code and read every correct answer. Require
+    // a session and throttle per IP.
+    if (practice) {
+      const session = await getSessionUser(request);
+      if (!session) {
+        return NextResponse.json(
+          { error: "Sign in to take a practice quiz." },
+          { status: 401 }
+        );
+      }
+      const throttle = checkThrottle(request, "practice-submit", 20, 60_000);
+      if (throttle.blocked) {
+        return NextResponse.json(
+          { error: throttle.message },
+          { status: 429, headers: { "Retry-After": String(throttle.retryAfterSeconds) } }
+        );
+      }
     }
 
     // A submission is final. A second click or a replayed request must not

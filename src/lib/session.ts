@@ -99,7 +99,10 @@ export function createSessionCookie(user: { id: string; email: string; role: str
   import("./session-store")
     .then(({ registerSession }) => registerSession(user.id, sid, Date.now(), payload.exp))
     .catch(() => { /* best-effort */ });
-  return `${COOKIE_NAME}=${serialize(payload)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`;
+  // Secure in production only: a Secure cookie is dropped over plain http, and
+  // local development runs on http://localhost.
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  return `${COOKIE_NAME}=${serialize(payload)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}${secure}`;
 }
 
 export function createLogoutCookie(): string {
@@ -262,24 +265,13 @@ async function resolveSessionUser(
           | undefined;
         if (byEmail?.data) return byEmail.data as { id: string; email: string; role: string };
       } catch { /* infra hiccup */ }
-      // email exists in the cookie but no profile row — fall back to the
-      // first admin so the session is still usable (fail open).
-      try {
-        const firstAdmin = await supabase
-          .from("profiles")
-          .select("id, email, role")
-          .eq("role", "admin")
-          .order("created_at", { ascending: true })
-          .limit(1)
-          .single() as unknown as
-          | { data: { id: string; email: string; role: string } | null }
-          | undefined;
-        if (firstAdmin?.data) {
-          return firstAdmin.data as { id: string; email: string; role: string };
-        }
-      } catch { /* infra hiccup */ }
-      // Genuinely deleted / missing — fall back to the cookie's declared role.
-      return { id: payload.userId, email: payload.email, role: payload.role || "student" };
+      // No profile row for this email. This used to fall back to "the first
+      // admin" so a session stayed usable — which handed admin rights to any
+      // account whose profile had been deleted while its cookie was still
+      // valid. The cookie's signature proves who signed in, not what they may
+      // do now, so keep the least privilege the payload claims and let the
+      // admin gates re-check against real data.
+      return { id: payload.userId, email: payload.email, role: "student" };
     }
 
     return null;

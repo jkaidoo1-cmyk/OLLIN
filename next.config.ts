@@ -19,6 +19,24 @@ const nextConfig: NextConfig = {
     "pdf-lib",
     "dommatrix",
   ],
+  /**
+   * Baseline hardening headers. There is no CSP here yet — Next injects inline
+   * bootstrap scripts, so a useful policy needs nonces and its own change —
+   * but clickjacking, MIME sniffing and referrer leakage are cheap to close.
+   */
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
+  },
   outputFileTracingIncludes: {
     // Only the upload route needs the parsers — tracing them into every API
     // function makes each cold start carry ~15MB it never uses.
