@@ -15,6 +15,18 @@ export async function GET() {
       const stored = readLocalUsers().find((u) => u.id === sessionUser.id);
       // If the user isn't in the local file, try Supabase profiles (migrated users).
       let profile = stored;
+      // The session resolution already read this profile row, so use what it
+      // carried instead of querying the same row again (300ms per page load).
+      if (!profile && sessionUser.full_name !== undefined && sessionUser.full_name !== null) {
+        profile = {
+          id: sessionUser.id,
+          email: sessionUser.email,
+          full_name: sessionUser.full_name,
+          role: sessionUser.role,
+          program_id: sessionUser.program_id ?? null,
+          current_year: sessionUser.current_year ?? null,
+        } as any;
+      }
       if (!profile) {
         try {
           const supabase = await timed(marks, "client", () => createClient());

@@ -121,6 +121,11 @@ export interface SessionUser {
   id: string;
   email: string;
   role: string;
+  // Carried from the profile lookup that resolves the session, so callers like
+  // /api/auth/me don't repeat the same query (measured 300ms) on every page.
+  full_name?: string | null;
+  program_id?: string | null;
+  current_year?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +194,7 @@ async function resolveSessionUser(
         if (admin) {
           const { data } = await admin
             .from("profiles")
-            .select("id, email, role")
+            .select("id, email, role, full_name, program_id, current_year")
             .ilike("email", payload.email)
             .maybeSingle();
           if (data?.id) {
@@ -197,6 +202,9 @@ async function resolveSessionUser(
               id: data.id,
               email: data.email,
               role: data.role || payload.role || "student",
+              full_name: data.full_name ?? null,
+              program_id: data.program_id ?? null,
+              current_year: data.current_year ?? null,
             };
           }
         }
@@ -224,9 +232,9 @@ async function resolveSessionUser(
   const resolveByProfile = async (): Promise<{ id: string; email: string; role: string } | null> => {
     let byId: { data: { id: string; email: string; role: string } | null; error?: unknown } | undefined;
     try {
-      byId = await supabase
+              byId = await supabase
         .from("profiles")
-        .select("id, email, role")
+        .select("id, email, role, full_name, program_id, current_year")
         .eq("id", payload.userId)
         .maybeSingle() as unknown as { data: { id: string; email: string; role: string } | null; error?: unknown };
     } catch {
