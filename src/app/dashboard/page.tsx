@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizzes, getLocalAttempts, getLocalUser } from "@/lib/local";
 import { SkeletonText, SkeletonStats } from "@/components/Skeleton";
 import { warmResource } from "@/lib/prefetch";
@@ -12,6 +11,41 @@ import { Plus, ArrowRight, ArrowUpRight, ClipboardList } from "lucide-react";
 
 const statDot = ["#1f9d63", "#3b6fd4", "#e9a13b", "#1f9d63"];
 
+const UUID_RE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Attempts for a whole dashboard in one request.
+ *
+ * The attempts API permits a quiz's host (or an admin), and each request costs
+ * 1-2s end to end, so asking per quiz made a ten-quiz dashboard take twenty
+ * seconds. Non-uuid ids (file-mode legacy rows) can't be batched and keep the
+ * old per-quiz path.
+ */
+async function fetchAttemptsFor(quizList: Quiz[]): Promise<QuizAttempt[]> {
+  const collected: QuizAttempt[] = [];
+  const seen = new Set<string>();
+  const collect = (list: QuizAttempt[]) => {
+    for (const a of list) {
+      if (!seen.has(a.id)) {
+        collected.push(a);
+        seen.add(a.id);
+      }
+    }
+  };
+  try {
+    const batchIds = quizList.map((q) => q.id).filter((id) => UUID_RE_ID.test(id));
+    if (batchIds.length) {
+      const res = await fetch(`/api/attempts?quiz_ids=${batchIds.map(encodeURIComponent).join(",")}`);
+      if (res.ok) collect((await res.json()).attempts || []);
+    }
+    for (const id of quizList.map((q) => q.id).filter((id) => !UUID_RE_ID.test(id))) {
+      const res = await fetch(`/api/attempts?quiz_id=${encodeURIComponent(id)}`);
+      if (res.ok) collect((await res.json()).attempts || []);
+    }
+  } catch { /* attempts are a nice-to-have; the quiz list still renders */ }
+  return collected;
+}
+
 export default function DashboardPage() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [allAttempts, setAllAttempts] = useState<QuizAttempt[]>([]);
@@ -19,7 +53,6 @@ export default function DashboardPage() {
   const [userName, setUserName] = useState("");
   const [code, setCode] = useState("");
   const router = useRouter();
-  const supabase = createClient();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -33,73 +66,51 @@ export default function DashboardPage() {
         for (const q of quizList) {
           attempts.push(...getLocalAttempts(q.id));
         }
-        try {
-          // The all-attempts endpoint is admin-only, so a creator asks for the
-          // quizzes it hosts. One batched request instead of one per quiz:
-          // each request costs 1-2s, so the old loop took seconds per quiz.
-          const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          const batchIds = quizList.map((q) => q.id).filter((id) => UUID_RE.test(id));
-          const seenIds = new Set(attempts.map((a) => a.id));
-          const collect = (list: QuizAttempt[]) => {
-            for (const a of list) {
-              if (!seenIds.has(a.id)) {
-                attempts.push(a);
-                seenIds.add(a.id);
-              }
-            }
-          };
-          if (batchIds.length) {
-            const res = await fetch(`/api/attempts?quiz_ids=${batchIds.map(encodeURIComponent).join(",")}`);
-            if (res.ok) {
-              const data = await res.json();
-              collect(data.attempts || []);
-            }
+        const seenIds = new Set(attempts.map((a) => a.id));
+        for (const a of await fetchAttemptsFor(quizList)) {
+          if (!seenIds.has(a.id)) {
+            attempts.push(a);
+            seenIds.add(a.id);
           }
-          // Legacy non-uuid ids can't be batched; they are rare and stay a
-          // per-quiz fetch.
-          for (const id of quizList.map((q) => q.id).filter((id) => !UUID_RE.test(id))) {
-            const res = await fetch(`/api/attempts?quiz_id=${encodeURIComponent(id)}`);
-            if (res.ok) {
-              const data = await res.json();
-              collect(data.attempts || []);
-            }
-          }
-        } catch { /* ignore */ }
+        }
         setAllAttempts(attempts);
         setLoading(false);
         return;
       }
 
-      if (!supabase) {
-        setLoading(false);
-        return;
-      }
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) {
+      // Deployed: the app's own signed session cookie is the session. Checking
+      // Supabase auth first bounced every signed-in student back to /login, so
+      // signing in looked like the site hanging and then looping.
+      let me: { id: string; email?: string; full_name?: string | null } | null = null;
+      try {
+        const res = await fetch("/api/auth/me");
+        const data = await res.json();
+        if (res.ok && data.user) me = data.user;
+      } catch { /* offline — treated as signed out below */ }
+
+      if (!me) {
         router.push("/login");
         return;
       }
 
-      setUserName(user.user.user_metadata?.full_name?.split(" ")[0] || user.user.email?.split("@")[0] || "");
+      setUserName((me.full_name || me.email || "").split(" ")[0]);
 
-      const { data: quizData } = await supabase
-        .from("quizzes").select("*").eq("host_id", user.user.id)
-        .order("created_at", { ascending: false });
-
-      if (quizData) {
-        setQuizzes(quizData);
-        // One query for every quiz's attempts instead of one query per quiz.
-        const ids = quizData.map((q: Quiz) => q.id);
-        const { data: attData } = ids.length
-          ? await supabase
-              .from("quiz_attempts").select("*").in("quiz_id", ids).eq("status", "completed")
-          : { data: [] as QuizAttempt[] };
-        setAllAttempts(attData || []);
-      }
+      // "My quizzes" are the ones this session hosts. One list request, then
+      // one batched attempts request — not a request per quiz.
+      let quizList: Quiz[] = [];
+      try {
+        const res = await fetch("/api/quizzes");
+        if (res.ok) {
+          const data = await res.json();
+          quizList = (data.quizzes || []).filter((q: Quiz) => q.host_id === me!.id);
+        }
+      } catch { /* render the empty state rather than a redirect */ }
+      setQuizzes(quizList);
+      setAllAttempts(await fetchAttemptsFor(quizList));
       setLoading(false);
     };
     fetchData();
-  }, [supabase, router]);
+  }, [router]);
 
   const joinQuiz = (e: React.FormEvent) => {
     e.preventDefault();
