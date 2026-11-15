@@ -47,6 +47,15 @@ export async function GET(request: NextRequest) {
   try {
     const quizId = request.nextUrl.searchParams.get("quiz_id");
     const mine = request.nextUrl.searchParams.get("mine") === "true";
+    // Batch form (?quiz_ids=a,b,c) for the dashboard overview: one request
+    // instead of one per quiz. Each request costs 1-2s end to end, so the
+    // per-quiz loop made a ten-quiz dashboard take twenty seconds.
+    const UUID_PARAM = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const quizIds = (request.nextUrl.searchParams.get("quiz_ids") || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => UUID_PARAM.test(s))
+      .slice(0, 100);
 
     // Database mode: attempts live in quiz_attempts. The file store is only a
     // dev convenience and is empty/read-only on a serverless host, which made
@@ -74,24 +83,27 @@ export async function GET(request: NextRequest) {
           // File-mode ids are not uuids and own no rows in Postgres.
           if (!sessionIsUuid) return NextResponse.json({ attempts: [] });
           query = query.eq("participant_id", session.id);
-        } else if (quizId) {
+        } else if (quizId || quizIds.length) {
           if (!session) {
             return NextResponse.json({ error: "Only the quiz creator or an admin can view attempts" }, { status: 403 });
           }
           if (session.role !== "admin") {
-            const { data: quiz } = await admin
+            const wanted = quizId ? [quizId] : quizIds;
+            const { data: owned } = await admin
               .from("quizzes")
-              .select("host_id")
-              .eq("id", quizId)
-              .maybeSingle();
-            if (!quiz || quiz.host_id !== session.id) {
+              .select("id, host_id")
+              .in("id", wanted);
+            const mineOwned = new Set(
+              (owned || []).filter((q: any) => q.host_id === session.id).map((q: any) => q.id)
+            );
+            if (mineOwned.size !== new Set(wanted).size) {
               return NextResponse.json(
                 { error: "Only the quiz creator or an admin can view attempts" },
                 { status: 403 }
               );
             }
           }
-          query = query.eq("quiz_id", quizId);
+          query = quizId ? query.eq("quiz_id", quizId) : query.in("quiz_id", quizIds);
         } else if (!session || session.role !== "admin") {
           return userError("forbidden");
         }
@@ -152,6 +164,30 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => String(b.completed_at || "").localeCompare(String(a.completed_at || "")))
         .slice(0, limit);
       return NextResponse.json({ attempts: quizAttempts });
+    }
+
+    if (quizIds.length) {
+      // Batch read for the creator's dashboard — same rule as a single quiz.
+      const { readServerQuizzes } = await import("@/lib/data");
+      const all = readServerQuizzes();
+      const session3 = await getSessionUser(request);
+      const allowed = !!session3 && quizIds.every((id) => {
+        if (session3.role === "admin") return true;
+        return all.some((q) => q.id === id && q.host_id === session3.id);
+      });
+      if (!allowed) {
+        return NextResponse.json(
+          { error: "Only the quiz creator or an admin can view attempts" },
+          { status: 403 }
+        );
+      }
+      const batch = allAttempts
+        .filter((a) => quizIds.includes(a.quiz_id))
+        .sort((a: any, b: any) =>
+          String(b.completed_at || b.started_at || "").localeCompare(String(a.completed_at || a.started_at || ""))
+        )
+        .slice(0, limit);
+      return NextResponse.json({ attempts: batch });
     }
 
     // All attempts — admin/creator overview (dashboard). Same rule as above:

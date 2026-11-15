@@ -123,6 +123,49 @@ export interface SessionUser {
   role: string;
 }
 
+// ---------------------------------------------------------------------------
+// Per-instance resolved-user cache.
+//
+// Resolving a session to a user costs a Supabase round trip, measured at
+// 300-1000ms from the deployed function. Every authenticated API call pays it,
+// and so does /api/auth/me on every page. A short in-process cache removes that
+// wait from repeat calls on the same instance. Revocation stays immediate:
+// both revoke paths evict the entry below, and the 60s TTL bounds any other
+// staleness.
+// ---------------------------------------------------------------------------
+interface CachedUser {
+  userId: string;
+  user: SessionUser;
+  at: number;
+}
+
+const USER_CACHE_TTL_MS = 60_000;
+const userCache = new Map<string, CachedUser>();
+
+function cacheGet(sid: string): SessionUser | null {
+  const hit = userCache.get(sid);
+  if (!hit) return null;
+  if (Date.now() - hit.at > USER_CACHE_TTL_MS) {
+    userCache.delete(sid);
+    return null;
+  }
+  return hit.user;
+}
+
+function cacheSet(sid: string, user: SessionUser) {
+  if (userCache.size > 500) userCache.clear();
+  userCache.set(sid, { userId: user.id, user, at: Date.now() });
+}
+
+/** Drop cached users for a session id (logout) or for a whole user. */
+export function invalidateSessionUserCache(sid?: string, userId?: string) {
+  if (sid) userCache.delete(sid);
+  if (!userId) return;
+  for (const [key, value] of userCache) {
+    if (value.userId === userId) userCache.delete(key);
+  }
+}
+
 /**
  * Resolve a session payload to a real user. File-mode users come from the
  * users file (deleted users lose access immediately). Supabase-mode users
@@ -246,10 +289,14 @@ export async function getSessionUser(request: Request): Promise<SessionUser | nu
   const payload = getSessionFromRequest(request);
   if (!payload) return null;
   try {
+    const cached = cacheGet(payload.sid);
+    if (cached) return cached;
     // Revocation check — a session id removed from the store is dead.
     const { isSessionValid } = await import("./session-store");
     if (!(await isSessionValid(payload.userId, payload.sid))) return null;
-    return await resolveSessionUser(payload);
+    const user = await resolveSessionUser(payload);
+    if (user) cacheSet(payload.sid, user);
+    return user;
   } catch {
     return null;
   }
@@ -266,6 +313,7 @@ export async function getSessionAdmin(request: Request): Promise<SessionUser | n
 export async function revokeCurrentSession(request: Request): Promise<void> {
   const payload = getSessionFromRequest(request);
   if (!payload) return;
+  invalidateSessionUserCache(payload.sid, payload.userId);
   try {
     const { revokeSession } = await import("./session-store");
     await revokeSession(payload.userId, payload.sid);
@@ -274,6 +322,7 @@ export async function revokeCurrentSession(request: Request): Promise<void> {
 
 /** Revoke every session issued to a user ("log out everywhere"). */
 export async function revokeAllUserSessions(userId: string): Promise<number> {
+  invalidateSessionUserCache(undefined, userId);
   try {
     const { revokeAllSessions } = await import("./session-store");
     return await revokeAllSessions(userId);
@@ -294,10 +343,14 @@ export async function getSessionUserFromCookieStore(): Promise<SessionUser | nul
   const payload = deserialize(token);
   if (!payload) return null;
   try {
+    const cached = cacheGet(payload.sid);
+    if (cached) return cached;
     // Same revocation check as the request-based path.
     const { isSessionValid } = await import("./session-store");
     if (!(await isSessionValid(payload.userId, payload.sid))) return null;
-    return await resolveSessionUser(payload);
+    const user = await resolveSessionUser(payload);
+    if (user) cacheSet(payload.sid, user);
+    return user;
   } catch {
     return null;
   }

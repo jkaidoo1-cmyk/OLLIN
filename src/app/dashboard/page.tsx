@@ -34,19 +34,34 @@ export default function DashboardPage() {
           attempts.push(...getLocalAttempts(q.id));
         }
         try {
-          // The all-attempts endpoint is admin-only now; creators fetch per
-          // quiz, which the attempts API permits for the quiz's host.
-          for (const q of quizList) {
-            const res = await fetch(`/api/attempts?quiz_id=${encodeURIComponent(q.id)}`);
+          // The all-attempts endpoint is admin-only, so a creator asks for the
+          // quizzes it hosts. One batched request instead of one per quiz:
+          // each request costs 1-2s, so the old loop took seconds per quiz.
+          const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          const batchIds = quizList.map((q) => q.id).filter((id) => UUID_RE.test(id));
+          const seenIds = new Set(attempts.map((a) => a.id));
+          const collect = (list: QuizAttempt[]) => {
+            for (const a of list) {
+              if (!seenIds.has(a.id)) {
+                attempts.push(a);
+                seenIds.add(a.id);
+              }
+            }
+          };
+          if (batchIds.length) {
+            const res = await fetch(`/api/attempts?quiz_ids=${batchIds.map(encodeURIComponent).join(",")}`);
             if (res.ok) {
               const data = await res.json();
-              const seenIds = new Set(attempts.map((a) => a.id));
-              for (const a of data.attempts || []) {
-                if (!seenIds.has(a.id)) {
-                  attempts.push(a);
-                  seenIds.add(a.id);
-                }
-              }
+              collect(data.attempts || []);
+            }
+          }
+          // Legacy non-uuid ids can't be batched; they are rare and stay a
+          // per-quiz fetch.
+          for (const id of quizList.map((q) => q.id).filter((id) => !UUID_RE.test(id))) {
+            const res = await fetch(`/api/attempts?quiz_id=${encodeURIComponent(id)}`);
+            if (res.ok) {
+              const data = await res.json();
+              collect(data.attempts || []);
             }
           }
         } catch { /* ignore */ }
@@ -73,13 +88,13 @@ export default function DashboardPage() {
 
       if (quizData) {
         setQuizzes(quizData);
-        const attempts: QuizAttempt[] = [];
-        for (const q of quizData) {
-          const { data: attData } = await supabase
-            .from("quiz_attempts").select("*").eq("quiz_id", q.id).eq("status", "completed");
-          if (attData) attempts.push(...attData);
-        }
-        setAllAttempts(attempts);
+        // One query for every quiz's attempts instead of one query per quiz.
+        const ids = quizData.map((q: Quiz) => q.id);
+        const { data: attData } = ids.length
+          ? await supabase
+              .from("quiz_attempts").select("*").in("quiz_id", ids).eq("status", "completed")
+          : { data: [] as QuizAttempt[] };
+        setAllAttempts(attData || []);
       }
       setLoading(false);
     };
