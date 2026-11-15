@@ -27,6 +27,10 @@ export async function POST(
     const { id } = await params;
     const body = await request.json();
     const { answers, quiz_id, participant_name, participant_email, time_taken_seconds } = body;
+    // Practice run from Test quizzes: grade it, return the result, and write
+    // nothing. The quiz's creator must never receive the participant's name or
+    // score from a practice attempt.
+    const practice = body.practice === true;
 
     if (!answers || !Array.isArray(answers)) {
       return NextResponse.json(
@@ -158,7 +162,8 @@ export async function POST(
         const session = await getSessionUser(request);
         const claimedEmail = body.participant_email || null;
         const guardEmail = session?.email || claimedEmail;
-        if (guardEmail) {
+        // A practice run can be retaken as often as the student likes.
+        if (guardEmail && !practice) {
           const asArr = readServerAttempts() as any[];
           const completed = asArr.filter(
             (a) => a.quiz_id === quizId
@@ -312,6 +317,18 @@ export async function POST(
       status: "completed",
       created_at: now,
     };
+
+    // Practice: return the graded result and stop. Nothing is stored, so the
+    // attempt never reaches the creator's roster or their notifications.
+    if (practice) {
+      return NextResponse.json({
+        attempt,
+        answers: graded,
+        answer_key,
+        explanations,
+        practice: true,
+      });
+    }
 
     if (local) {
       // File-mode: persist the completed attempt

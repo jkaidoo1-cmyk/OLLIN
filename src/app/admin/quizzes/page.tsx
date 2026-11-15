@@ -9,7 +9,7 @@ import {
   syncSavedQuizzesFromServer,
   getLocalQuizzes,
 } from "@/lib/local";
-import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, ExternalLink, Pencil, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, Pencil, RefreshCw, Plus } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
 import { readCache, writeCache } from "@/lib/admin-cache";
 import { useCacheAgeLabel } from "@/lib/use-cache-age";
@@ -24,6 +24,8 @@ export default function AdminQuizzesPage() {
   const [courses, setCourses] = useState<any[]>([]);
   const [questionsMap, setQuestionsMap] = useState<Record<string, any[]>>({});
   const [error, setError] = useState("");
+  // Which row's "+" course picker is open.
+  const [pickerId, setPickerId] = useState<string | null>(null);
   const refreshSpin = useRefreshSpin();
 
   // Loopback-only; on a deployed origin the file store is per-instance, so
@@ -256,17 +258,19 @@ export default function AdminQuizzesPage() {
                     <span className="text-xs text-[#999] hidden sm:inline">
                       {new Date(quiz.created_at).toLocaleDateString()}
                     </span>
-                    <a
-                      href={`/quiz/${quiz.share_code}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="p-2 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded hover:bg-blue-50 text-[#999] hover:text-blue-600 transition-colors"
-                      title="Open quiz"
-                      aria-label={`Open ${quiz.title} in a new tab`}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPickerId(pickerId === quiz.id ? null : quiz.id);
+                      }}
+                      className="p-2 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded hover:bg-green-50 text-[#999] hover:text-green-600 transition-colors"
+                      title="Add to Test quizzes"
+                      aria-label={`Add ${quiz.title} to Test quizzes`}
+                      aria-expanded={pickerId === quiz.id}
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
+                      <Plus className="w-4 h-4" />
+                    </button>
                     <a
                       href={`/dashboard/create?edit=${quiz.id}`}
                       onClick={(e) => e.stopPropagation()}
@@ -292,51 +296,46 @@ export default function AdminQuizzesPage() {
                   </div>
                 </div>
 
-                {/* Expanded: save-to-course + questions */}
+                {/* "+" course picker — the only way in, so it also needs an
+                    empty state rather than silently doing nothing. */}
+                {pickerId === quiz.id && (
+                  <div className="border-t border-[#e0e0e0] bg-[#f8f8f8] px-4 py-3">
+                    <p className="text-xs font-semibold text-[#666] mb-1">Add to Test quizzes</p>
+                    <p className="text-[10px] text-[#999] mb-2">
+                      {courses.length === 0
+                        ? "No courses yet — add one under Courses, then come back here."
+                        : "Tap a course to add this quiz to Test quizzes for those students; tap again to remove it."}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {courses.map((course: any) => {
+                        const saved = isQuizSavedToCourse(quiz.id, course.id);
+                        return saved ? (
+                          <button
+                            key={course.id}
+                            onClick={() => handleRemoveFromCourse(quiz.id, course.id)}
+                            className="px-2.5 py-1 text-[10px] font-medium rounded bg-green-50 text-green-700 border border-green-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors flex items-center gap-1"
+                            title={`Remove from ${course.code}`}
+                          >
+                            <Check className="w-3 h-3" /> {course.code}
+                          </button>
+                        ) : (
+                          <button
+                            key={course.id}
+                            onClick={() => handleSaveToCourse(quiz.id, course.id)}
+                            className="px-2.5 py-1 text-[10px] font-medium rounded bg-white text-[#666] border border-[#e0e0e0] hover:border-green-400 hover:text-green-600 transition-colors flex items-center gap-1"
+                            title={`Add to ${course.code}`}
+                          >
+                            <Plus className="w-3 h-3" /> {course.code}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Expanded: questions */}
                 {isExpanded && (
                   <div className="border-t border-[#e0e0e0] bg-[#f8f8f8] p-4">
-                    {/* Save to course section */}
-                    <div className="mb-4 p-3 bg-white border border-[#e0e0e0] rounded">
-                      <p className="text-xs font-semibold text-[#666] mb-2">Add to Test quizzes</p>
-                      <p className="text-[10px] text-[#999] mb-2">
-                        Tap a course to put this quiz on the Test quizzes page for the students of that
-                        course. Tap again to remove it.
-                      </p>
-                      {courses.length === 0 && (
-                        <p className="text-[10px] text-[#999]">
-                          No courses yet — add one under Courses, then come back here.
-                        </p>
-                      )}
-                      <div className="flex flex-wrap gap-2">
-                        {courses.map((course: any) => {
-                          const saved = isQuizSavedToCourse(quiz.id, course.id);
-                          return (
-                            <div key={course.id} className="flex items-center gap-1">
-                              {saved ? (
-                                <button
-                                  onClick={() => handleRemoveFromCourse(quiz.id, course.id)}
-                                  className="px-2.5 py-1 text-[10px] font-medium rounded bg-green-50 text-green-700 border border-green-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors flex items-center gap-1"
-                                  title={`Remove from ${course.code}`}
-                                >
-                                  <Check className="w-3 h-3" /> {course.code}
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleSaveToCourse(quiz.id, course.id)}
-                                  className="px-2.5 py-1 text-[10px] font-medium rounded bg-white text-[#666] border border-[#e0e0e0] hover:border-green-400 hover:text-green-600 transition-colors flex items-center gap-1"
-                                >
-                                  <Save className="w-3 h-3" /> {course.code}
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                        {courses.length === 0 && (
-                          <p className="text-[10px] text-[#999]">No courses available. Add courses first.</p>
-                        )}
-                      </div>
-                    </div>
-
                     {/* Questions */}
                     {questions.length > 0 ? (
                       <>

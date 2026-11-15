@@ -292,7 +292,7 @@ export default function TestQuizzesPage() {
                       )}
                     </button>
                     <Link
-                      href={`/quiz/${quiz.share_code}`}
+                      href={`/quiz/${quiz.share_code}?practice=1`}
                       className="btn-primary text-xs px-4 py-2 flex-shrink-0"
                     >
                       <Play className="w-3.5 h-3.5" /> Take quiz

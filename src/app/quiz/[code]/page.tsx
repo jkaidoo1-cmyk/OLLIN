@@ -27,6 +27,11 @@ export default function QuizPage() {
   const searchParams = useSearchParams();
   const code = params.code as string;
   const guestName = searchParams.get("guest");
+  // Practice run: opened from Test quizzes, not from a shared link. These
+  // attempts are graded in the browser's session only — nothing is written to
+  // the quiz's record, so the quiz's creator never receives the participant's
+  // name or score.
+  const isPractice = searchParams.get("practice") === "1";
   const router = useRouter();
   const supabase = createClient();
 
@@ -100,6 +105,11 @@ export default function QuizPage() {
   const [attemptResolved, setAttemptResolved] = useState(false);
   useEffect(() => {
     if (!quiz || joined || loading) return;
+    // Practice runs are not recorded, so there is no "already taken" to find.
+    if (isPractice) {
+      setAttemptResolved(true);
+      return;
+    }
     // Guests with a URL name have no account to check — join immediately.
     if (isGuest && guestName) {
       setAttemptResolved(true);
@@ -253,6 +263,13 @@ export default function QuizPage() {
     if (!participantName.trim()) return;
     if (alreadyTaken) return; // entry check owns this state
 
+    // Practice: no attempt row, no server-side record of who is taking it.
+    if (isPractice) {
+      joinedAtRef.current = new Date().toISOString();
+      setJoined(true);
+      return;
+    }
+
     if (isGuest || isLocalMode()) {
       joinedAtRef.current = new Date().toISOString();
       // Record the start server-side so the time limit survives page
@@ -329,6 +346,7 @@ export default function QuizPage() {
           time_taken_seconds: timeTaken,
           started_at: startedAt,
           submitted_at: submittedAt,
+          practice: isPractice,
           answers: questions.map((q) => ({
             question_id: q.id,
             selected_answer: answers[q.id] || "",
