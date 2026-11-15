@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { startMarks, timed, timingHeaders } from "@/lib/timing";
 
 export async function GET() {
+  const marks = startMarks();
   try {
     // The app issues its own signed session cookie (ollin_session) on login,
     // regardless of whether Supabase is configured. Check that first so the
     // cookie works in both local and Supabase mode.
     const { getSessionUserFromCookieStore } = await import("@/lib/session");
-    const sessionUser = await getSessionUserFromCookieStore();
+    const sessionUser = await timed(marks, "session", () => getSessionUserFromCookieStore());
     if (sessionUser) {
       const { readLocalUsers } = await import("@/lib/local-users-store");
       const stored = readLocalUsers().find((u) => u.id === sessionUser.id);
@@ -15,13 +17,13 @@ export async function GET() {
       let profile = stored;
       if (!profile) {
         try {
-          const supabase = await createClient();
+          const supabase = await timed(marks, "client", () => createClient());
           if (supabase) {
-            const { data, error } = await supabase
+            const { data, error } = await timed<any>(marks, "profile", () => supabase
               .from("profiles")
               .select("id, email, full_name, role, program_id, current_year")
               .eq("id", sessionUser.id)
-              .single();
+              .single());
             if (!error && data) profile = data;
           }
         } catch { /* Supabase unreachable — trust the signed cookie */ }
@@ -36,7 +38,7 @@ export async function GET() {
           current_year: (profile as any)?.current_year ?? 1,
         },
         local: true,
-      });
+      }, { headers: timingHeaders(marks) });
     }
 
     // Fallback: Supabase auth cookie (for native Supabase logins, if any).

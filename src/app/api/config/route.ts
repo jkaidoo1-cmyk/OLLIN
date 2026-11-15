@@ -6,6 +6,7 @@ import { serverError, userError } from "@/lib/api-errors";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import { createAdminClient } from "@/lib/supabase/server";
+import { startMarks, timed, timingHeaders } from "@/lib/timing";
 
 const CONFIG_PATH = join(process.cwd(), ".ollin-config.json");
 
@@ -55,11 +56,12 @@ async function sbReadKeys(): Promise<any[] | null> {
 
 // GET — read current key list + usage stats — admin only
 export async function GET(request: NextRequest) {
-  if (!(await getSessionAdmin(request))) {
+  const marks = startMarks();
+  if (!(await timed(marks, "session", () => getSessionAdmin(request)))) {
     return userError("forbidden");
   }
   try {
-    const sbKeys = await sbReadKeys();
+    const sbKeys = await timed(marks, "keys", () => sbReadKeys());
     if (sbKeys) {
       return NextResponse.json({
         api_keys: sbKeys.map((k: any) => ({
@@ -81,7 +83,7 @@ export async function GET(request: NextRequest) {
         ai_provider: "auto",
         source: "supabase",
         hint: "Keys are stored in your Supabase database.",
-      });
+      }, { headers: timingHeaders(marks) });
     }
 
     const allKeys = await getAllKeys();
