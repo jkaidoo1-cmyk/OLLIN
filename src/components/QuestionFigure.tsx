@@ -20,6 +20,21 @@ export function QuestionFigure({ figure }: { figure?: FigureData | null }) {
         </figcaption>
       )}
       {fig.kind === "pie" ? <Pie fig={fig} /> : fig.kind === "line" ? <Line fig={fig} /> : <Bar fig={fig} />}
+      {/* The numbers stay reachable without reading the picture: screen readers
+          and anyone on a tiny screen get the data, not just a shape. */}
+      <details className="mt-2">
+        <summary className="text-[10px] text-[#888] cursor-pointer select-none">Show data</summary>
+        <table className="w-full mt-1 text-[10px] text-[#555]">
+          <tbody>
+            {fig.labels.map((label, i) => (
+              <tr key={i} className="border-t border-[#f0f0f0]">
+                <th scope="row" className="text-left font-normal py-0.5 pr-2">{label}</th>
+                <td className="text-right py-0.5">{fig.values[i]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
       {(fig.x_label || fig.y_label) && (
         <p className="text-[10px] text-[#888] text-center mt-1">
           {[fig.x_label, fig.y_label].filter(Boolean).join(" · ")}
@@ -33,6 +48,12 @@ export function QuestionFigure({ figure }: { figure?: FigureData | null }) {
 const W = 360;
 const H = 210;
 const PAD = { top: 12, right: 10, bottom: 34, left: 40 };
+
+/** One sentence of the chart's data, for assistive tech. */
+function describe(fig: FigureData): string {
+  const points = fig.labels.map((l, i) => `${l} ${fig.values[i]}`).join(", ");
+  return `${fig.kind} chart${fig.title ? `, ${fig.title}` : ""}: ${points}.`;
+}
 
 const COLORS = [
   "#0d6b3d", "#12854e", "#1a9b5f", "#3fb37c",
@@ -121,6 +142,8 @@ function Bar({ fig }: { fig: FigureData }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={fig.title || "Bar chart"} className="w-full h-auto">
+      <title>{fig.title || "Bar chart"}</title>
+      <desc>{describe(fig)}</desc>
       <Axes min={min} max={max} yLabel={fig.y_label} xLabel={fig.x_label} />
       {fig.values.map((v, i) => {
         const cx = PAD.left + slot * i + slot / 2;
@@ -160,6 +183,8 @@ function Line({ fig }: { fig: FigureData }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={fig.title || "Line chart"} className="w-full h-auto">
+      <title>{fig.title || "Line chart"}</title>
+      <desc>{describe(fig)}</desc>
       <Axes min={min} max={max} yLabel={fig.y_label} xLabel={fig.x_label} />
       <polyline points={points} fill="none" stroke={COLORS[0]} strokeWidth={2} strokeLinejoin="round" />
       {fig.values.map((v, i) => (
@@ -214,6 +239,8 @@ function Pie({ fig }: { fig: FigureData }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={fig.title || "Pie chart"} className="w-full h-auto">
+      <title>{fig.title || "Pie chart"}</title>
+      <desc>{describe(fig)}</desc>
       {arcs}
       {fig.labels.map((label, i) => {
         const pct = Math.round((fig.values[i] / total) * 100);

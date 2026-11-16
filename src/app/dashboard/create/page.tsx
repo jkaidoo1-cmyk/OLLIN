@@ -9,6 +9,8 @@ import { isLocalMode, addLocalQuiz, getLocalUser } from "@/lib/local";
 import { cleanText } from "@/lib/utils";
 import { invalidateResource } from "@/lib/prefetch";
 import { Quiz, Course } from "@/lib/types";
+import { FigureEditor } from "@/components/FigureEditor";
+import { QuestionFigure } from "@/components/QuestionFigure";
 import {
   Upload,
   FileText,
@@ -524,7 +526,11 @@ export default function CreateQuizPage() {
     }
   };
 
-  const updateQuestion = (idx: number, field: keyof GeneratedQ, value: string | string[]) => {
+  const updateQuestion = (
+    idx: number,
+    field: keyof GeneratedQ,
+    value: string | string[] | GeneratedQ["figure"]
+  ) => {
     setQuestions((prev) => prev.map((q, i) => (i === idx ? { ...q, [field]: value } : q)));
   };
 
@@ -1141,6 +1147,10 @@ export default function CreateQuizPage() {
                             placeholder="Explanation (shown after submission)"
                             className="input-field text-xs"
                           />
+                          <FigureEditor
+                            figure={q.figure}
+                            onChange={(fig) => updateQuestion(idx, "figure", fig)}
+                          />
                         </>
                       ) : (
                         <>
@@ -1175,6 +1185,7 @@ export default function CreateQuizPage() {
                               Answer: <span className="font-medium text-green-700">{cleanText(q.correctAnswer)}</span>
                             </p>
                           )}
+                          {q.figure && <QuestionFigure figure={q.figure} />}
                           {q.explanation && (
                             <p className="mt-1.5 text-xs text-[#666] bg-[#f8f8f8] rounded px-2.5 py-1.5">
                               {cleanText(q.explanation)}
