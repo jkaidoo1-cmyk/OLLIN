@@ -181,9 +181,11 @@ Rules:
 - If the paper states no answers (or an answer sheet is missing), solve each question yourself from the subject matter. correctAnswer and answerKey must never be empty — an unanswered question is a failed extraction, not a safe result.
 - explanation: max 12 words justifying the answer.
 - Keep the exam's original title if present.
+- A question that refers to a diagram, block chart, signal chain or control loop ("as shown in the diagram below", "the system in the figure") is unanswerable without it: reproduce that diagram as the question's "figure" so it can be redrawn — {"kind":"diagram","title":"","nodes":[{"id":"SENSOR","label":"SENSOR","detail":"5 mV/°C ±1%"}],"edges":[{"from":"SENSOR","to":"PROCESSOR"}]}. Use the block names and values printed in the paper (2–6 blocks, label max 12 characters, detail max 16); read them off the image if one is supplied. Add the closing edge for a feedback loop. If the figure is a chart of values, use a bar/line/pie figure; if it is a table, use a table figure. Never answer with "the diagram shows…" alone.
+- A question the paper introduces with a shared passage or case gets that text as its "preamble" (max 60 words, copied from the paper). Do not merge the preamble into the question text.
 
 JSON only:
-{"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"0","answerKey":"","explanation":""}]}`;
+{"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"0","answerKey":"","explanation":"","preamble":"","figure":{"kind":"diagram","nodes":[],"edges":[]}}]}`;
 }
 
 export function buildDeepAnalysisAndQuestionPrompt(
