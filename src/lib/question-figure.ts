@@ -8,12 +8,19 @@
  * any size, printable, tiny to store, and free to render.
  */
 export interface QuestionFigure {
-  kind: "bar" | "line" | "pie";
+  /**
+   * `table` is not a chart: it renders the headers/rows as a real table, which
+   * is how most exam questions present lookups and multi-column data.
+   */
+  kind: "bar" | "line" | "pie" | "table";
   title?: string;
   x_label?: string;
   y_label?: string;
   labels: string[];
   values: number[];
+  /** Table only: column headings (2–4) and rows of the same width. */
+  headers?: string[];
+  rows?: string[][];
   caption?: string;
 }
 
@@ -35,6 +42,29 @@ export function normalizeFigure(raw: unknown): QuestionFigure | null {
   const input = raw as Record<string, unknown>;
 
   const kind = String(input.kind ?? "").toLowerCase();
+  if (kind === "table") {
+    const headers = Array.isArray(input.headers)
+      ? input.headers.map((h) => text(h, MAX_LABEL))
+      : [];
+    const rows = Array.isArray(input.rows)
+      ? input.rows.map((row) =>
+          Array.isArray(row) ? row.map((cell) => text(cell, MAX_LABEL)) : []
+        )
+      : [];
+    if (headers.length < 2 || headers.length > 4) return null;
+    if (rows.length < 1 || rows.length > 10) return null;
+    // A ragged table can't be drawn honestly; reject instead of padding blanks.
+    if (rows.some((r) => r.length !== headers.length || r.some((c) => !c))) return null;
+    return {
+      kind: "table",
+      title: text(input.title, MAX_TITLE) || undefined,
+      headers,
+      rows,
+      labels: [],
+      values: [],
+      caption: text(input.caption, MAX_TITLE) || undefined,
+    };
+  }
   if (kind !== "bar" && kind !== "line" && kind !== "pie") return null;
 
   const labels = Array.isArray(input.labels)

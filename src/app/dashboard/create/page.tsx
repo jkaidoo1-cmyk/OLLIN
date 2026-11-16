@@ -539,6 +539,17 @@ export default function CreateQuizPage() {
     setQuestions((prev) => prev.map((q, i) => (i === idx ? { ...q, [field]: value } : q)));
   };
 
+  /** A case study spans several questions: paste the context once, reuse it. */
+  const applyPreamble = (idx: number, everywhere: boolean) => {
+    const text = questions[idx]?.preamble?.trim();
+    if (!text) return;
+    setQuestions((prev) =>
+      prev.map((q, i) =>
+        everywhere || (i > idx && i <= idx + 3) ? { ...q, preamble: text } : q
+      )
+    );
+  };
+
   const deleteQuestion = (idx: number) => {
     setQuestions((prev) => prev.filter((_, i) => i !== idx));
   };
@@ -1152,13 +1163,39 @@ export default function CreateQuizPage() {
                             placeholder="Explanation (shown after submission)"
                             className="input-field text-xs"
                           />
-                          <textarea
-                            value={q.preamble ?? ""}
-                            onChange={(e) => updateQuestion(idx, "preamble", e.target.value || null)}
-                            placeholder="Optional passage or case this question is based on (shown above the question)"
-                            rows={2}
-                            className="input-field text-xs w-full mt-2 resize-y"
-                          />
+                          <div className="mt-2">
+                            <textarea
+                              value={q.preamble ?? ""}
+                              onChange={(e) => updateQuestion(idx, "preamble", e.target.value || null)}
+                              placeholder="Optional passage or case this question is based on (shown above the question)"
+                              rows={3}
+                              maxLength={1200}
+                              className="input-field text-xs w-full resize-y"
+                            />
+                            <div className="flex items-center justify-between mt-1 gap-2 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => applyPreamble(idx, true)}
+                                  disabled={!(q.preamble ?? "").trim()}
+                                  className="text-[11px] text-[#006633] hover:underline disabled:text-[#bbb] disabled:no-underline"
+                                >
+                                  Use for all questions
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => applyPreamble(idx, false)}
+                                  disabled={!(q.preamble ?? "").trim() || idx + 1 >= questions.length}
+                                  className="text-[11px] text-[#006633] hover:underline disabled:text-[#bbb] disabled:no-underline"
+                                >
+                                  Use for the next 3
+                                </button>
+                              </div>
+                              <span className="text-[10px] text-[#aaa]">
+                                {(q.preamble ?? "").length}/1200
+                              </span>
+                            </div>
+                          </div>
                           <FigureEditor
                             figure={q.figure}
                             onChange={(fig) => updateQuestion(idx, "figure", fig)}

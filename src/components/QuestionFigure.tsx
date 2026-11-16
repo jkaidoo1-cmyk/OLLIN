@@ -19,9 +19,19 @@ export function QuestionFigure({ figure }: { figure?: FigureData | null }) {
           {fig.title}
         </figcaption>
       )}
-      {fig.kind === "pie" ? <Pie fig={fig} /> : fig.kind === "line" ? <Line fig={fig} /> : <Bar fig={fig} />}
+      {fig.kind === "table" ? (
+        <Table fig={fig} />
+      ) : fig.kind === "pie" ? (
+        <Pie fig={fig} />
+      ) : fig.kind === "line" ? (
+        <Line fig={fig} />
+      ) : (
+        <Bar fig={fig} />
+      )}
       {/* The numbers stay reachable without reading the picture: screen readers
-          and anyone on a tiny screen get the data, not just a shape. */}
+          and anyone on a tiny screen get the data, not just a shape. A table is
+          already its own data view, so it needs no disclosure. */}
+      {fig.kind !== "table" && (
       <details className="mt-2">
         <summary className="text-[10px] text-[#888] cursor-pointer select-none">Show data</summary>
         <table className="w-full mt-1 text-[10px] text-[#555]">
@@ -35,6 +45,7 @@ export function QuestionFigure({ figure }: { figure?: FigureData | null }) {
           </tbody>
         </table>
       </details>
+      )}
       {(fig.x_label || fig.y_label) && (
         <p className="text-[10px] text-[#888] text-center mt-1">
           {[fig.x_label, fig.y_label].filter(Boolean).join(" · ")}
@@ -49,10 +60,47 @@ const W = 360;
 const H = 210;
 const PAD = { top: 12, right: 10, bottom: 34, left: 40 };
 
-/** One sentence of the chart's data, for assistive tech. */
+/** One sentence of the figure's data, for assistive tech. */
 function describe(fig: FigureData): string {
+  if (fig.kind === "table") {
+    const rows = (fig.rows ?? []).map((r) => r.join(" ")).join("; ");
+    return `Table${fig.title ? `, ${fig.title}` : ""}, columns ${(fig.headers ?? []).join(", ")}: ${rows}.`;
+  }
   const points = fig.labels.map((l, i) => `${l} ${fig.values[i]}`).join(", ");
   return `${fig.kind} chart${fig.title ? `, ${fig.title}` : ""}: ${points}.`;
+}
+
+/** A table isn't drawn — it is the data, laid out. */
+function Table({ fig }: { fig: FigureData }) {
+  const headers = fig.headers ?? [];
+  return (
+    <table className="w-full text-[11px] text-[#444] border-collapse" aria-label={fig.title || "Data table"}>
+      <thead>
+        <tr>
+          {headers.map((h, i) => (
+            <th
+              key={i}
+              scope="col"
+              className="text-left font-semibold text-[#333] border-b border-[#dcdcdc] py-1 pr-2"
+            >
+              {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {(fig.rows ?? []).map((row, ri) => (
+          <tr key={ri} className="border-b border-[#f2f2f2] last:border-0">
+            {row.map((cell, ci) => (
+              <td key={ci} className="py-1 pr-2 align-top">
+                {cell}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 
 const COLORS = [
@@ -139,6 +187,8 @@ function Bar({ fig }: { fig: FigureData }) {
   const slot = plotW / fig.values.length;
   const barW = Math.min(34, slot * 0.62);
   const base = y(Math.max(0, min));
+  // Crowded or wordy categories overlap when centred; angle them instead.
+  const rotate = fig.values.length > 5 || fig.labels.some((l) => l.length > 8);
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={fig.title || "Bar chart"} className="w-full h-auto">
@@ -158,7 +208,14 @@ function Bar({ fig }: { fig: FigureData }) {
               rx={2}
               fill={COLORS[i % COLORS.length]}
             />
-            <text x={cx} y={H - PAD.bottom + 12} fontSize={9} fill="#666" textAnchor="middle">
+            <text
+              x={cx}
+              y={H - PAD.bottom + 12}
+              fontSize={9}
+              fill="#666"
+              textAnchor={rotate ? "end" : "middle"}
+              transform={rotate ? `rotate(-30 ${cx} ${H - PAD.bottom + 12})` : undefined}
+            >
               {fig.labels[i]}
             </text>
             <text x={cx} y={top - 3} fontSize={8} fill="#555" textAnchor="middle">
@@ -195,7 +252,18 @@ function Line({ fig }: { fig: FigureData }) {
             y={H - PAD.bottom + 12}
             fontSize={9}
             fill="#666"
-            textAnchor={i === 0 ? "start" : i === fig.values.length - 1 ? "end" : "middle"}
+            textAnchor={
+              fig.values.length > 5
+                ? "end"
+                : i === 0
+                  ? "start"
+                  : i === fig.values.length - 1
+                    ? "end"
+                    : "middle"
+            }
+            transform={
+              fig.values.length > 5 ? `rotate(-30 ${x(i)} ${H - PAD.bottom + 12})` : undefined
+            }
           >
             {fig.labels[i]}
           </text>
