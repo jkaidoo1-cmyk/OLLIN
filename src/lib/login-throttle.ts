@@ -105,6 +105,16 @@ export async function recordLoginFailure(
       ip: ip === "unknown" ? null : ip,
     });
     if (error) throw new Error(error.message);
+    // Rows older than the window are never counted again; drop them now and
+    // then so a burst of bad logins can't grow the table without bound.
+    if (Math.random() < 0.05) {
+      const cutoff = new Date(Date.now() - WINDOW_MS).toISOString();
+      await admin
+        .from("audit_log")
+        .delete()
+        .eq("action", FAILURE_ACTION)
+        .lt("created_at", cutoff);
+    }
   } catch {
     /* best-effort — the in-memory limiter still counted the failure */
   }

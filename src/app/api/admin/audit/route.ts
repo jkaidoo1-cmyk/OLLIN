@@ -86,9 +86,13 @@ export async function GET(request: NextRequest) {
     const { createAdminClient } = await import("@/lib/supabase/server");
     const client = await createAdminClient();
     if (client) {
+      // The table also carries failed sign-in counters (see login-throttle).
+      // Those are security telemetry, not admin activity, so keep them out of
+      // this feed — otherwise a burst of bad logins buries the real changes.
       const { data, error } = await client
         .from("audit_log")
         .select("*")
+        .neq("action", "auth.login_failed")
         .order("created_at", { ascending: false })
         .limit(500);
       if (error) throw new Error(error.message);
@@ -99,7 +103,8 @@ export async function GET(request: NextRequest) {
     const path = AUDIT_PATH();
     if (existsSync(path)) {
       const events = JSON.parse(readFileSync(path, "utf-8"));
-      return NextResponse.json({ events: events.slice(-500).reverse() });
+      const visible = events.filter((e: { action?: string }) => e.action !== "auth.login_failed");
+      return NextResponse.json({ events: visible.slice(-500).reverse() });
     }
     return NextResponse.json({ events: [] });
   } catch (error) {
