@@ -5,7 +5,7 @@ import { getSessionUser } from "@/lib/session";
 import { checkThrottle } from "@/lib/rate-limit";
 import { recordAdminAction } from "@/lib/audit";
 import { keepAliveResponse } from "@/lib/keep-alive";
-import { normalizeFigure } from "@/lib/question-figure";
+import { normalizeFigure, normalizePreamble } from "@/lib/question-figure";
 
 // Generation plus an optional top-up call has to fit in the host's function
 // budget; the internal deadline below is set just inside it.
@@ -378,6 +378,8 @@ async function handle(request: NextRequest) {
           // The model returns the chart's DATA; anything malformed is dropped
           // rather than drawn, since a wrong picture is worse than none.
           figure: normalizeFigure(q.figure),
+          // Optional passage/case the question is built on.
+          preamble: normalizePreamble(q.preamble),
         };
       })
       .filter((q) => q.correctAnswer !== "");

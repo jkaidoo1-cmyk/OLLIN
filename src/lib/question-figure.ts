@@ -64,14 +64,28 @@ export function normalizeFigure(raw: unknown): QuestionFigure | null {
   };
 }
 
+const MAX_PREAMBLE = 1200;
+
 /**
- * True when an error is the database rejecting a `figure` column that hasn't
- * been migrated in yet. Callers use it to retry the save without figures so a
- * missing migration never costs a quiz.
+ * Optional shared context printed above a question: a case, a short passage, a
+ * scenario the question refers to. Whitespace is collapsed (models love
+ * double-spaced output) and an empty string means "no preamble", not "blank".
  */
-export function isMissingFigureColumn(error: unknown): boolean {
+export function normalizePreamble(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const text = raw.replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").trim();
+  if (text.length < 10) return null;
+  return text.slice(0, MAX_PREAMBLE);
+}
+
+/**
+ * True when an error is the database rejecting one of the optional question
+ * columns (`figure`, `preamble`) that hasn't been migrated in yet. Callers retry
+ * the save without them so a missing migration never costs a quiz.
+ */
+export function isMissingOptionalColumn(error: unknown): boolean {
   const message = String(
     (error as { message?: string })?.message ?? error ?? ""
   );
-  return /figure/i.test(message) && /(column|schema|does not exist)/i.test(message);
+  return /(figure|preamble)/i.test(message) && /(column|schema|does not exist)/i.test(message);
 }

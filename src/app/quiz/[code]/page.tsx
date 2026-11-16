@@ -753,6 +753,11 @@ export default function QuizPage() {
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-[#333] mb-2">{item.question.question_text}</p>
+                      {item.question.preamble && (
+                        <p className="text-xs text-[#555] leading-relaxed whitespace-pre-line border-l-2 border-[#0d6b3d] bg-[#f7f9f8] pl-2 pr-2 py-1.5 rounded-r mb-2">
+                          {item.question.preamble}
+                        </p>
+                      )}
                       <QuestionFigure figure={item.question.figure} />
 
                       {item.question.options ? (
@@ -855,6 +860,13 @@ export default function QuizPage() {
                 </span>
                 <p className="text-[15px] sm:text-sm font-medium text-[#333] leading-snug">{q.question_text}</p>
               </div>
+
+              {/* The passage or case the question is built on. */}
+              {q.preamble && (
+                <p className="sm:ml-9 mb-3 text-sm text-[#555] leading-relaxed whitespace-pre-line border-l-2 border-[#0d6b3d] bg-[#f7f9f8] pl-3 pr-2 py-2 rounded-r">
+                  {q.preamble}
+                </p>
+              )}
 
               {/* The data the question refers to, drawn from its own values. */}
               {q.figure && (

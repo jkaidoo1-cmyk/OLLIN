@@ -87,6 +87,8 @@ export interface Question {
   answer_key?: string | null;
   /** Data the question refers to (a chart), drawn client-side as SVG. */
   figure?: import("./question-figure").QuestionFigure | null;
+  /** Optional passage/case printed above the question. */
+  preamble?: string | null;
 }
 
 export interface QuizAttempt {

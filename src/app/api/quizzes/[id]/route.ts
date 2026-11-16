@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLocalRequest } from "@/lib/server-host";
 import { getQuizById, getQuizByIdAsAdmin, getQuizByCode, deleteQuiz, getQuizQuestions } from "@/lib/data";
 import { serverError } from "@/lib/api-errors";
-import { normalizeFigure, isMissingFigureColumn } from "@/lib/question-figure";
+import { normalizeFigure, normalizePreamble, isMissingOptionalColumn } from "@/lib/question-figure";
 
 // GET — get quiz by ID or share code, with questions (public, no auth required)
 // Resolve the requester's session (null for guests)
@@ -312,17 +312,19 @@ export async function PUT(
         marks: q.marks ?? 1,
         order_index: q.order_index ?? i,
         figure: normalizeFigure(q.figure),
+        preamble: normalizePreamble(q.preamble),
       }));
 
       let { error: saveErr } = await admin
         .from("questions")
         .upsert(rows, { onConflict: "id" });
-      // `figure` is a migration: retry without it instead of failing the save.
-      if (saveErr && isMissingFigureColumn(saveErr)) {
-        console.warn("[quiz.update] questions.figure column missing — run supabase/question-figures.sql");
+      // `figure`/`preamble` ship as migrations: retry without them rather than
+      // fail the whole save because a deployment is one SQL file ahead.
+      if (saveErr && isMissingOptionalColumn(saveErr)) {
+        console.warn("[quiz.update] questions.figure/preamble column missing — run the SQL in supabase/");
         ({ error: saveErr } = await admin
           .from("questions")
-          .upsert(rows.map(({ figure: _figure, ...rest }: any) => rest), { onConflict: "id" }));
+          .upsert(rows.map(({ figure: _figure, preamble: _preamble, ...rest }: any) => rest), { onConflict: "id" }));
       }
       if (saveErr) {
         return serverError("quiz.update.questions", saveErr, {
@@ -364,6 +366,7 @@ export async function PUT(
         order_index: q.order_index ?? i,
         created_at: q.created_at || new Date().toISOString(),
         figure: normalizeFigure(q.figure),
+        preamble: normalizePreamble(q.preamble),
       }))
     );
     writeServerQuestions(kept);

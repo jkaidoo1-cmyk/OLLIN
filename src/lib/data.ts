@@ -195,6 +195,7 @@ export async function createQuiz(
           order_index: idx,
           created_at: new Date().toISOString(),
           figure: (q as { figure?: Question["figure"] }).figure ?? null,
+          preamble: (q as { preamble?: string | null }).preamble ?? null,
           // Exam extraction carries the exact option text as answer_key —
           // the correct answers are stored as an index, so this preserves
           // the ground truth for grading and the post-quiz answer key.
@@ -259,6 +260,7 @@ export async function createQuiz(
         marks: 1,
         order_index: idx,
         figure: (q as { figure?: Question["figure"] }).figure ?? null,
+        preamble: (q as { preamble?: string | null }).preamble ?? null,
       }));
 
       const { error: qError } = await supabaseClient

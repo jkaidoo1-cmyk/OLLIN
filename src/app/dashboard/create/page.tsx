@@ -33,6 +33,8 @@ interface GeneratedQ {
   difficulty?: string;
   /** Chart data the question refers to, drawn as SVG on the quiz page. */
   figure?: import("@/lib/question-figure").QuestionFigure | null;
+  /** Passage/case printed above the question. */
+  preamble?: string | null;
 }
 
 /** Placeholder titles produced when the model gives no title of its own. */
@@ -177,6 +179,7 @@ export default function CreateQuizPage() {
               topic: q.topic || "",
               difficulty: q.difficulty || "medium",
               figure: q.figure ?? null,
+              preamble: q.preamble ?? null,
             };
           })
         );
@@ -428,6 +431,7 @@ export default function CreateQuizPage() {
           order_index: idx,
           created_at: new Date().toISOString(),
           figure: q.figure ?? null,
+          preamble: q.preamble ?? null,
         }));
         // Persist server-side (visible from any browser + admin panel) AND locally
         try {
@@ -507,6 +511,7 @@ export default function CreateQuizPage() {
               marks: 1,
               order_index: idx,
               figure: q.figure ?? null,
+              preamble: q.preamble ?? null,
             })),
           }),
         }
@@ -529,7 +534,7 @@ export default function CreateQuizPage() {
   const updateQuestion = (
     idx: number,
     field: keyof GeneratedQ,
-    value: string | string[] | GeneratedQ["figure"]
+    value: string | string[] | GeneratedQ["figure"] | GeneratedQ["preamble"]
   ) => {
     setQuestions((prev) => prev.map((q, i) => (i === idx ? { ...q, [field]: value } : q)));
   };
@@ -1147,6 +1152,13 @@ export default function CreateQuizPage() {
                             placeholder="Explanation (shown after submission)"
                             className="input-field text-xs"
                           />
+                          <textarea
+                            value={q.preamble ?? ""}
+                            onChange={(e) => updateQuestion(idx, "preamble", e.target.value || null)}
+                            placeholder="Optional passage or case this question is based on (shown above the question)"
+                            rows={2}
+                            className="input-field text-xs w-full mt-2 resize-y"
+                          />
                           <FigureEditor
                             figure={q.figure}
                             onChange={(fig) => updateQuestion(idx, "figure", fig)}
@@ -1155,6 +1167,11 @@ export default function CreateQuizPage() {
                       ) : (
                         <>
                           <p className="font-medium text-sm text-[#333]">{cleanText(q.question)}</p>
+                          {q.preamble && (
+                            <p className="mt-1.5 text-xs text-[#555] border-l-2 border-[#0d6b3d] bg-[#f5f7f6] pl-2 py-1 whitespace-pre-line rounded-r">
+                              {cleanText(q.preamble)}
+                            </p>
+                          )}
                           <span className="inline-block text-[10px] px-1.5 py-0.5 bg-slate-100 text-[#666] rounded mt-1">
                             {q.type.replace(/_/g, " ")}
                           </span>

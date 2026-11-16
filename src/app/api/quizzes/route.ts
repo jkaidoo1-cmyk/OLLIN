@@ -5,7 +5,7 @@ import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
 import { serverError, userError } from "@/lib/api-errors";
 import { resolveQuizHostId } from "@/lib/quiz-host";
 import { recordAdminAction } from "@/lib/audit";
-import { normalizeFigure, isMissingFigureColumn } from "@/lib/question-figure";
+import { normalizeFigure, normalizePreamble, isMissingOptionalColumn } from "@/lib/question-figure";
 import { Quiz, Question } from "@/lib/types";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -97,6 +97,8 @@ function normalizeQuestionPayload(q: any, idx: number) {
     order_index: q.order_index ?? idx,
     // Chart data the question refers to (drawn client-side as SVG).
     figure: normalizeFigure(q.figure),
+    // Optional passage/case printed above the question.
+    preamble: normalizePreamble(q.preamble),
   };
 }
 
@@ -193,6 +195,7 @@ export async function POST(request: NextRequest) {
           order_index: q.order_index ?? idx,
           created_at: q.created_at || new Date().toISOString(),
           figure: normalizeFigure(q.figure),
+          preamble: normalizePreamble(q.preamble),
         })
       );
 
@@ -302,11 +305,11 @@ export async function POST(request: NextRequest) {
           let { error: qError } = await admin.from("questions").insert(questionInserts);
           // The `figure` column ships as a migration: retry without it rather
           // than lose the whole quiz because a deployment is one SQL file ahead.
-          if (qError && isMissingFigureColumn(qError)) {
-            console.warn("[quizzes] questions.figure column missing — run supabase/question-figures.sql");
+          if (qError && isMissingOptionalColumn(qError)) {
+            console.warn("[quizzes] questions.figure/preamble column missing — run the SQL in supabase/");
             ({ error: qError } = await admin
               .from("questions")
-              .insert(questionInserts.map(({ figure: _figure, ...rest }) => rest)));
+              .insert(questionInserts.map(({ figure: _figure, preamble: _preamble, ...rest }) => rest)));
           }
           if (qError) throw qError;
         }

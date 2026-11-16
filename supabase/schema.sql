@@ -101,11 +101,14 @@ create table if not exists public.questions (
   order_index integer default 0,
   -- Chart data the question refers to (drawn client-side as SVG).
   figure jsonb,
+  -- Passage/case shown above the question stem.
+  preamble text,
   created_at timestamptz not null default now()
 );
 
--- Existing installs: add the column the question generator writes.
+-- Existing installs: add the columns the question generator writes.
 alter table public.questions add column if not exists figure jsonb;
+alter table public.questions add column if not exists preamble text;
 
 -- QUIZ ATTEMPTS
 create table if not exists public.quiz_attempts (

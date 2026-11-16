@@ -234,6 +234,7 @@ Rules:
 - answerKey: the EXACT TEXT of the correct option — this is the ground truth, never leave it empty.
 - true_false: options ["True","False"], correctAnswer "true" or "false". Balance the answers: close to half of your true/false items must be FALSE. A false item is a plausible but incorrect claim (wrong value, cause, order or term) the material contradicts — never a negated true statement, a trick absolute ("always", "never"), or a swapped word that gives itself away. Avoid trick absolutes unless the material states them.
 - explanation: max 15 words, the reason the answer is right — not a pointer to the text.
+- preamble: OPTIONAL context a question is built on — a short case, a passage, a scenario or a set of facts. Write it only when the item cannot be understood without it. At most 60 words of plain prose: no markdown, no "Read the following passage" heading, no question in it. The preamble and the question must together be self-contained, because items can be shown in any order. Omit the key entirely for standalone questions.
 - figure: OPTIONAL, and only when the question can't be answered without seeing data (a trend, a comparison, a share of a whole). Supply the DATA, never an image link or a description of a picture: {"kind":"bar|line|pie","title":"","x_label":"","y_label":"","labels":["",""],"values":[0,0],"caption":""}. 2–8 points, labels max 12 characters, values plain numbers, exactly as many values as labels. It must only show data stated in the material; if the material has no numbers for a figure, omit the key entirely. Ask at most one figure per five questions — a figure that doesn't change what is being tested is noise.
 - Final check before answering: drop any item that the material does not clearly settle, or whose distractors are obviously wrong.
 
@@ -241,8 +242,8 @@ Examples of the standard expected (other subjects — match this quality, do not
 ${QUESTION_EXEMPLARS}
 
 JSON only:
-{"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"0","answerKey":"","explanation":"","figure":{"kind":"bar","title":"","x_label":"","y_label":"","labels":["",""],"values":[0,0]}}]}
-Omit "figure" from any question that does not need one.`;
+{"title":"","subject":"","questions":[{"type":"multiple_choice","question":"","options":["","","",""],"correctAnswer":"0","answerKey":"","explanation":"","preamble":"","figure":{"kind":"bar","title":"","x_label":"","y_label":"","labels":["",""],"values":[0,0]}}]}
+Omit "preamble" and "figure" from any question that does not need them.`;
 }
 
 // ─── Main Generation Entry Point ─────────────────────────
