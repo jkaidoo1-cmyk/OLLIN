@@ -44,6 +44,9 @@ export default function ProfilePage() {
   const router = useRouter();
   const supabase = createClient();
   const [me, setMe] = useState<Me | null>(null);
+  // The API returns the program's id; the banner names the program the student
+  // is enrolled in, so resolve the label once the id is known.
+  const [programName, setProgramName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<OpenSection>(null);
 
@@ -101,6 +104,22 @@ export default function ProfilePage() {
       finally { setLoading(false); }
     })();
   }, []);
+
+  const programId = me?.program_id ?? null;
+  useEffect(() => {
+    if (!programId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/programs");
+        if (!res.ok) return;
+        const data = await res.json();
+        const match = (data.programs || []).find((p: any) => p?.id === programId);
+        if (!cancelled && match) setProgramName(match.name || match.code || null);
+      } catch { /* the banner keeps its neutral label */ }
+    })();
+    return () => { cancelled = true; };
+  }, [programId]);
 
   const syncLocalMirror = (patch: Partial<{ full_name: string; current_year: number }>) => {
     try {
@@ -271,9 +290,9 @@ export default function ProfilePage() {
             <AtSign className="w-3 h-3" />
             {me.role}
           </span>
-          {me.program_id && (
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white text-[#006633] text-xs font-medium">
-              Program assigned
+          {programId && (
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white text-[#006633] text-xs font-medium max-w-[14rem] truncate">
+              {programName || "Program assigned"}
             </span>
           )}
         </div>
