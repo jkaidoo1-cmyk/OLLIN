@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createQuiz, getUserQuizzes, readServerQuizzes, writeServerQuizzes, readServerQuestions, writeServerQuestions } from "@/lib/data";
-import { getSessionUser, getSessionAdmin } from "@/lib/session";
+import { getSessionUser } from "@/lib/session";
 import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
 import { serverError, userError } from "@/lib/api-errors";
 import { resolveQuizHostId } from "@/lib/quiz-host";
@@ -17,6 +17,15 @@ import { join } from "path";
 export async function GET(request: NextRequest) {
   try {
     const local = isLocalRequest(request);
+    // Every caller of this list is a signed-in screen (student dashboard, test
+    // quizzes, admin panel). Without a session there is nothing to list, and an
+    // anonymous caller could sweep every published share code in one request —
+    // so require the session instead of answering the world. File mode on a
+    // real server keeps working without one.
+    const session = await getSessionUser(request).catch(() => null);
+    if (!session && !local) {
+      return NextResponse.json({ error: "Sign in to view quizzes." }, { status: 401 });
+    }
     let quizzes: Quiz[] = [];
 
     // File store only where the filesystem persists. On a serverless host it is
@@ -41,7 +50,7 @@ export async function GET(request: NextRequest) {
           if (!error && data) {
             // Admins also need drafts and archived rows; everyone else
             // (including participants) only ever sees published quizzes.
-            const isAdmin = !!(await getSessionAdmin(request).catch(() => null));
+            const isAdmin = session?.role === "admin";
             const published = isAdmin
               ? (data || [])
               : (data || []).filter((q: any) => q.status === "published");

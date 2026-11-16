@@ -35,12 +35,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             router.replace("/admin");
             return;
           }
-          // Show a storage notice only when the server is NOT persisting to
-          // Supabase — a healthy server session is not a local.
+          // Show a storage notice only when the server is NOT persisting to a
+          // shared database — a healthy server session is not a local.
           try {
             const res = await fetch("/api/backend-status");
             const data = await res.json();
-            if (data.backend !== "supabase") setLocal(true);
+            if (data.persistent === false) setLocal(true);
           } catch { /* assume server fine */ }
           return;
         }

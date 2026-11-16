@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readLocalUsers, publicUser, verifyPassword, hashPassword } from "@/lib/local-users-store";
-import { createSessionCookie } from "@/lib/session";
+import { issueSessionCookie } from "@/lib/session";
 import { ADMIN_PASSWORD } from "@/lib/local-constants";
-import { checkRateLimit, recordFailure, recordSuccess } from "@/lib/rate-limit";
+import { recordFailure, recordSuccess } from "@/lib/rate-limit";
+import { checkLoginAttempt, recordLoginFailure } from "@/lib/login-throttle";
 import { serverError } from "@/lib/api-errors";
 
 export async function POST(request: NextRequest) {
@@ -17,8 +18,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Brute-force protection: escalating backoff per IP after repeated failures.
-    const limit = checkRateLimit(request, "login");
+    // Brute-force protection: escalating backoff per IP (in-memory, instant)
+    // plus a shared per-IP / per-email counter so the limit holds across
+    // serverless instances instead of resetting on every cold start.
+    const limit = await checkLoginAttempt(request, email);
     if (limit.blocked) {
       return NextResponse.json(
         { error: limit.message },
@@ -57,21 +60,28 @@ export async function POST(request: NextRequest) {
       const res = NextResponse.json({ user: publicUser(user), local: true });
       res.headers.append(
         "Set-Cookie",
-        createSessionCookie({ id: user.id, email: user.email, role: user.role || "student" })
+        await issueSessionCookie({ id: user.id, email: user.email, role: user.role || "student" })
       );
       return res;
     }
 
+    // A failed credential check is recorded in the shared store as well, so the
+    // per-email limit still applies when the attack arrives from many IPs.
+    const failAttempt = async () => {
+      recordFailure(request, "login");
+      await recordLoginFailure(request, email);
+    };
+
     // Local-flag logins never fall through to Supabase.
     if (local) {
-      recordFailure(request, "login");
+      await failAttempt();
       return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
     }
 
     // Real Supabase login
     const supabase = await import("@/lib/supabase/server").then((m) => m.createClient());
     if (!supabase) {
-      recordFailure(request, "login");
+      await failAttempt();
       return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
     }
 
@@ -83,7 +93,7 @@ export async function POST(request: NextRequest) {
     if (error) {
       // Backend availability issues were already filtered out by createClient()
       // returning null — anything here is a genuine credential problem.
-      recordFailure(request, "login");
+      await failAttempt();
       return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
     }
 
@@ -106,7 +116,7 @@ export async function POST(request: NextRequest) {
     // Also issue the app session cookie so admin/config APIs accept this login.
     res.headers.append(
       "Set-Cookie",
-      createSessionCookie({
+      await issueSessionCookie({
         id: data.user.id,
         email: data.user.email || email,
         role: (profile?.role as "admin" | "student") || "student",

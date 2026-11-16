@@ -81,7 +81,16 @@ export async function registerSession(
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function isSessionValid(userId: string, sid: string): Promise<boolean> {
+/**
+ * `"unknown"` means the registry could not be consulted (database error or
+ * unreachable). Callers decide whether that is tolerable for the session's
+ * role: the signature still guarantees who signed in, but a revoked session
+ * can't be detected during the outage.
+ */
+export async function isSessionValid(
+  userId: string,
+  sid: string
+): Promise<boolean | "unknown"> {
   // Prefer the file store when it has a record for this user: it's written
   // on every login unless the Supabase insert provably succeeded, so it is
   // always authoritative in file mode and never silently out of date.
@@ -109,8 +118,9 @@ export async function isSessionValid(userId: string, sid: string): Promise<boole
         .eq("user_id", userId)
         .eq("sid", sid)
         .maybeSingle();
-      // Store unreachable → fail open (signature is still the real gate)
-      if (error) return true;
+      // Store unreachable: report it instead of claiming the session is fine,
+      // so privileged sessions don't ride out an outage on signature alone.
+      if (error) return "unknown";
       return !!data;
     }
   } catch { /* fall through */ }

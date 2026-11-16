@@ -84,25 +84,44 @@ function deserialize(token: string): SessionPayload | null {
 // ---------------------------------------------------------------------------
 // Cookie handling
 // ---------------------------------------------------------------------------
-export function createSessionCookie(user: { id: string; email: string; role: string }): string {
-  const sid = randomBytes(12).toString("hex");
+function buildSessionCookie(user: { id: string; email: string; role: string }, sid: string, exp: number): string {
   const payload: SessionPayload = {
     userId: user.id,
     email: user.email,
     role: user.role || "student",
     sid,
-    exp: Date.now() + SESSION_TTL_MS,
+    exp,
   };
-  // Register the session server-side so it can be revoked later. Registration
-  // is best-effort: if the store is unreachable the cookie still works (fail
-  // open) — the signature remains the primary protection.
-  import("./session-store")
-    .then(({ registerSession }) => registerSession(user.id, sid, Date.now(), payload.exp))
-    .catch(() => { /* best-effort */ });
   // Secure in production only: a Secure cookie is dropped over plain http, and
   // local development runs on http://localhost.
   const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
   return `${COOKIE_NAME}=${serialize(payload)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}${secure}`;
+}
+
+/**
+ * Issue a session cookie and register its id in the session store.
+ *
+ * Registration is awaited: a fire-and-forget write could be dropped when the
+ * serverless instance freezes right after the response, leaving a session that
+ * can never be revoked. A failed registration still returns the cookie (the
+ * signature remains the primary gate) — it is logged rather than swallowed.
+ */
+export async function issueSessionCookie(user: { id: string; email: string; role: string }): Promise<string> {
+  const sid = randomBytes(12).toString("hex");
+  const exp = Date.now() + SESSION_TTL_MS;
+  try {
+    const { registerSession } = await import("./session-store");
+    await registerSession(user.id, sid, Date.now(), exp);
+  } catch (err) {
+    console.error("session.register: could not record the session", err);
+  }
+  return buildSessionCookie(user, sid, exp);
+}
+
+/** Synchronous cookie build without registration — used where a stable sid is
+ *  already registered (e.g. re-issuing a cookie for an existing session). */
+export function createSessionCookie(user: { id: string; email: string; role: string }): string {
+  return buildSessionCookie(user, randomBytes(12).toString("hex"), Date.now() + SESSION_TTL_MS);
 }
 
 export function createLogoutCookie(): string {
@@ -293,9 +312,16 @@ export async function getSessionUser(request: Request): Promise<SessionUser | nu
     if (cached) return cached;
     // Revocation check — a session id removed from the store is dead.
     const { isSessionValid } = await import("./session-store");
-    if (!(await isSessionValid(payload.userId, payload.sid))) return null;
+    const validity = await isSessionValid(payload.userId, payload.sid);
+    if (validity === false) return null;
+    // Registry unreachable: an ordinary student session may continue (the
+    // signature is intact), but an admin cookie must not outlive an outage
+    // that hides revocation. Deny and let them sign in again.
+    if (validity === "unknown" && payload.role === "admin") return null;
     const user = await resolveSessionUser(payload);
-    if (user) cacheSet(payload.sid, user);
+    // Privileged sessions are never cached: a revoked admin must lose access on
+    // the very next request, not up to the cache TTL later.
+    if (user && user.role !== "admin") cacheSet(payload.sid, user);
     return user;
   } catch {
     return null;
@@ -347,9 +373,11 @@ export async function getSessionUserFromCookieStore(): Promise<SessionUser | nul
     if (cached) return cached;
     // Same revocation check as the request-based path.
     const { isSessionValid } = await import("./session-store");
-    if (!(await isSessionValid(payload.userId, payload.sid))) return null;
+    const validity = await isSessionValid(payload.userId, payload.sid);
+    if (validity === false) return null;
+    if (validity === "unknown" && payload.role === "admin") return null;
     const user = await resolveSessionUser(payload);
-    if (user) cacheSet(payload.sid, user);
+    if (user && user.role !== "admin") cacheSet(payload.sid, user);
     return user;
   } catch {
     return null;
