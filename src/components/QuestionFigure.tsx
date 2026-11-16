@@ -5,6 +5,13 @@ import {
   normalizeFigure,
   type QuestionFigure as FigureData,
 } from "@/lib/question-figure";
+import {
+  layoutGraph,
+  BOX_W,
+  BOX_H,
+  PAD as DIAGRAM_PAD,
+  FEEDBACK_LANE,
+} from "@/lib/diagram-layout";
 
 /**
  * Draws a question's data figure as SVG.
@@ -83,91 +90,13 @@ function describe(fig: FigureData): string {
   return `${fig.kind} chart${fig.title ? `, ${fig.title}` : ""}: ${points}.`;
 }
 
-const BOX_W = 118;
-const BOX_H = 46;
-const COL_GAP = 46;
-const ROW_GAP = 16;
-const DPAD = 12;
-const FEEDBACK_LANE = 26;
-
-/**
- * Lay a block diagram out left to right.
- *
- * Cycles are detected first (depth-first) and treated as feedback: a control
- * loop must draw its return path, not push the boxes into an endless row.
- */
-function layoutGraph(fig: FigureData) {
-  const nodes = fig.nodes ?? [];
-  const edges = fig.edges ?? [];
-  const state = new Map<string, 0 | 1 | 2>();
-  const back = new Set<number>();
-
-  const visit = (id: string) => {
-    state.set(id, 1);
-    edges.forEach((e, i) => {
-      if (e.from !== id) return;
-      const s = state.get(e.to) ?? 0;
-      if (s === 1) back.add(i);
-      else if (s === 0) visit(e.to);
-    });
-    state.set(id, 2);
-  };
-  nodes.forEach((n) => {
-    if ((state.get(n.id) ?? 0) === 0) visit(n.id);
-  });
-
-  // Longest-path layering over the acyclic part.
-  const layer = new Map(nodes.map((n) => [n.id, 0]));
-  for (let pass = 0; pass < nodes.length; pass++) {
-    let changed = false;
-    edges.forEach((e, i) => {
-      if (back.has(i)) return;
-      const next = (layer.get(e.from) ?? 0) + 1;
-      if (next > (layer.get(e.to) ?? 0)) {
-        layer.set(e.to, next);
-        changed = true;
-      }
-    });
-    if (!changed) break;
-  }
-
-  const columns = new Map<number, string[]>();
-  nodes.forEach((n) => {
-    const col = layer.get(n.id) ?? 0;
-    columns.set(col, [...(columns.get(col) ?? []), n.id]);
-  });
-
-  const maxCol = Math.max(0, ...[...columns.keys()]);
-  const maxRows = Math.max(1, ...[...columns.values()].map((c) => c.length));
-
-  const place = new Map<string, { x: number; y: number }>();
-  for (const [col, ids] of columns) {
-    // Short columns sit centred against the tallest one.
-    const offset = ((maxRows - ids.length) * (BOX_H + ROW_GAP)) / 2;
-    ids.forEach((id, row) => {
-      place.set(id, {
-        x: DPAD + col * (BOX_W + COL_GAP),
-        y: DPAD + offset + row * (BOX_H + ROW_GAP),
-      });
-    });
-  }
-
-  return {
-    place,
-    back,
-    width: DPAD * 2 + (maxCol + 1) * BOX_W + maxCol * COL_GAP,
-    height:
-      DPAD * 2 + maxRows * BOX_H + (maxRows - 1) * ROW_GAP + (back.size ? FEEDBACK_LANE : 0),
-  };
-}
-
 /** A block/flow drawing: boxes, straight arrows, and a lane for feedback. */
 function Diagram({ fig }: { fig: FigureData }) {
   const nodes = fig.nodes ?? [];
   const edges = fig.edges ?? [];
-  const { place, back, width, height } = layoutGraph(fig);
+  const { place, back, width, height } = layoutGraph(nodes, edges);
   const markerId = `arrow-${useId().replace(/:/g, "")}`;
-  const laneY = height - DPAD - FEEDBACK_LANE / 2;
+  const laneY = height - DIAGRAM_PAD - FEEDBACK_LANE / 2;
 
   return (
     <svg
