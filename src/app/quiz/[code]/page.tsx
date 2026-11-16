@@ -8,6 +8,7 @@ import { isLocalMode, getLocalQuizByCode, getLocalQuestions, getLocalUser } from
 import { Quiz, Question, QuizAttempt } from "@/lib/types";
 import { Clock, Send, CheckCircle, AlertCircle, User } from "lucide-react";
 import { BrandMark, BrandSpinner } from "@/components/Logo";
+import { QuestionFigure } from "@/components/QuestionFigure";
 import { useToast } from "@/components/ui/toast";
 import { formatTime } from "@/lib/utils";
 
@@ -752,6 +753,7 @@ export default function QuizPage() {
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-[#333] mb-2">{item.question.question_text}</p>
+                      <QuestionFigure figure={item.question.figure} />
 
                       {item.question.options ? (
                         <div className="space-y-1 mb-2">
@@ -853,6 +855,13 @@ export default function QuizPage() {
                 </span>
                 <p className="text-[15px] sm:text-sm font-medium text-[#333] leading-snug">{q.question_text}</p>
               </div>
+
+              {/* The data the question refers to, drawn from its own values. */}
+              {q.figure && (
+                <div className="sm:ml-9 mb-3">
+                  <QuestionFigure figure={q.figure} />
+                </div>
+              )}
 
               {/* Branch on the question's type, not on whether it happens to
                   carry options: a fill-in-the-blank or short-answer question has

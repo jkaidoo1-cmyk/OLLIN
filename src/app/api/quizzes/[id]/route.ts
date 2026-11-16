@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLocalRequest } from "@/lib/server-host";
 import { getQuizById, getQuizByIdAsAdmin, getQuizByCode, deleteQuiz, getQuizQuestions } from "@/lib/data";
 import { serverError } from "@/lib/api-errors";
+import { normalizeFigure, isMissingFigureColumn } from "@/lib/question-figure";
 
 // GET — get quiz by ID or share code, with questions (public, no auth required)
 // Resolve the requester's session (null for guests)
@@ -310,11 +311,19 @@ export async function PUT(
         difficulty: q.difficulty || "medium",
         marks: q.marks ?? 1,
         order_index: q.order_index ?? i,
+        figure: normalizeFigure(q.figure),
       }));
 
-      const { error: saveErr } = await admin
+      let { error: saveErr } = await admin
         .from("questions")
         .upsert(rows, { onConflict: "id" });
+      // `figure` is a migration: retry without it instead of failing the save.
+      if (saveErr && isMissingFigureColumn(saveErr)) {
+        console.warn("[quiz.update] questions.figure column missing — run supabase/question-figures.sql");
+        ({ error: saveErr } = await admin
+          .from("questions")
+          .upsert(rows.map(({ figure: _figure, ...rest }: any) => rest), { onConflict: "id" }));
+      }
       if (saveErr) {
         return serverError("quiz.update.questions", saveErr, {
           message: "We saved the quiz but not its questions. Please try again.",
@@ -354,6 +363,7 @@ export async function PUT(
         marks: q.marks ?? 1,
         order_index: q.order_index ?? i,
         created_at: q.created_at || new Date().toISOString(),
+        figure: normalizeFigure(q.figure),
       }))
     );
     writeServerQuestions(kept);

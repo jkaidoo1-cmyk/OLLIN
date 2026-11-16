@@ -85,6 +85,8 @@ export interface Question {
   created_at: string;
   /** The exact text of the correct option, preserved from exam extraction. */
   answer_key?: string | null;
+  /** Data the question refers to (a chart), drawn client-side as SVG. */
+  figure?: import("./question-figure").QuestionFigure | null;
 }
 
 export interface QuizAttempt {

@@ -29,6 +29,8 @@ interface GeneratedQ {
   explanation: string;
   topic?: string;
   difficulty?: string;
+  /** Chart data the question refers to, drawn as SVG on the quiz page. */
+  figure?: import("@/lib/question-figure").QuestionFigure | null;
 }
 
 /** Placeholder titles produced when the model gives no title of its own. */
@@ -172,6 +174,7 @@ export default function CreateQuizPage() {
               explanation: q.explanation || "",
               topic: q.topic || "",
               difficulty: q.difficulty || "medium",
+              figure: q.figure ?? null,
             };
           })
         );
@@ -422,6 +425,7 @@ export default function CreateQuizPage() {
           marks: 1,
           order_index: idx,
           created_at: new Date().toISOString(),
+          figure: q.figure ?? null,
         }));
         // Persist server-side (visible from any browser + admin panel) AND locally
         try {
@@ -500,6 +504,7 @@ export default function CreateQuizPage() {
               difficulty: q.difficulty || "medium",
               marks: 1,
               order_index: idx,
+              figure: q.figure ?? null,
             })),
           }),
         }

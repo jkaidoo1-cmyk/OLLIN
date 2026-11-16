@@ -99,8 +99,13 @@ create table if not exists public.questions (
   difficulty text default 'medium' check (difficulty in ('easy', 'medium', 'hard')),
   marks integer default 1,
   order_index integer default 0,
+  -- Chart data the question refers to (drawn client-side as SVG).
+  figure jsonb,
   created_at timestamptz not null default now()
 );
+
+-- Existing installs: add the column the question generator writes.
+alter table public.questions add column if not exists figure jsonb;
 
 -- QUIZ ATTEMPTS
 create table if not exists public.quiz_attempts (
