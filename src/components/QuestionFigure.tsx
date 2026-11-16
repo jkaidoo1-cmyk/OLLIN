@@ -1,6 +1,10 @@
 "use client";
 
-import { normalizeFigure, type QuestionFigure as FigureData } from "@/lib/question-figure";
+import { useId } from "react";
+import {
+  normalizeFigure,
+  type QuestionFigure as FigureData,
+} from "@/lib/question-figure";
 
 /**
  * Draws a question's data figure as SVG.
@@ -19,7 +23,9 @@ export function QuestionFigure({ figure }: { figure?: FigureData | null }) {
           {fig.title}
         </figcaption>
       )}
-      {fig.kind === "table" ? (
+      {fig.kind === "diagram" ? (
+        <Diagram fig={fig} />
+      ) : fig.kind === "table" ? (
         <Table fig={fig} />
       ) : fig.kind === "pie" ? (
         <Pie fig={fig} />
@@ -31,7 +37,7 @@ export function QuestionFigure({ figure }: { figure?: FigureData | null }) {
       {/* The numbers stay reachable without reading the picture: screen readers
           and anyone on a tiny screen get the data, not just a shape. A table is
           already its own data view, so it needs no disclosure. */}
-      {fig.kind !== "table" && (
+      {fig.kind !== "table" && fig.kind !== "diagram" && (
       <details className="mt-2">
         <summary className="text-[10px] text-[#888] cursor-pointer select-none">Show data</summary>
         <table className="w-full mt-1 text-[10px] text-[#555]">
@@ -62,12 +68,225 @@ const PAD = { top: 12, right: 10, bottom: 34, left: 40 };
 
 /** One sentence of the figure's data, for assistive tech. */
 function describe(fig: FigureData): string {
+  if (fig.kind === "diagram") {
+    const boxes = (fig.nodes ?? [])
+      .map((n) => (n.detail ? `${n.label} (${n.detail})` : n.label))
+      .join(", ");
+    const arrows = (fig.edges ?? []).map((e) => `${e.from} to ${e.to}`).join(", ");
+    return `Block diagram${fig.title ? `, ${fig.title}` : ""}. Blocks: ${boxes}. Arrows: ${arrows}.`;
+  }
   if (fig.kind === "table") {
     const rows = (fig.rows ?? []).map((r) => r.join(" ")).join("; ");
     return `Table${fig.title ? `, ${fig.title}` : ""}, columns ${(fig.headers ?? []).join(", ")}: ${rows}.`;
   }
   const points = fig.labels.map((l, i) => `${l} ${fig.values[i]}`).join(", ");
   return `${fig.kind} chart${fig.title ? `, ${fig.title}` : ""}: ${points}.`;
+}
+
+const BOX_W = 118;
+const BOX_H = 46;
+const COL_GAP = 46;
+const ROW_GAP = 16;
+const DPAD = 12;
+const FEEDBACK_LANE = 26;
+
+/**
+ * Lay a block diagram out left to right.
+ *
+ * Cycles are detected first (depth-first) and treated as feedback: a control
+ * loop must draw its return path, not push the boxes into an endless row.
+ */
+function layoutGraph(fig: FigureData) {
+  const nodes = fig.nodes ?? [];
+  const edges = fig.edges ?? [];
+  const state = new Map<string, 0 | 1 | 2>();
+  const back = new Set<number>();
+
+  const visit = (id: string) => {
+    state.set(id, 1);
+    edges.forEach((e, i) => {
+      if (e.from !== id) return;
+      const s = state.get(e.to) ?? 0;
+      if (s === 1) back.add(i);
+      else if (s === 0) visit(e.to);
+    });
+    state.set(id, 2);
+  };
+  nodes.forEach((n) => {
+    if ((state.get(n.id) ?? 0) === 0) visit(n.id);
+  });
+
+  // Longest-path layering over the acyclic part.
+  const layer = new Map(nodes.map((n) => [n.id, 0]));
+  for (let pass = 0; pass < nodes.length; pass++) {
+    let changed = false;
+    edges.forEach((e, i) => {
+      if (back.has(i)) return;
+      const next = (layer.get(e.from) ?? 0) + 1;
+      if (next > (layer.get(e.to) ?? 0)) {
+        layer.set(e.to, next);
+        changed = true;
+      }
+    });
+    if (!changed) break;
+  }
+
+  const columns = new Map<number, string[]>();
+  nodes.forEach((n) => {
+    const col = layer.get(n.id) ?? 0;
+    columns.set(col, [...(columns.get(col) ?? []), n.id]);
+  });
+
+  const maxCol = Math.max(0, ...[...columns.keys()]);
+  const maxRows = Math.max(1, ...[...columns.values()].map((c) => c.length));
+
+  const place = new Map<string, { x: number; y: number }>();
+  for (const [col, ids] of columns) {
+    // Short columns sit centred against the tallest one.
+    const offset = ((maxRows - ids.length) * (BOX_H + ROW_GAP)) / 2;
+    ids.forEach((id, row) => {
+      place.set(id, {
+        x: DPAD + col * (BOX_W + COL_GAP),
+        y: DPAD + offset + row * (BOX_H + ROW_GAP),
+      });
+    });
+  }
+
+  return {
+    place,
+    back,
+    width: DPAD * 2 + (maxCol + 1) * BOX_W + maxCol * COL_GAP,
+    height:
+      DPAD * 2 + maxRows * BOX_H + (maxRows - 1) * ROW_GAP + (back.size ? FEEDBACK_LANE : 0),
+  };
+}
+
+/** A block/flow drawing: boxes, straight arrows, and a lane for feedback. */
+function Diagram({ fig }: { fig: FigureData }) {
+  const nodes = fig.nodes ?? [];
+  const edges = fig.edges ?? [];
+  const { place, back, width, height } = layoutGraph(fig);
+  const markerId = `arrow-${useId().replace(/:/g, "")}`;
+  const laneY = height - DPAD - FEEDBACK_LANE / 2;
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={fig.title || "Block diagram"}
+      className="w-full h-auto"
+      style={{ maxWidth: width }}
+    >
+      <title>{fig.title || "Block diagram"}</title>
+      <desc>{describe(fig)}</desc>
+      <defs>
+        <marker
+          id={markerId}
+          viewBox="0 0 10 10"
+          refX={9}
+          refY={5}
+          markerWidth={6}
+          markerHeight={6}
+          orient="auto-start-reverse"
+        >
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#555" />
+        </marker>
+      </defs>
+
+      {edges.map((edge, i) => {
+        const a = place.get(edge.from);
+        const b = place.get(edge.to);
+        if (!a || !b) return null;
+        if (back.has(i)) {
+          // Feedback: drop below the row, run across, come up into the target.
+          const x1 = a.x + BOX_W / 2;
+          const y1 = a.y + BOX_H;
+          const x2 = b.x + BOX_W / 2;
+          const y2 = b.y + BOX_H;
+          return (
+            <polyline
+              key={i}
+              points={`${x1},${y1} ${x1},${laneY} ${x2},${laneY} ${x2},${y2}`}
+              fill="none"
+              stroke="#555"
+              strokeWidth={1.3}
+              markerEnd={`url(#${markerId})`}
+            />
+          );
+        }
+        const x1 = a.x + BOX_W;
+        const y1 = a.y + BOX_H / 2;
+        const x2 = b.x;
+        const y2 = b.y + BOX_H / 2;
+        const forward = x2 >= x1;
+        return (
+          <g key={i}>
+            <line
+              x1={x1}
+              y1={y1}
+              // A backward arrow would run through the boxes; step it down.
+              x2={forward ? x2 : x2 + BOX_W}
+              y2={forward ? y2 : y2 + BOX_H / 2 + 10}
+              stroke="#555"
+              strokeWidth={1.3}
+              markerEnd={`url(#${markerId})`}
+            />
+            {edge.label && (
+              <text
+                x={(x1 + (x2 - 10)) / 2}
+                y={(y1 + y2) / 2 - 4}
+                fontSize={8}
+                fill="#666"
+                textAnchor="middle"
+              >
+                {edge.label}
+              </text>
+            )}
+          </g>
+        );
+      })}
+
+      {nodes.map((node) => {
+        const p = place.get(node.id);
+        if (!p) return null;
+        return (
+          <g key={node.id}>
+            <rect
+              x={p.x}
+              y={p.y}
+              width={BOX_W}
+              height={BOX_H}
+              rx={6}
+              fill="#fff"
+              stroke="#0d6b3d"
+              strokeWidth={1.4}
+            />
+            <text
+              x={p.x + BOX_W / 2}
+              y={p.y + (node.detail ? BOX_H / 2 - 2 : BOX_H / 2 + 3.5)}
+              fontSize={10}
+              fontWeight={600}
+              fill="#1c3b2b"
+              textAnchor="middle"
+            >
+              {node.label}
+            </text>
+            {node.detail && (
+              <text
+                x={p.x + BOX_W / 2}
+                y={p.y + BOX_H / 2 + 11}
+                fontSize={8}
+                fill="#6b7a71"
+                textAnchor="middle"
+              >
+                {node.detail}
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
 }
 
 /** A table isn't drawn — it is the data, laid out. */

@@ -7,12 +7,28 @@
  * model returns the data itself and the app draws it as SVG: exact, crisp at
  * any size, printable, tiny to store, and free to render.
  */
+/** One box in a block/flow diagram, e.g. SENSOR with its transfer function. */
+export interface DiagramNode {
+  id: string;
+  label: string;
+  /** Small second line: a gain, a range, a unit. */
+  detail?: string;
+}
+
+export interface DiagramEdge {
+  from: string;
+  to: string;
+  label?: string;
+}
+
 export interface QuestionFigure {
   /**
    * `table` is not a chart: it renders the headers/rows as a real table, which
    * is how most exam questions present lookups and multi-column data.
+   * `diagram` is a block/flow drawing (signal chains, control loops, process
+   * flows) built from boxes and arrows — never a generated picture.
    */
-  kind: "bar" | "line" | "pie" | "table";
+  kind: "bar" | "line" | "pie" | "table" | "diagram";
   title?: string;
   x_label?: string;
   y_label?: string;
@@ -21,6 +37,9 @@ export interface QuestionFigure {
   /** Table only: column headings (2–4) and rows of the same width. */
   headers?: string[];
   rows?: string[][];
+  /** Diagram only: boxes and the arrows between them. */
+  nodes?: DiagramNode[];
+  edges?: DiagramEdge[];
   caption?: string;
 }
 
@@ -42,6 +61,40 @@ export function normalizeFigure(raw: unknown): QuestionFigure | null {
   const input = raw as Record<string, unknown>;
 
   const kind = String(input.kind ?? "").toLowerCase();
+  if (kind === "diagram") {
+    const rawNodes = Array.isArray(input.nodes) ? input.nodes : [];
+    const nodes: DiagramNode[] = [];
+    const seen = new Set<string>();
+    for (const raw of rawNodes.slice(0, 8)) {
+      const node = raw as Record<string, unknown>;
+      const id = text(node?.id ?? node?.label, MAX_LABEL);
+      const label = text(node?.label ?? node?.id, MAX_LABEL);
+      if (!id || !label || seen.has(id)) continue;
+      seen.add(id);
+      nodes.push({ id, label, detail: text(node?.detail, MAX_LABEL) || undefined });
+    }
+    if (nodes.length < 2) return null;
+    const rawEdges = Array.isArray(input.edges) ? input.edges : [];
+    const edges: DiagramEdge[] = [];
+    for (const raw of rawEdges.slice(0, 12)) {
+      const edge = raw as Record<string, unknown>;
+      const from = String(edge?.from ?? "").trim();
+      const to = String(edge?.to ?? "").trim();
+      // An arrow to a box that doesn't exist would render as a dangling line.
+      if (!from || !to || !seen.has(from) || !seen.has(to) || from === to) continue;
+      edges.push({ from, to, label: text(edge?.label, MAX_LABEL) || undefined });
+    }
+    if (edges.length === 0) return null;
+    return {
+      kind: "diagram",
+      title: text(input.title, MAX_TITLE) || undefined,
+      nodes,
+      edges,
+      labels: [],
+      values: [],
+      caption: text(input.caption, MAX_TITLE) || undefined,
+    };
+  }
   if (kind === "table") {
     const headers = Array.isArray(input.headers)
       ? input.headers.map((h) => text(h, MAX_LABEL))
