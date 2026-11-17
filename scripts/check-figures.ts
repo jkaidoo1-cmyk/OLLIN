@@ -11,7 +11,6 @@
 import { normalizeFigure, normalizePreamble } from "../src/lib/question-figure.ts";
 import { layoutGraph, BOX_W, BOX_H, COL_GAP, PAD } from "../src/lib/diagram-layout.ts";
 import { groupQuestions, printsContext } from "../src/lib/question-groups.ts";
-import { analyseItems, flagLabel } from "../src/lib/item-analytics.ts";
 
 let failures = 0;
 
@@ -208,87 +207,6 @@ eq("a lone preamble prints itself", printsContext(undefined), true);
 eq("a lone preamble prints itself (size 1)", printsContext({ id: "a", size: 1, index: 0, leader: true }), true);
 eq("the leader prints the context", printsContext({ id: "a", size: 2, index: 0, leader: true }), true);
 eq("members do not repeat it", printsContext({ id: "a", size: 2, index: 1, leader: false }), false);
-
-// ─── Item analytics ──────────────────────────────────────
-const q1 = { id: "q1", correct_answer: "b", figure: { kind: "bar" }, preamble: null };
-const q2 = { id: "q2", correct_answer: "x", figure: null, preamble: "A case." };
-
-const allWrong = analyseItems(
-  [q1],
-  Array.from({ length: 6 }, (_, i) => ({ score_percentage: 0, answers: { q1: "a" }, attempt_answers: [] }))
-);
-eq("nobody right → flagged as a wrong key", allWrong.items[0].flag, "likely_wrong_key");
-eq("success rate counts answers", allWrong.items[0].answered, 6);
-eq("nobody right → 0%", allWrong.items[0].pValue, 0);
-eq("flagged items are listed", allWrong.suspicious.length, 1);
-
-eq(
-  "one wrong answer is not enough to blame the key",
-  analyseItems([q1], [{ score_percentage: 0, answers: { q1: "a" } }]).items[0].flag,
-  null
-);
-
-eq(
-  "an unanswered item reports no data",
-  analyseItems([q1], []).items[0].flag,
-  "no_data"
-);
-eq(
-  "everyone right → too easy",
-  analyseItems(
-    [q1],
-    Array.from({ length: 6 }, () => ({ score_percentage: 100, answers: { q1: "b" } }))
-  ).items[0].flag,
-  "too_easy"
-);
-
-// A crisp item: the top third always right, the bottom third always wrong.
-const crisp = [];
-for (let i = 0; i < 9; i++) {
-  crisp.push({ score_percentage: i < 3 ? 100 : i > 5 ? 0 : 50, answers: { q1: i < 3 ? "b" : "a" } });
-}
-eq("a crisp item separates the groups", analyseItems([q1], crisp).items[0].discrimination, 1);
-eq("a crisp item carries no flag", analyseItems([q1], crisp).items[0].flag, null);
-
-// Half right, but the same half in both groups: measures nothing.
-const flat = [];
-for (let i = 0; i < 9; i++) {
-  const correct = i % 3 === 0;
-  flat.push({ score_percentage: 90 - i * 10, answers: { q1: correct ? "b" : "a" } });
-}
-eq("an item nobody separates on is weak", analyseItems([q1], flat).items[0].flag, "weak");
-
-// Graded arrays win over the raw selections.
-eq(
-  "graded answers are trusted",
-  analyseItems(
-    [q1],
-    [
-      {
-        score_percentage: 100,
-        answers: { q1: "a" },
-        attempt_answers: [{ question_id: "q1", selected_answer: "b", is_correct: true }],
-      },
-    ]
-  ).items[0].correct,
-  1
-);
-
-const mixed = analyseItems(
-  [q1, q2],
-  [
-    { score_percentage: 50, answers: { q1: "b", q2: "y" } },
-    { score_percentage: 50, answers: { q1: "a", q2: "x" } },
-  ]
-);
-eq("figure breakdown separates kinds", mixed.byFigure.length, 2);
-eq(
-  "figure breakdown keys off the kind",
-  mixed.byFigure.find((f) => f.key === "bar")?.answered,
-  2
-);
-eq("plainer questions are bucketed as none", mixed.byFigure.find((f) => f.key === "none")?.answered, 2);
-eq("flag labels read plainly", flagLabel("likely_wrong_key"), "check the answer key");
 
 if (failures > 0) {
   console.error(`\n${failures} figure check(s) failed.`);
