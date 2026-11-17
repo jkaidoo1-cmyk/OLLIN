@@ -20,8 +20,10 @@ import {
   Award,
   Check,
   Trash2,
+  AlertCircle,
 } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
+import { analyseItems, flagLabel } from "@/lib/item-analytics";
 
 interface AttemptWithAnswers extends QuizAttempt {
   attempt_answers?: {
@@ -142,32 +144,16 @@ export default function QuizDetailPage() {
     (a) => a.score_percentage >= (quiz?.passing_score || 50)
   ).length;
 
-  const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
-  const questionStats = questions.map((q) => {
-    // Count every answer we can grade: graded arrays (Supabase) or raw
-    // selection records (server attempts) graded against the answer key.
-    let totalAnswers = 0;
-    let correctCount = 0;
-    for (const a of completedAttempts) {
-      if (a.attempt_answers?.length) {
-        const aa = a.attempt_answers.find((x) => x.question_id === q.id);
-        if (!aa || aa.selected_answer == null) continue;
-        totalAnswers++;
-        if (aa.is_correct) correctCount++;
-      } else if (a.answers && a.answers[q.id] != null) {
-        totalAnswers++;
-        if (norm(a.answers[q.id]) === norm(q.correct_answer)) correctCount++;
-      }
-    }
-    return {
-      question: q,
-      totalAnswers,
-      correctPercentage:
-        totalAnswers > 0
-          ? Math.round((correctCount / totalAnswers) * 100)
-          : 0,
-    };
-  });
+  // Success rate plus the diagnosis that a bare percentage hides: an item
+  // nearly everyone fails usually has a wrong stored key, and an item that
+  // strong and weak students score equally on measures nothing.
+  const analytics = analyseItems(questions, completedAttempts);
+  const questionStats = analytics.items.map((item) => ({
+    question: questions[item.index],
+    totalAnswers: item.answered,
+    correctPercentage: Math.round(item.pValue * 100),
+    flagLabel: flagLabel(item.flag),
+  }));
 
   const copyCode = () => {
     if (quiz) {
@@ -331,6 +317,32 @@ export default function QuizDetailPage() {
         </div>
       )}
 
+      {/* Items worth re-reading before the next sitting */}
+      {analytics.suspicious.length > 0 && (
+        <div className="app-card mb-4 border-l-4 border-amber-400">
+          <h2 className="font-bold text-sm mb-2 flex items-center gap-2 text-[var(--ink)]">
+            <AlertCircle className="w-4 h-4 text-amber-500" />
+            {analytics.suspicious.length} question{analytics.suspicious.length === 1 ? "" : "s"} need a look
+          </h2>
+          <ul className="space-y-1.5">
+            {analytics.suspicious.map((item) => (
+              <li key={item.questionId} className="text-xs text-slate-600 flex gap-2">
+                <span className="font-mono text-slate-400">#{item.index + 1}</span>
+                <span className="flex-1 min-w-0 truncate">
+                  {questions[item.index]?.question_text}
+                </span>
+                <span className="flex-shrink-0 text-amber-700 font-medium">
+                  {flagLabel(item.flag)} · {Math.round(item.pValue * 100)}% of {item.answered}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[10px] text-slate-400 mt-2">
+            An item almost nobody answers correctly usually has the wrong stored answer — open it and check the key.
+          </p>
+        </div>
+      )}
+
       {/* Question Performance Breakdown */}
       {questionStats.length > 0 && (
         <div className="app-card mb-4" >
@@ -338,6 +350,20 @@ export default function QuizDetailPage() {
             <BarChart3 className="w-4 h-4 text-green-600" />
             Question Success Rates
           </h2>
+          {analytics.byFigure.length > 1 && (
+            <p className="text-[10px] text-slate-500 -mt-2 mb-3">
+              With a figure:{" "}
+              {analytics.byFigure
+                .filter((f) => f.key !== "none" && f.answered > 0)
+                .map((f) => `${f.key} ${Math.round(f.pValue * 100)}%`)
+                .join(" · ") || "no answers yet"}
+              {"  "}| Without:{" "}
+              {(() => {
+                const none = analytics.byFigure.find((f) => f.key === "none");
+                return none && none.answered > 0 ? `${Math.round(none.pValue * 100)}%` : "no answers yet";
+              })()}
+            </p>
+          )}
           <div className="space-y-3">
             {questionStats.map((qs, idx) => (
               <div key={qs.question.id} className="flex items-center gap-4 text-xs">
@@ -360,6 +386,11 @@ export default function QuizDetailPage() {
                   </div>
                   <span className="font-bold w-8 text-right text-slate-600">{qs.correctPercentage}%</span>
                 </div>
+                {qs.flagLabel && (
+                  <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 whitespace-nowrap">
+                    {qs.flagLabel}
+                  </span>
+                )}
                 <span className="w-16 text-right text-[10px] text-slate-400 flex-shrink-0">
                   {qs.totalAnswers > 0 ? `${qs.totalAnswers} answered` : "no answers"}
                 </span>
