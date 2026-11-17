@@ -10,6 +10,7 @@
  */
 import { normalizeFigure, normalizePreamble } from "../src/lib/question-figure.ts";
 import { layoutGraph, BOX_W, BOX_H, COL_GAP, PAD } from "../src/lib/diagram-layout.ts";
+import { groupQuestions, printsContext } from "../src/lib/question-groups.ts";
 
 let failures = 0;
 
@@ -171,6 +172,41 @@ eq("branch puts both targets in column 1", branch.place.get("B")?.x, branch.plac
 check("branch stacks targets vertically", (branch.place.get("C")?.y ?? 0) > (branch.place.get("B")?.y ?? 0));
 check("branch centres the shorter column", (branch.place.get("A")?.y ?? 0) > (branch.place.get("B")?.y ?? 0));
 eq("branch height holds two rows", branch.height, PAD * 2 + 2 * BOX_H + 16);
+
+// ─── Case-study grouping ──────────────────────────────────
+const plain = groupQuestions([
+  { id: "a", preamble: null },
+  { id: "b" },
+]);
+eq("questions without a preamble form no groups", plain.size, 0);
+
+const caseSet = groupQuestions([
+  { id: "a", preamble: "A case about refining." },
+  { id: "b", preamble: "A  case   about refining." },
+  { id: "c", preamble: "A case about refining." },
+  { id: "d", preamble: null },
+]);
+eq("one case groups its questions", caseSet.size, 3);
+eq("group size counts every member", caseSet.get("a")?.size, 3);
+eq("only the first question leads", caseSet.get("a")?.leader, true);
+eq("later members are not leaders", caseSet.get("c")?.leader, false);
+eq("members keep their position", caseSet.get("b")?.index, 1);
+eq("a question without context is not grouped", caseSet.get("d"), undefined);
+
+eq(
+  "an interrupted case makes two groups",
+  groupQuestions([
+    { id: "a", preamble: "Same case text here." },
+    { id: "b", preamble: null },
+    { id: "c", preamble: "Same case text here." },
+  ]).get("c")?.size,
+  1
+);
+
+eq("a lone preamble prints itself", printsContext(undefined), true);
+eq("a lone preamble prints itself (size 1)", printsContext({ id: "a", size: 1, index: 0, leader: true }), true);
+eq("the leader prints the context", printsContext({ id: "a", size: 2, index: 0, leader: true }), true);
+eq("members do not repeat it", printsContext({ id: "a", size: 2, index: 1, leader: false }), false);
 
 if (failures > 0) {
   console.error(`\n${failures} figure check(s) failed.`);

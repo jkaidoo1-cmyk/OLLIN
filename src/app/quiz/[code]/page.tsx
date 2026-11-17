@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { Fragment, useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -9,6 +9,7 @@ import { Quiz, Question, QuizAttempt } from "@/lib/types";
 import { Clock, Send, CheckCircle, AlertCircle, User } from "lucide-react";
 import { BrandMark, BrandSpinner } from "@/components/Logo";
 import { QuestionFigure } from "@/components/QuestionFigure";
+import { groupQuestions, printsContext } from "@/lib/question-groups";
 import { useToast } from "@/components/ui/toast";
 import { formatTime } from "@/lib/utils";
 
@@ -819,6 +820,9 @@ export default function QuizPage() {
 
   // Quiz in progress — all questions in one scrollable page
   const answeredCount = questions.filter((q) => answers[q.id]).length;
+  // Consecutive questions sharing a case are presented under one printed
+  // passage instead of repeating it on every card.
+  const groups = groupQuestions(questions);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -852,8 +856,22 @@ export default function QuizPage() {
 
       <main className="flex-1 px-4 py-6">
         <div className="app-column space-y-3">
-          {questions.map((q, idx) => (
-            <div key={q.id} className="app-card p-4 sm:p-5">
+          {questions.map((q, idx) => {
+            const group = groups.get(q.id);
+            const showContext = !!(q.preamble && printsContext(group));
+            return (
+            <Fragment key={q.id}>
+            {group && group.leader && group.size > 1 && (
+              <div className="app-card p-4 sm:p-5 border-l-4 border-[#0d6b3d]">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#0d6b3d] mb-1.5">
+                  Questions {idx + 1}–{idx + group.size} refer to this
+                </p>
+                <p className="text-sm text-[#444] leading-relaxed whitespace-pre-line">
+                  {q.preamble}
+                </p>
+              </div>
+            )}
+            <div className="app-card p-4 sm:p-5">
               <div className="flex items-start gap-3 mb-3">
                 <span className="w-6 h-6 rounded-full bg-[var(--primary)] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
                   {idx + 1}
@@ -861,8 +879,9 @@ export default function QuizPage() {
                 <p className="text-[15px] sm:text-sm font-medium text-[#333] leading-snug">{q.question_text}</p>
               </div>
 
-              {/* The passage or case the question is built on. */}
-              {q.preamble && (
+              {/* The passage or case the question is built on (see above when
+                  it is shared with the questions around it). */}
+              {showContext && (
                 <p className="sm:ml-9 mb-3 text-sm text-[#555] leading-relaxed whitespace-pre-line border-l-2 border-[#0d6b3d] bg-[#f7f9f8] pl-3 pr-2 py-2 rounded-r">
                   {q.preamble}
                 </p>
@@ -948,7 +967,9 @@ export default function QuizPage() {
                 </div>
               )}
             </div>
-          ))}
+            </Fragment>
+            );
+          })}
 
           <div className="sticky bottom-0 -mx-4 sm:mx-0 px-4 sm:px-0 pt-3 pb-[calc(0.75rem_+_env(safe-area-inset-bottom))] sm:pb-3 bg-white/95 backdrop-blur border-t border-[#e0e0e0] flex justify-center">
             <button
