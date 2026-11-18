@@ -23,7 +23,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
-import { analyseItems, flagLabel } from "@/lib/item-analytics";
+import { analyseItems, flagLabel, type ItemAnalytics } from "@/lib/item-analytics";
 
 interface AttemptWithAnswers extends QuizAttempt {
   attempt_answers?: {
@@ -49,6 +49,7 @@ export default function QuizDetailPage() {
   const [loading, setLoading] = useState(true);
   const [expandedAttempt, setExpandedAttempt] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [remoteAnalytics, setRemoteAnalytics] = useState<ItemAnalytics | null>(null);
   const confirmDialog = useConfirm();
   const toast = useToast();
 
@@ -120,6 +121,27 @@ export default function QuizDetailPage() {
     fetchQuiz();
   }, [quizId, supabase, router]);
 
+  // Item diagnosis comes from the server: what each participant chose lives in
+  // attempt_answers and is deliberately not shipped with the attempts list.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/quizzes/${quizId}/analytics`, {
+          headers: isLocalMode() ? { "x-local-mode": "true" } : {},
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data.analytics) setRemoteAnalytics(data.analytics as ItemAnalytics);
+      } catch {
+        /* the client-side calculation below still reports success rates */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [quizId]);
+
   const completedAttempts = attempts.filter((a) => a.status === "completed");
   const avgScore =
     completedAttempts.length > 0
@@ -147,7 +169,9 @@ export default function QuizDetailPage() {
   // Success rate plus the diagnosis that a bare percentage hides: an item
   // nearly everyone fails usually has a wrong stored key, and an item that
   // strong and weak students score equally on measures nothing.
-  const analytics = analyseItems(questions, completedAttempts);
+  const localAnalytics = analyseItems(questions, completedAttempts);
+  const analytics =
+    remoteAnalytics && remoteAnalytics.items.length > 0 ? remoteAnalytics : localAnalytics;
   const questionStats = analytics.items.map((item) => ({
     question: questions[item.index],
     totalAnswers: item.answered,
