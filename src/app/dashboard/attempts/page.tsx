@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Award, ChevronDown, ChevronRight, Clock, CheckCircle2, XCircle, History } from "lucide-react";
 import { SkeletonPanel } from "@/components/Skeleton";
 import { QuizViewSwitcher } from "@/components/QuizViewSwitcher";
-import { useResource } from "@/lib/prefetch";
+import { useResource, warmResource } from "@/lib/prefetch";
 
 interface MyAttempt {
   id: string;
@@ -32,6 +32,9 @@ interface ReviewQuestion {
 // score even when answers were stored with stray formatting.
 const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
 
+/** Shared with the dashboard layout's warm-up and the quiz pages. */
+const quizzesResourceKey = "quizzes";
+
 function scoreColor(score: number): string {
   if (score >= 70) return "text-green-600 bg-green-50";
   if (score >= 50) return "text-amber-600 bg-amber-50";
@@ -45,13 +48,15 @@ const attemptsFetcher = async (): Promise<MyAttempt[]> => {
     const data = await res.json();
     const rows: MyAttempt[] = data.attempts || [];
 
-    // Attach quiz titles in one call (shares the cached quizzes resource)
+    // Attach quiz titles from the list the layout already warmed — one shared
+    // request instead of a second fetch of the same data.
     try {
-      const qRes = await fetch("/api/quizzes");
-      const qData = await qRes.json();
-      const titles = new Map<string, string>(
-        (qData.quizzes || []).map((q: { id: string; title: string }) => [q.id, q.title])
-      );
+      const allQuizzes = await warmResource<{ id: string; title: string }[]>("quizzes", async () => {
+        const qRes = await fetch("/api/quizzes");
+        const qData = await qRes.json();
+        return qData.quizzes || [];
+      });
+      const titles = new Map<string, string>(allQuizzes.map((q) => [q.id, q.title]));
       for (const a of rows) a.quiz_title = titles.get(a.quiz_id) || "Untitled quiz";
     } catch { /* titles optional */ }
 
@@ -70,6 +75,18 @@ export default function MyAttemptsPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [reviewData, setReviewData] = useState<Record<string, ReviewQuestion[]>>({});
   const [reviewLoading, setReviewLoading] = useState<string | null>(null);
+
+  // Titles come from the quiz list the layout warms, so an attempt never shows
+  // "Untitled quiz" just because the attempts resource was warmed first.
+  const { data: allQuizzes } = useResource<{ id: string; title: string }[]>(quizzesResourceKey, async () => {
+    const res = await fetch("/api/quizzes");
+    const data = await res.json();
+    return data.quizzes || [];
+  });
+  const quizTitles = useMemo(
+    () => new Map((allQuizzes || []).map((q) => [q.id, q.title])),
+    [allQuizzes]
+  );
 
   useEffect(() => {
     if (warmLoading) return;
@@ -146,7 +163,7 @@ export default function MyAttemptsPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[#333] truncate">
-                      {a.quiz_title || "Untitled quiz"}
+                      {a.quiz_title || quizTitles.get(a.quiz_id) || "Untitled quiz"}
                       {a.status === "timed_out" && (
                         <span className="ml-2 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded align-middle">Timed out — not submitted</span>
                       )}

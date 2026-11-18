@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizzes } from "@/lib/local";
 import { SkeletonText, SkeletonList } from "@/components/Skeleton";
 import { QuizViewSwitcher } from "@/components/QuizViewSwitcher";
@@ -20,56 +19,51 @@ export default function MyQuizzesPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const router = useRouter();
-  const supabase = createClient();
   const confirmDialog = useConfirm();
   const toast = useToast();
 
   useEffect(() => {
-    const fetchQuizzes = async () => {
-      if (isLocalMode()) {
-        // Shared with the layout warm-up: usually already resolved, so the
-        // page paints with content immediately.
-        try {
-          const merged = await warmResource("quizzes", async () => {
-            const res = await fetch("/api/quizzes", { headers: { "x-local-mode": "true" } });
-            if (!res.ok) return getLocalQuizzes();
-            const data = await res.json();
-            const server: Quiz[] = data.quizzes || [];
-            const ids = new Set(server.map((q) => q.id));
-            return [...server, ...getLocalQuizzes().filter((q) => !ids.has(q.id))];
-          });
-          setQuizzes(merged);
-        } catch {
-          setQuizzes(getLocalQuizzes());
-        }
-        try {
-          const data = await warmResource("courses", async () => {
-            const res = await fetch("/api/courses", { headers: { "x-local-mode": "true" } });
-            return res.json().catch(() => ({ courses: [] }));
-          });
-          setCourses(data.courses || []);
-        } catch { /* ignore */ }
-        setLoading(false);
-        return;
-      }
-
-      if (!supabase) { setLoading(false); return; }
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) { router.push("/login"); return; }
-
-      const { data } = await supabase
-        .from("quizzes").select("*").eq("host_id", user.user.id)
-        .order("created_at", { ascending: false });
-
-      if (data) setQuizzes(data);
+    let alive = true;
+    // One warmed request carries both the quizzes and the courses they are
+    // filtered by. The dashboard layout starts it before this page opens, and
+    // the session cookie identifies the caller — the page no longer waits on
+    // auth.getUser() plus two queries in sequence, which is what made switching
+    // to this tab slow.
+    const load = async () => {
       try {
-        const { data: courseData } = await supabase.from("courses").select("*");
-        if (courseData) setCourses(courseData);
-      } catch { /* ignore */ }
-      setLoading(false);
+        const data = await warmResource("my-quizzes", async () => {
+          const res = await fetch("/api/my-quizzes", {
+            headers: isLocalMode() ? { "x-local-mode": "true" } : {},
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || "Please sign in again.");
+          }
+          return (await res.json()) as { quizzes: Quiz[]; courses: Course[] };
+        });
+        if (!alive) return;
+        const server: Quiz[] = data.quizzes || [];
+        const ids = new Set(server.map((q) => q.id));
+        setQuizzes(
+          isLocalMode()
+            ? [...server, ...getLocalQuizzes().filter((q) => !ids.has(q.id))]
+            : server
+        );
+        setCourses(data.courses || []);
+      } catch (error) {
+        if (!alive) return;
+        // Quizzes saved in this browser still show when the server is unreachable.
+        setQuizzes(getLocalQuizzes());
+        if (error instanceof Error && /sign in/i.test(error.message)) router.push("/login");
+      } finally {
+        if (alive) setLoading(false);
+      }
     };
-    fetchQuizzes();
-  }, [supabase, router]);
+    load();
+    return () => {
+      alive = false;
+    };
+  }, [router]);
 
   const copyShareLink = (code: string, id: string) => {
     navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}`);
@@ -100,6 +94,7 @@ export default function MyQuizzesPage() {
         removeLocalQuiz(quiz.id);
         setQuizzes((prev) => prev.filter((q) => q.id !== quiz.id));
         invalidateResource("quizzes");
+        invalidateResource("my-quizzes");
         toast.success(`"${quiz.title}" removed from this browser`);
         return;
       }
@@ -108,8 +103,9 @@ export default function MyQuizzesPage() {
         return;
       }
       setQuizzes((prev) => prev.filter((q) => q.id !== quiz.id));
-      // Keep the warmed list in step, or a later visit resurrects the row.
+      // Keep the warmed lists in step, or a later visit resurrects the row.
       invalidateResource("quizzes");
+      invalidateResource("my-quizzes");
       // Confirm the quiz is really gone before claiming it is. A success
       // response that deleted nothing is how a removed quiz came back.
       let stillThere = false;

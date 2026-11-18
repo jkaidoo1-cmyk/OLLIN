@@ -458,6 +458,7 @@ export default function CreateQuizPage() {
         // quiz published now stayed invisible on My Quizzes until a hard
         // reload — which looks exactly like "the quiz didn't save".
         invalidateResource("quizzes");
+        invalidateResource("my-quizzes");
         // Notify quiz creator
         const { addNotification } = await import("@/lib/local");
         addNotification(
@@ -523,6 +524,7 @@ export default function CreateQuizPage() {
       }
 
       invalidateResource("quizzes");
+      invalidateResource("my-quizzes");
       setGeneratedCode(shareCode);
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : "Failed to publish quiz");

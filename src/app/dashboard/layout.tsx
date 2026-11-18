@@ -109,6 +109,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           return data.courses || [];
         } catch { return []; }
       }],
+      ["my-quizzes", async () => {
+        try {
+          const res = await fetch("/api/my-quizzes");
+          if (!res.ok) return { quizzes: [], courses: [] };
+          return await res.json();
+        } catch { return { quizzes: [], courses: [] }; }
+      }],
       ["my-attempts", async () => {
         try {
           const res = await fetch("/api/attempts?mine=true");
