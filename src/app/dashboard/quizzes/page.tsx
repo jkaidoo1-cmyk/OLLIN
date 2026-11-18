@@ -15,7 +15,7 @@ import { useConfirm, useToast } from "@/components/ui/toast";
 export default function MyQuizzesPage() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "draft" | "published" | "completed">("all");
+  const [filter, setFilter] = useState<"all" | "draft" | "published">("all");
   const [courses, setCourses] = useState<Course[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const router = useRouter();
@@ -128,7 +128,6 @@ export default function MyQuizzesPage() {
   const statusStyles: Record<string, string> = {
     published: "badge badge-success",
     active: "badge badge-primary",
-    completed: "badge badge-slate",
     draft: "badge badge-warning",
     archived: "badge badge-slate",
   };
@@ -159,7 +158,7 @@ export default function MyQuizzesPage() {
 
       {/* Filters */}
       <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1">
-        {(["all", "draft", "published", "completed"] as const).map((f) => (
+        {(["all", "draft", "published"] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
