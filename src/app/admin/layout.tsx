@@ -58,6 +58,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     // signed-in browser behind.
     try {
       await fetch("/api/auth/logout", { method: "POST" });
+      // Leave nothing cached that belongs to this account.
+      const { clearResourceCache } = await import("@/lib/prefetch");
+      clearResourceCache();
     } catch { /* offline — nothing else stays behind either */ }
     if (isLocalMode()) disableLocalMode();
     clearLocalUser();

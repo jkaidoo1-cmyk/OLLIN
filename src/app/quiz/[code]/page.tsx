@@ -360,6 +360,11 @@ export default function QuizPage() {
 
       score = data.attempt?.score_percentage ?? 0;
       correct = data.attempt?.correct_answers ?? 0;
+      // My attempts is cached for the tab; this attempt must appear in it
+      // immediately, so the stale list is dropped before the student navigates.
+      import("@/lib/prefetch")
+        .then(({ invalidateResource }) => invalidateResource("my-attempts"))
+        .catch(() => {});
 
       // Build the review from server-graded answers + answer key fetched
       // AFTER grading (the graded response includes the correct answers).

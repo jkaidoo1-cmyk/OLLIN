@@ -167,6 +167,9 @@ export default function ProfilePage() {
     // extras that used to be left behind.
     try {
       await fetch("/api/auth/logout", { method: "POST" });
+      // Leave nothing cached that belongs to this account.
+      const { clearResourceCache } = await import("@/lib/prefetch");
+      clearResourceCache();
     } catch { /* offline — the cookie may survive, but nothing else will */ }
     if (isLocalMode()) disableLocalMode();
     clearLocalUser();

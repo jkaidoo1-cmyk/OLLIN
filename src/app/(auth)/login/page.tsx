@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { enableLocalMode } from "@/lib/local";
+import { clearResourceCache } from "@/lib/prefetch";
 import { BrandMark, BrandSpinner } from "@/components/Logo";
 import { Eye, EyeOff } from "lucide-react";
 
@@ -47,6 +48,11 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
+
+      // The warm cache is keyed by resource, not by user: drop whatever the
+      // previous account on this tab left behind before this session starts
+      // filling it.
+      clearResourceCache();
 
       if (data.local) {
         enableLocalMode(data.user);
