@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ToastProvider, ConfirmProvider } from "@/components/ui/toast";
+import { PerfProbe } from "@/components/PerfProbe";
 
 export const metadata: Metadata = {
   title: "OLLIN – Quiz Platform",
@@ -32,6 +33,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body className="min-h-full flex flex-col antialiased relative">
+        <PerfProbe />
         <ToastProvider>
           <ConfirmProvider>
             <div className="relative z-10 flex flex-col min-h-full">{children}</div>

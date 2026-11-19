@@ -24,6 +24,45 @@ const answerText = (value: string | null | undefined): string => {
   return String(value);
 };
 
+/**
+ * The countdown owns its own ticking state. Because the page never re-renders
+ * on a tick, the question list and its figures stay untouched for the whole
+ * quiz — the previous design re-rendered every card once a second.
+ */
+function Countdown({ seconds, onExpire }: { seconds: number; onExpire: () => void }) {
+  const [left, setLeft] = useState(seconds);
+  // The callback is read through a ref inside the interval, so a new identity
+  // on every answer never restarts the countdown.
+  const expireRef = useRef(onExpire);
+  useEffect(() => {
+    expireRef.current = onExpire;
+  });
+
+  useEffect(() => {
+    // Deadline, not a decrement: a throttled background tab would otherwise
+    // drift, and a resumed attempt must keep its real remaining time.
+    const end = Date.now() + seconds * 1000;
+    let fired = false;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+      setLeft(remaining);
+      if (remaining <= 0 && !fired) {
+        fired = true;
+        expireRef.current();
+      }
+    };
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [seconds]);
+
+  return (
+    <div className="flex items-center gap-1.5 text-sm">
+      <Clock className={`w-4 h-4 ${left < 60 ? "animate-pulse" : ""}`} />
+      <span className={left < 60 ? "text-red-600 font-bold" : ""}>{formatTime(left)}</span>
+    </div>
+  );
+}
+
 export default function QuizPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -51,7 +90,12 @@ export default function QuizPage() {
 
 
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  // The countdown lives inside <Countdown>, which owns its own ticking state.
+  // Keeping it here re-rendered every question card (and its figure) once a
+  // second for the whole quiz. Only the deadline is needed here, and only to
+  // report elapsed time when the student hands in.
+  const [initialSeconds, setInitialSeconds] = useState<number | null>(null);
+  const deadlineRef = useRef<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // Terminal submit rejection (time up / closed / duplicate) — shows a
   // resolution screen; the quiz UI is no longer reachable or retryable.
@@ -65,7 +109,6 @@ export default function QuizPage() {
     detailed: Array<{ question: Question; selected: string | null; isCorrect: boolean }>;
   } | null>(null);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoJoiningRef = useRef(false);
   // Server-trusted attempt start: the moment the quiz UI was joined.
   const joinedAtRef = useRef<string | null>(null);
@@ -224,7 +267,7 @@ export default function QuizPage() {
   }, [code, supabase]);
 
   useEffect(() => {
-    if (joined && quiz?.time_limit_minutes && timeLeft === null) {
+    if (joined && quiz?.time_limit_minutes && deadlineRef.current === null) {
       // Resume-aware: if we hold a server attempt with a real start time
       // (fresh join OR a resumed attempt), remaining time is measured from
       // THAT moment — a refreshed page never gets fresh time back.
@@ -234,24 +277,40 @@ export default function QuizPage() {
       if (!Number.isNaN(startedMs) && startedMs > 0) {
         remaining = Math.max(0, Math.floor(remaining - (Date.now() - startedMs) / 1000));
       }
-      setTimeLeft(remaining);
+      deadlineRef.current = Date.now() + remaining * 1000;
+      setInitialSeconds(remaining);
     }
-  }, [joined, quiz, timeLeft]);
+  }, [joined, quiz, attempt]);
 
+  // Answers are kept for refresh-recovery. Writing the whole map on every
+  // keystroke is a synchronous storage write per character — felt as a lagging
+  // input on a phone — so writes are debounced, with a final flush on unmount
+  // that covers closing the tab mid-edit.
+  const saveStateRef = useRef<{ key: string; answers: Record<string, string>; skip: boolean }>({
+    key: "",
+    answers: {},
+    skip: false,
+  });
   useEffect(() => {
-    if (timeLeft !== null && timeLeft > 0 && !submitted) {
-      timerRef.current = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
-      return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-    }
-    if (timeLeft === 0 && !submitted) handleSubmit();
-  }, [timeLeft, submitted]);
-
+    saveStateRef.current = {
+      key: quiz ? `quiz_${quiz.id}_answers` : "",
+      answers,
+      skip: submitted,
+    };
+  }, [quiz, answers, submitted]);
   useEffect(() => {
-    if (joined && quiz) {
-      const key = `quiz_${quiz.id}_answers`;
-      localStorage.setItem(key, JSON.stringify(answers));
-    }
+    if (!joined || !quiz) return;
+    const key = `quiz_${quiz.id}_answers`;
+    const id = setTimeout(() => {
+      try { localStorage.setItem(key, JSON.stringify(answers)); } catch { /* storage full */ }
+    }, 400);
+    return () => clearTimeout(id);
   }, [answers, joined, quiz]);
+  useEffect(() => () => {
+    const { key, answers: last, skip } = saveStateRef.current;
+    if (!key || skip || !Object.keys(last).length) return;
+    try { localStorage.setItem(key, JSON.stringify(last)); } catch { /* storage full */ }
+  }, []);
 
   useEffect(() => {
     if (joined && quiz) {
@@ -314,7 +373,6 @@ export default function QuizPage() {
   const handleSubmit = useCallback(async () => {
     if (submitting || submitted || !quiz || !questions.length) return;
     setSubmitting(true);
-    if (timerRef.current) clearTimeout(timerRef.current);
 
     // ── Server-side grading ────────────────────────────────
     // Correct answers never reach the browser, so the server computes the
@@ -329,9 +387,14 @@ export default function QuizPage() {
     // this as when the quiz was handed in, so a slow connection doesn't turn an
     // on-time submission into a late one.
     const submittedAt = new Date().toISOString();
-    const timeTaken = quiz.time_limit_minutes
-      ? quiz.time_limit_minutes * 60 - (timeLeft || 0)
-      : null;
+    const timeTaken =
+      quiz.time_limit_minutes && deadlineRef.current
+        ? Math.max(
+            0,
+            quiz.time_limit_minutes * 60 -
+              Math.round((deadlineRef.current - Date.now()) / 1000)
+          )
+        : null;
 
     let score = 0;
     let correct = 0;
@@ -490,7 +553,7 @@ export default function QuizPage() {
         }
       }
     } catch { /* leaderboard optional */ }
-  }, [submitting, submitted, quiz, questions, answers, attempt, timeLeft, isGuest, participantName, supabase, currentUser]);
+  }, [submitting, submitted, quiz, questions, answers, attempt, isGuest, participantName, supabase, currentUser]);
 
   // Auto-join for guests with a URL name happens inside the entry check.
   // Logged-in users never see a separate auto-join effect — the check itself
@@ -835,13 +898,8 @@ export default function QuizPage() {
         <div className="app-column h-14 flex items-center justify-between">
           <span className="text-sm font-medium truncate">{quiz!.title}</span>
           <div className="flex items-center gap-3">
-            {timeLeft !== null && (
-              <div className="flex items-center gap-1.5 text-sm">
-                <Clock className={`w-4 h-4 ${timeLeft < 60 ? "animate-pulse" : ""}`} />
-                <span className={timeLeft < 60 ? "text-red-600 font-bold" : ""}>
-                  {formatTime(timeLeft)}
-                </span>
-              </div>
+            {initialSeconds !== null && (
+              <Countdown seconds={initialSeconds} onExpire={handleSubmit} />
             )}
             <span className="text-xs text-[var(--ink-muted)] bg-[var(--surface-2)] border border-[var(--border)] px-2 py-0.5 rounded">
               {answeredCount}/{questions.length} answered
