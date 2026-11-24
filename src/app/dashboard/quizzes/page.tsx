@@ -145,7 +145,7 @@ export default function MyQuizzesPage() {
 
   return (
     <div className="pt-2">
-      <div className="mb-3">
+      <div className="flex justify-end mb-3">
         <QuizViewSwitcher />
       </div>
       <div className="mb-5">

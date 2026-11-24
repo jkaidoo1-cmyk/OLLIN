@@ -21,7 +21,7 @@ export function QuizViewSwitcher() {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Quiz views" className="grid grid-cols-3 gap-2">
+    <nav aria-label="Quiz views" className="inline-flex flex-wrap justify-end gap-1.5">
       {VIEWS.map((view) => {
         const active = view.href === pathname;
         return (
@@ -29,7 +29,7 @@ export function QuizViewSwitcher() {
             key={view.href}
             href={view.href}
             aria-current={active ? "page" : undefined}
-            className={`flex items-center justify-center rounded-full border px-2 py-2 text-xs font-semibold no-underline transition-colors ${
+            className={`flex items-center justify-center rounded-full border px-2.5 py-1.5 text-xs font-semibold no-underline transition-colors ${
               active
                 ? "bg-[var(--primary-soft)] border-[#cfe6d8] text-[var(--primary-strong)]"
                 : "bg-[var(--surface)] border-[var(--border-strong)] text-[var(--ink-muted)] hover:bg-[var(--surface-2)]"

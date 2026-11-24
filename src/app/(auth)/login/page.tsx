@@ -84,7 +84,7 @@ export default function LoginPage() {
             <BrandMark />
             <span className="brand-word">Ollin</span>
           </Link>
-          <Link href="/join" className="section-link">Join a quiz</Link>
+          <Link href="/signup" className="section-link">Sign up</Link>
         </div>
       </header>
 
