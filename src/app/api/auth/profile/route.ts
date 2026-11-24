@@ -31,8 +31,11 @@ export async function PATCH(request: NextRequest) {
   // stays valid, other devices keep working until their cookie expires.
   if (body.new_password !== undefined) {
     const newPassword = String(body.new_password);
-    if (newPassword.length < 6) {
-      return NextResponse.json({ error: "New password must be at least 6 characters" }, { status: 400 });
+    // A change screen with no rules would let anyone step around signup's.
+    const { passwordProblem } = await import("@/lib/password-policy");
+    const weakPassword = passwordProblem(newPassword, session.email);
+    if (weakPassword) {
+      return NextResponse.json({ error: weakPassword }, { status: 400 });
     }
 
     // Try Supabase first (user may be a Supabase-created account)

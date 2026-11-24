@@ -9,9 +9,9 @@ import { issueSessionCookie } from "@/lib/session";
 import { checkThrottle } from "@/lib/rate-limit";
 import { serverError } from "@/lib/api-errors";
 import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
+import { passwordProblem } from "@/lib/password-policy";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_PASSWORD_LENGTH = 8;
 
 function isEmailTaken(users: { email?: string }[], email: string) {
   const normalized = email.toLowerCase().trim();
@@ -47,11 +47,10 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      return NextResponse.json(
-        { error: `Use at least ${MIN_PASSWORD_LENGTH} characters for your password.` },
-        { status: 400 }
-      );
+    // Same policy the form runs, re-checked here because the endpoint is public.
+    const weakPassword = passwordProblem(password, email);
+    if (weakPassword) {
+      return NextResponse.json({ error: weakPassword }, { status: 400 });
     }
 
     const displayName = fullName || email.split("@")[0];

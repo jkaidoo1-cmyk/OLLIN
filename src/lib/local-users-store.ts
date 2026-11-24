@@ -64,9 +64,8 @@ function getUsersPath() {
 }
 
 /**
- * Seed accounts carry plaintext passwords; hashing happens lazily on first
- * verify (see verifyPassword's migration path) so serverless cold starts
- * don't pay the scrypt cost for accounts nobody is logging into.
+ * Seed accounts are hashed before they are ever written, so the user store
+ * never holds a password in clear text — not even for the first login.
  */
 function seedDefaults(): StoredLocalUser[] {
   return DEFAULT_LOCAL_USERS.map((u) => ({
@@ -74,7 +73,7 @@ function seedDefaults(): StoredLocalUser[] {
     email: u.email,
     full_name: u.full_name,
     role: u.role,
-    password: u.password, // hashed on first successful verify
+    password_hash: hashPassword(u.password),
     program_id: null,
     current_year: u.current_year,
     created_at: new Date(Date.now() - 86400000 * 30).toISOString(),

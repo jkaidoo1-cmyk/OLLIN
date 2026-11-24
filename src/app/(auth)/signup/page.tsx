@@ -8,6 +8,7 @@ import { clearResourceCache } from "@/lib/prefetch";
 import { clearOfflineData } from "@/lib/offline";
 import { BrandMark, BrandSpinner } from "@/components/Logo";
 import { Eye, EyeOff } from "lucide-react";
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT, passwordProblem } from "@/lib/password-policy";
 
 export default function SignupPage() {
   const [fullName, setFullName] = useState("");
@@ -23,8 +24,9 @@ export default function SignupPage() {
     e.preventDefault();
     setError("");
 
-    if (password.length < 8) {
-      setError("Use at least 8 characters for your password.");
+    const weakPassword = passwordProblem(password, email);
+    if (weakPassword) {
+      setError(weakPassword);
       return;
     }
     if (password !== confirmPassword) {
@@ -77,7 +79,7 @@ export default function SignupPage() {
 
       <main className="app-column py-8">
         <h1 className="greeting">Create your account</h1>
-        <p className="greeting-sub mb-6">Sign up to build and track quizzes.</p>
+        <p className="greeting-sub mb-6">Sign up to get access to quizzes.</p>
 
         {error && (
           <div className="text-sm px-4 py-3 bg-[#fcedec] border border-[#f3d2ce] text-[#a32a20] rounded-2xl mb-5">
@@ -126,8 +128,8 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={8}
-                placeholder="At least 8 characters"
+                minLength={MIN_PASSWORD_LENGTH}
+                placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
                 className="input-field pr-11"
               />
               <button
@@ -139,6 +141,7 @@ export default function SignupPage() {
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+            <p className="text-[11px] text-[var(--ink-faint)] mt-1.5">{PASSWORD_HINT}</p>
           </div>
 
           <div>
@@ -151,7 +154,7 @@ export default function SignupPage() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              minLength={8}
+              minLength={MIN_PASSWORD_LENGTH}
               placeholder="Repeat your password"
               className="input-field"
             />
