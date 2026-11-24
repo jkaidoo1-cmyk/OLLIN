@@ -10,7 +10,7 @@ import { getResource, invalidateResource } from "@/lib/prefetch";
 import { loadMyQuizzes } from "@/lib/quizzes-sync";
 import { Quiz, Course } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
-import { Plus, Copy, CheckCircle, ExternalLink, Pencil, ClipboardList, Trash2 } from "lucide-react";
+import { Copy, CheckCircle, ExternalLink, Pencil, ClipboardList, Trash2 } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
 
 export default function MyQuizzesPage() {
@@ -145,17 +145,12 @@ export default function MyQuizzesPage() {
 
   return (
     <div className="pt-2">
-      <div className="flex justify-end mb-2">
+      <div className="mb-3">
         <QuizViewSwitcher />
       </div>
-      <div className="flex items-start justify-between gap-3 mb-5">
-        <div>
-          <h1 className="greeting">My quizzes</h1>
-          <p className="greeting-sub">Everything you have created.</p>
-        </div>
-        <Link href="/dashboard/create" className="btn-primary text-sm shrink-0">
-          <Plus className="w-4 h-4" /> New
-        </Link>
+      <div className="mb-5">
+        <h1 className="greeting">My quizzes</h1>
+        <p className="greeting-sub">Everything you have created.</p>
       </div>
 
       {/* Filters */}
