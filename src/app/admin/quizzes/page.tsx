@@ -228,19 +228,19 @@ export default function AdminQuizzesPage() {
             return (
               <div key={quiz.id} className="bg-white border border-[#e0e0e0] rounded-lg overflow-hidden">
                 <div
-                  className="flex items-center justify-between gap-3 p-4 cursor-pointer hover:bg-[#f8f8f8] transition-colors"
+                  className="flex items-center justify-between gap-2 sm:gap-3 p-3 sm:p-4 cursor-pointer hover:bg-[#f8f8f8] transition-colors"
                   onClick={() => toggleExpand(quiz.id)}
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[#333] truncate">{quiz.title}</p>
-                    <div className="flex items-center gap-3 mt-1">
+                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
                       <span className="text-xs text-[#999] font-mono whitespace-nowrap">{quiz.share_code}</span>
-                      <span className="text-xs text-[#999] flex items-center gap-1">
+                      <span className="text-xs text-[#999] flex items-center gap-1 whitespace-nowrap">
                         <BookOpen className="w-3 h-3" />{" "}
                         {questions.length > 0 ? `${questions.length} questions` : "…"}
                       </span>
                       {quiz.time_limit_minutes && (
-                        <span className="text-xs text-[#999] flex items-center gap-1">
+                        <span className="text-xs text-[#999] flex items-center gap-1 whitespace-nowrap">
                           <Clock className="w-3 h-3" /> {quiz.time_limit_minutes}m
                         </span>
                       )}
@@ -251,8 +251,8 @@ export default function AdminQuizzesPage() {
                           <span
                             className={
                               inTest > 0
-                                ? "text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200"
-                                : "text-[11px] px-2 py-0.5 rounded-full bg-[#f4f4f4] text-[#888] border border-[#e5e5e5]"
+                                ? "text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 whitespace-nowrap"
+                                : "text-[11px] px-2 py-0.5 rounded-full bg-[#f4f4f4] text-[#888] border border-[#e5e5e5] whitespace-nowrap"
                             }
                           >
                             {inTest > 0 ? `In Test quizzes (${inTest})` : "Not in Test quizzes"}
@@ -261,8 +261,8 @@ export default function AdminQuizzesPage() {
                       })()}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className={`badge ${quiz.status === "published" ? "badge-success" : quiz.status === "draft" ? "badge-warning" : "badge-slate"}`}>
+                  <div className="flex items-center gap-0.5 sm:gap-2 flex-shrink-0">
+                    <span className={`badge whitespace-nowrap ${quiz.status === "published" ? "badge-success" : quiz.status === "draft" ? "badge-warning" : "badge-slate"}`}>
                       {quiz.status}
                     </span>
                     <span className="text-xs text-[#999] hidden sm:inline">
@@ -310,12 +310,11 @@ export default function AdminQuizzesPage() {
                     empty state rather than silently doing nothing. */}
                 {pickerId === quiz.id && (
                   <div className="border-t border-[#e0e0e0] bg-[#f8f8f8] px-4 py-3">
-                    <p className="text-xs font-semibold text-[#666] mb-1">Add to Test quizzes</p>
-                    <p className="text-[10px] text-[#999] mb-2">
-                      {courses.length === 0
-                        ? "No courses yet — add one under Courses, then come back here."
-                        : "Tap a course to add this quiz to Test quizzes for those students; tap again to remove it."}
-                    </p>
+                    {courses.length === 0 && (
+                      <p className="text-[10px] text-[#999] mb-2">
+                        No courses yet — add one under Courses, then come back here.
+                      </p>
+                    )}
                     <div className="flex flex-wrap gap-2">
                       {courses.map((course: any) => {
                         const saved = isQuizSavedToCourse(quiz.id, course.id);
