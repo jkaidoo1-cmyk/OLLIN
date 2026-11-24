@@ -1,0 +1,186 @@
+import { NextRequest, NextResponse } from "next/server";
+import {
+  readLocalUsers,
+  writeLocalUsers,
+  publicUser,
+  hashPassword,
+} from "@/lib/local-users-store";
+import { issueSessionCookie } from "@/lib/session";
+import { checkThrottle } from "@/lib/rate-limit";
+import { serverError } from "@/lib/api-errors";
+import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
+
+function isEmailTaken(users: { email?: string }[], email: string) {
+  const normalized = email.toLowerCase().trim();
+  return users.some((u) => u.email?.toLowerCase().trim() === normalized);
+}
+
+// POST — self-service sign up (creates a student account, then signs them in)
+export async function POST(request: NextRequest) {
+  try {
+    const limit = checkThrottle(request, "signup", 5, 60_000);
+    if (limit.blocked) {
+      return NextResponse.json(
+        { error: limit.message },
+        { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+      );
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const email = String(body.email || "").trim().toLowerCase();
+    const password = String(body.password || "");
+    const fullName = String(body.full_name || "").trim();
+    const local = isLocalRequest(request);
+
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: "Email and password are required." },
+        { status: 400 }
+      );
+    }
+    if (!EMAIL_RE.test(email)) {
+      return NextResponse.json(
+        { error: "Enter a valid email address." },
+        { status: 400 }
+      );
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      return NextResponse.json(
+        { error: `Use at least ${MIN_PASSWORD_LENGTH} characters for your password.` },
+        { status: 400 }
+      );
+    }
+
+    const displayName = fullName || email.split("@")[0];
+
+    // Try the database first on hosted deployments, the same way admin-created
+    // accounts do. Roles are always forced to "student" here — signup must
+    // never be able to grant admin rights.
+    if (!local) {
+      const { createAdminClient } = await import("@/lib/supabase/server");
+      const adminSupabase = await createAdminClient();
+
+      if (adminSupabase) {
+        const { data: sbUser, error: createError } =
+          await adminSupabase.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: {
+              full_name: displayName,
+              role: "student",
+              current_year: 1,
+            },
+          });
+
+        if (!createError && sbUser?.user) {
+          const user = {
+            id: sbUser.user.id,
+            email: sbUser.user.email || email,
+            full_name: displayName,
+            role: "student" as const,
+            program_id: null,
+            current_year: 1,
+            created_at: new Date().toISOString(),
+          };
+          // No local flag: this is a database account, like a Supabase login.
+          const res = NextResponse.json({
+            user,
+            message: "Account created",
+          });
+          res.headers.append(
+            "Set-Cookie",
+            await issueSessionCookie({
+              id: user.id,
+              email: user.email,
+              role: user.role,
+            })
+          );
+          return res;
+        }
+
+        if (createError && /already|exist|duplicate/i.test(createError.message || "")) {
+          return NextResponse.json(
+            { error: "An account with this email already exists." },
+            { status: 409 }
+          );
+        }
+
+        if (isEphemeralHost()) {
+          console.error("[auth.signup] database signup failed", createError?.message);
+          return NextResponse.json(
+            {
+              error: "We couldn't create your account right now. Please try again shortly.",
+              code: "service_unavailable",
+            },
+            { status: 503 }
+          );
+        }
+      } else if (isEphemeralHost()) {
+        console.error("[auth.signup] no account store configured on this host");
+        return NextResponse.json(
+          {
+            error: "We couldn't create your account right now. Please try again shortly.",
+            code: "service_unavailable",
+          },
+          { status: 503 }
+        );
+      }
+    }
+
+    // File-backed store: the same one admin-created accounts use, so signups
+    // work on the local machine (and any deliberately file-backed host).
+    const users = readLocalUsers();
+    if (isEmailTaken(users, email)) {
+      return NextResponse.json(
+        { error: "An account with this email already exists." },
+        { status: 409 }
+      );
+    }
+
+    const newUser = {
+      id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      email,
+      full_name: displayName,
+      role: "student" as const,
+      password_hash: hashPassword(password),
+      program_id: null,
+      current_year: 1,
+      created_at: new Date().toISOString(),
+    };
+    users.push(newUser);
+
+    if (!writeLocalUsers(users)) {
+      return NextResponse.json(
+        {
+          error:
+            "Could not save your account — the server could not write to its user store, so nothing was created. Please try again later.",
+          not_persisted: true,
+        },
+        { status: 507 }
+      );
+    }
+
+    const res = NextResponse.json({
+      user: publicUser(newUser),
+      local: true,
+      message: "Account created",
+    });
+    res.headers.append(
+      "Set-Cookie",
+      await issueSessionCookie({
+        id: newUser.id,
+        email: newUser.email,
+        role: newUser.role,
+      })
+    );
+    return res;
+  } catch (error) {
+    return serverError("auth.signup", error, {
+      message: "We couldn't create your account. Please try again in a moment.",
+    });
+  }
+}

@@ -1,0 +1,176 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { enableLocalMode } from "@/lib/local";
+import { clearResourceCache } from "@/lib/prefetch";
+import { clearOfflineData } from "@/lib/offline";
+import { BrandMark, BrandSpinner } from "@/components/Logo";
+import { Eye, EyeOff } from "lucide-react";
+
+export default function SignupPage() {
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const router = useRouter();
+
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    if (password.length < 8) {
+      setError("Use at least 8 characters for your password.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, full_name: fullName }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.user) {
+        setError(data.error || "Could not create your account.");
+        setLoading(false);
+        return;
+      }
+
+      // Same cache reset as login: resource caches are per origin, not per user.
+      clearResourceCache();
+      void clearOfflineData();
+      if (data.local) enableLocalMode(data.user);
+
+      router.push(data.user.role === "admin" ? "/admin" : "/dashboard");
+      router.refresh();
+    } catch {
+      setError("Unable to reach the server. Please try again.");
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen">
+      <header className="app-topbar">
+        <div className="app-column h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2 no-underline">
+            <BrandMark />
+            <span className="brand-word">Ollin</span>
+          </Link>
+          <Link href="/login" className="section-link">
+            Log in
+          </Link>
+        </div>
+      </header>
+
+      <main className="app-column py-8">
+        <h1 className="greeting">Create your account</h1>
+        <p className="greeting-sub mb-6">Sign up to build and track quizzes.</p>
+
+        {error && (
+          <div className="text-sm px-4 py-3 bg-[#fcedec] border border-[#f3d2ce] text-[#a32a20] rounded-2xl mb-5">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSignup} className="space-y-4">
+          <div>
+            <label htmlFor="name-input" className="block text-xs font-semibold text-[var(--ink-soft)] mb-1.5">
+              Full name
+            </label>
+            <input
+              id="name-input"
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Your name"
+              className="input-field"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="signup-email-input" className="block text-xs font-semibold text-[var(--ink-soft)] mb-1.5">
+              Email
+            </label>
+            <input
+              id="signup-email-input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="you@university.edu"
+              className="input-field"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="signup-password-input" className="block text-xs font-semibold text-[var(--ink-soft)] mb-1.5">
+              Password
+            </label>
+            <div className="relative">
+              <input
+                id="signup-password-input"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+                placeholder="At least 8 characters"
+                className="input-field pr-11"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--ink-faint)] hover:text-[var(--ink-soft)]"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="signup-confirm-input" className="block text-xs font-semibold text-[var(--ink-soft)] mb-1.5">
+              Confirm password
+            </label>
+            <input
+              id="signup-confirm-input"
+              type={showPassword ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              minLength={8}
+              placeholder="Repeat your password"
+              className="input-field"
+            />
+          </div>
+
+          <button id="signup-submit-btn" type="submit" disabled={loading} className="btn-primary w-full">
+            {loading ? (
+              <><BrandSpinner className="w-4 h-4" /> Creating account…</>
+            ) : "Create account"}
+          </button>
+        </form>
+
+        <p className="text-center text-xs text-[var(--ink-faint)] mt-5">
+          Already have an account?{" "}
+          <Link href="/login" className="text-[var(--primary)] font-semibold">
+            Log in
+          </Link>
+        </p>
+      </main>
+    </div>
+  );
+}

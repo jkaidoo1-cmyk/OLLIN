@@ -146,6 +146,13 @@ export default function LoginPage() {
           </button>
         </form>
 
+        <p className="text-center text-xs text-[var(--ink-faint)] mt-5">
+          New to Ollin?{" "}
+          <Link href="/signup" className="text-[var(--primary)] font-semibold">
+            Create an account
+          </Link>
+        </p>
+
         {/* Forgot password — requests land in the admin's inbox */}
         <div className="mt-5">
           {!fpOpen ? (
