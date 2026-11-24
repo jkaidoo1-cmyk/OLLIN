@@ -211,14 +211,14 @@ export default function TestQuizzesPage() {
 
   return (
     <div className="pt-2">
-      <div className="flex justify-end mb-3">
+      <div className="flex items-start justify-between gap-3 mb-5">
+        <div className="min-w-0">
+          <h1 className="greeting">Test quizzes</h1>
+          <p className="greeting-sub">
+            Take quizzes available in your courses.
+          </p>
+        </div>
         <QuizViewSwitcher />
-      </div>
-      <div className="mb-5">
-        <h1 className="greeting">Test quizzes</h1>
-        <p className="greeting-sub">
-          Take quizzes available in your courses.
-        </p>
       </div>
 
       {loading ? (
