@@ -167,9 +167,12 @@ export default function ProfilePage() {
     // extras that used to be left behind.
     try {
       await fetch("/api/auth/logout", { method: "POST" });
-      // Leave nothing cached that belongs to this account.
+      // Leave nothing cached that belongs to this account — including the
+      // service worker's offline copies of this student's quizzes and attempts.
       const { clearResourceCache } = await import("@/lib/prefetch");
       clearResourceCache();
+      const { clearOfflineData } = await import("@/lib/offline");
+      await clearOfflineData();
     } catch { /* offline — the cookie may survive, but nothing else will */ }
     if (isLocalMode()) disableLocalMode();
     clearLocalUser();

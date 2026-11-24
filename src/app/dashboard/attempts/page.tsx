@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Award, ChevronDown, ChevronRight, Clock, CheckCircle2, XCircle, History } from "lucide-react";
 import { SkeletonPanel } from "@/components/Skeleton";
 import { QuizViewSwitcher } from "@/components/QuizViewSwitcher";
-import { useResource, warmResource } from "@/lib/prefetch";
+import { useResource } from "@/lib/prefetch";
+import { loadQuizzes } from "@/lib/quizzes-sync";
+import { Quiz } from "@/lib/types";
+import { useOffline } from "@/lib/use-offline";
 
 interface MyAttempt {
   id: string;
@@ -49,13 +52,9 @@ const attemptsFetcher = async (): Promise<MyAttempt[]> => {
     const rows: MyAttempt[] = data.attempts || [];
 
     // Attach quiz titles from the list the layout already warmed — one shared
-    // request instead of a second fetch of the same data.
+    // cached list, delta refreshed, instead of a second full download.
     try {
-      const allQuizzes = await warmResource<{ id: string; title: string }[]>("quizzes", async () => {
-        const qRes = await fetch("/api/quizzes");
-        const qData = await qRes.json();
-        return qData.quizzes || [];
-      });
+      const allQuizzes = await loadQuizzes();
       const titles = new Map<string, string>(allQuizzes.map((q) => [q.id, q.title]));
       for (const a of rows) a.quiz_title = titles.get(a.quiz_id) || "Untitled quiz";
     } catch { /* titles optional */ }
@@ -75,14 +74,12 @@ export default function MyAttemptsPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [reviewData, setReviewData] = useState<Record<string, ReviewQuestion[]>>({});
   const [reviewLoading, setReviewLoading] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<Record<string, string>>({});
+  const offline = useOffline();
 
   // Titles come from the quiz list the layout warms, so an attempt never shows
   // "Untitled quiz" just because the attempts resource was warmed first.
-  const { data: allQuizzes } = useResource<{ id: string; title: string }[]>(quizzesResourceKey, async () => {
-    const res = await fetch("/api/quizzes");
-    const data = await res.json();
-    return data.quizzes || [];
-  });
+  const { data: allQuizzes } = useResource<Quiz[]>(quizzesResourceKey, async () => loadQuizzes());
   const quizTitles = useMemo(
     () => new Map((allQuizzes || []).map((q) => [q.id, q.title])),
     [allQuizzes]
@@ -97,13 +94,22 @@ export default function MyAttemptsPage() {
   const loadReview = async (attempt: MyAttempt) => {
     if (reviewData[attempt.id] || !attempt.answers) return;
     setReviewLoading(attempt.id);
+    setReviewError((prev) => ({ ...prev, [attempt.id]: "" }));
     try {
       // Owner-scoped endpoint returns questions WITH correct answers
       const res = await fetch(`/api/attempts/${attempt.id}/review`);
       const data = await res.json();
       setReviewData((prev) => ({ ...prev, [attempt.id]: data.questions || [] }));
     } catch {
-      setReviewData((prev) => ({ ...prev, [attempt.id]: [] }));
+      // Offline and this review was never cached: say why instead of claiming
+      // the quiz's questions are gone. Reopening the attempt retries.
+      setReviewError((prev) => ({
+        ...prev,
+        [attempt.id]:
+          navigator.onLine === false
+            ? "You're offline and this review wasn't saved on this device. Open it once while connected and it will be available offline."
+            : "We couldn't load this review. Check your connection and try again.",
+      }));
     } finally {
       setReviewLoading(null);
     }
@@ -137,9 +143,13 @@ export default function MyAttemptsPage() {
           <span className="tile-icon mx-auto mb-3">
             <History className="w-5 h-5" />
           </span>
-          <p className="text-sm font-bold text-[var(--ink)]">No attempts yet</p>
+          <p className="text-sm font-bold text-[var(--ink)]">
+            {offline ? "No attempts saved offline" : "No attempts yet"}
+          </p>
           <p className="text-xs text-[var(--ink-muted)] mt-1 max-w-xs mx-auto">
-            Quizzes you take — from Test quizzes or a shared link — will appear here.
+            {offline
+              ? "Open this page once while connected and your attempts will stay available here."
+              : "Quizzes you take — from Test quizzes or a shared link — will appear here."}
           </p>
         </div>
       ) : (
@@ -202,6 +212,8 @@ export default function MyAttemptsPage() {
                       </p>
                     ) : reviewLoading === a.id ? (
                       <p className="text-xs text-[#999] py-3">Loading review…</p>
+                    ) : reviewError[a.id] ? (
+                      <p className="text-xs text-[#999] py-3">{reviewError[a.id]}</p>
                     ) : !questions || questions.length === 0 ? (
                       <p className="text-xs text-[#999] py-3">
                         The questions for this quiz are no longer available.

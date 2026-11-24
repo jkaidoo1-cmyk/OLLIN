@@ -6,7 +6,8 @@ import { getLocalUser } from "@/lib/local";
 import { Quiz, Course } from "@/lib/types";
 import { SkeletonList } from "@/components/Skeleton";
 import { QuizViewSwitcher } from "@/components/QuizViewSwitcher";
-import { warmResource } from "@/lib/prefetch";
+import { getResource, warmResource } from "@/lib/prefetch";
+import { loadQuizzes } from "@/lib/quizzes-sync";
 import { BookOpen, Clock, Play, Search, Share2, Check } from "lucide-react";
 
 interface CourseWithQuizzes {
@@ -46,6 +47,40 @@ const BUILT_IN_TEST_QUIZ: Quiz & { built_in: true } = {
   updated_at: "2026-09-24T17:00:00.000Z",
   built_in: true,
 };
+/**
+ * Group admin-saved quiz links under the courses this student may see.
+ * Pure, so the cached paint and the delta refresh build the same list.
+ */
+function buildCourseGroups(
+  savedLinks: Array<{ quiz_id: string; course_id: string }>,
+  allCourses: Course[],
+  allQuizzes: Quiz[]
+): CourseWithQuizzes[] {
+  // Filter courses by the student's current year (when known)
+  const user = getLocalUser();
+  const studentYear = user?.current_year;
+  const yearCourses = studentYear
+    ? allCourses.filter((c) => !c.year || c.year === studentYear)
+    : allCourses;
+
+  // Group admin-saved quizzes under their courses
+  const quizById = new Map(allQuizzes.map((q) => [q.id, q]));
+  const courseMap = new Map<string, Quiz[]>();
+  for (const link of savedLinks) {
+    const quiz = quizById.get(link.quiz_id);
+    if (!quiz || quiz.status === "draft") continue;
+    if (!courseMap.has(link.course_id)) courseMap.set(link.course_id, []);
+    courseMap.get(link.course_id)!.push(quiz);
+  }
+
+  const result: CourseWithQuizzes[] = [];
+  for (const course of yearCourses) {
+    const quizzes = courseMap.get(course.id);
+    if (quizzes && quizzes.length > 0) result.push({ course, quizzes });
+  }
+  return result;
+}
+
 export default function TestQuizzesPage() {
   const [coursesWithQuizzes, setCoursesWithQuizzes] = useState<CourseWithQuizzes[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
@@ -86,65 +121,60 @@ export default function TestQuizzesPage() {
     setTimeout(() => setSharedId(null), 2000);
   };
 
+  // Paint the cached rows first, then ask only what changed. Switching to this
+  // tab therefore renders before anything touches the network.
   useEffect(() => {
-    const load = async () => {
+    let alive = true;
+    let autoSelected = false;
+
+    type SavedLink = { quiz_id: string; course_id: string };
+
+    const paint = (quizzes: Quiz[], savedLinks: SavedLink[], courses: Course[]) => {
+      if (!alive) return;
+      const groups = buildCourseGroups(savedLinks, courses, quizzes);
+      setCoursesWithQuizzes(groups);
+      // Pick the only course once; a later refresh must not override a filter
+      // the student has set.
+      if (!autoSelected && groups.length === 1) {
+        autoSelected = true;
+        setSelectedCourseId(groups[0].course.id);
+      }
+      setLoading(false);
+    };
+
+    const cachedQuizzes = getResource<Quiz[]>("quizzes")?.data;
+    const cachedSaved = getResource<SavedLink[]>("saved-quizzes")?.data;
+    const cachedCourses = getResource<Course[]>("courses")?.data;
+    if (cachedQuizzes && cachedSaved && cachedCourses) {
+      paint(cachedQuizzes, cachedSaved, cachedCourses);
+    }
+
+    (async () => {
       try {
-        // These three resources are warmed on layout mount; Promise.all via
-        // warmResource shares those in-flight promises instead of refetching.
-        const [savedData, coursesData, quizzesData] = await Promise.all([
-          warmResource("saved-quizzes", async () => {
+        // Quiz rows come back as a difference against the cache; the other two
+        // lists are small and shared with the layout's warm-up.
+        const [quizzes, savedLinks, courses] = await Promise.all([
+          loadQuizzes(),
+          warmResource<SavedLink[]>("saved-quizzes", async () => {
             const res = await fetch("/api/saved-quizzes");
-            return res.json().catch(() => ({ saved: [] }));
+            const data = await res.json().catch(() => ({ saved: [] }));
+            return data.saved || [];
           }),
-          warmResource("courses", async () => {
+          warmResource<Course[]>("courses", async () => {
             const res = await fetch("/api/courses");
-            return res.json().catch(() => ({ courses: [] }));
-          }),
-          warmResource("quizzes", async () => {
-            const res = await fetch("/api/quizzes");
-            return res.json().catch(() => ({ quizzes: [] }));
+            const data = await res.json().catch(() => ({ courses: [] }));
+            return data.courses || [];
           }),
         ]);
-        const savedLinks: Array<{ quiz_id: string; course_id: string }> = savedData.saved || [];
-        const allCourses: Course[] = coursesData.courses || [];
-        const allQuizzes: Quiz[] = quizzesData.quizzes || [];
-
-        // Filter courses by the student's current year (when known)
-        const user = getLocalUser();
-        const studentYear = user?.current_year;
-        const yearCourses = studentYear
-          ? allCourses.filter((c) => !c.year || c.year === studentYear)
-          : allCourses;
-
-        // Group admin-saved quizzes under their courses
-        const quizById = new Map(allQuizzes.map((q) => [q.id, q]));
-        const courseMap = new Map<string, Quiz[]>();
-        for (const link of savedLinks) {
-          const quiz = quizById.get(link.quiz_id);
-          if (!quiz || quiz.status === "draft") continue;
-          if (!courseMap.has(link.course_id)) courseMap.set(link.course_id, []);
-          courseMap.get(link.course_id)!.push(quiz);
-        }
-
-        const result: CourseWithQuizzes[] = [];
-        for (const course of yearCourses) {
-          const quizzes = courseMap.get(course.id);
-          if (quizzes && quizzes.length > 0) {
-            result.push({ course, quizzes });
-          }
-        }
-
-        setCoursesWithQuizzes(result);
-        if (result.length === 1) {
-          setSelectedCourseId(result[0].course.id);
-        }
+        paint(quizzes, savedLinks, courses);
       } catch {
-        setCoursesWithQuizzes([]);
-      } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
+    })();
+
+    return () => {
+      alive = false;
     };
-    load();
   }, []);
 
   // The built-in test quiz appears unless a search excludes it (a course filter hides it automatically).

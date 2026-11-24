@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { isLocalMode, getLocalQuizzes, getLocalAttempts, getLocalUser } from "@/lib/local";
+import { isLocalMode, getLocalAttempts, getLocalUser } from "@/lib/local";
 import { SkeletonText, SkeletonStats } from "@/components/Skeleton";
 import { warmResource } from "@/lib/prefetch";
+import { loadQuizzes } from "@/lib/quizzes-sync";
 import { Quiz, QuizAttempt } from "@/lib/types";
 import { Plus, ArrowRight, ArrowUpRight, ClipboardList } from "lucide-react";
 
@@ -60,7 +61,7 @@ export default function DashboardPage() {
         const localUser = getLocalUser();
         if (localUser) setUserName(localUser.full_name.split(" ")[0]);
         // Warmed on layout mount — typically already resolved at first paint.
-        const quizList = await warmResource<Quiz[]>("quizzes", async () => getLocalQuizzes());
+        const quizList = await loadQuizzes();
         setQuizzes(quizList);
         const attempts: QuizAttempt[] = [];
         for (const q of quizList) {
@@ -106,12 +107,7 @@ export default function DashboardPage() {
       // without another 1-2s round trip.
       let quizList: Quiz[] = [];
       try {
-        const list = await warmResource<Quiz[]>("quizzes", async () => {
-          const res = await fetch("/api/quizzes");
-          if (!res.ok) return [];
-          const data = await res.json();
-          return (data.quizzes || []) as Quiz[];
-        });
+        const list = await loadQuizzes();
         quizList = list.filter((q) => q.host_id === me!.id);
       } catch { /* render the empty state rather than a redirect */ }
       setQuizzes(quizList);

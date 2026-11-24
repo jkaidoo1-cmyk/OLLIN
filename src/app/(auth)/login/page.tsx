@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { enableLocalMode } from "@/lib/local";
 import { clearResourceCache } from "@/lib/prefetch";
+import { clearOfflineData } from "@/lib/offline";
 import { BrandMark, BrandSpinner } from "@/components/Logo";
 import { Eye, EyeOff } from "lucide-react";
 
@@ -51,8 +52,10 @@ export default function LoginPage() {
 
       // The warm cache is keyed by resource, not by user: drop whatever the
       // previous account on this tab left behind before this session starts
-      // filling it.
+      // filling it. The service worker's offline copies are per origin for the
+      // same reason, so they go too — it refills them for this account.
       clearResourceCache();
+      void clearOfflineData();
 
       if (data.local) {
         enableLocalMode(data.user);

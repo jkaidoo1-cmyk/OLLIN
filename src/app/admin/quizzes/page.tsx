@@ -12,6 +12,7 @@ import {
 import { ChevronDown, ChevronUp, BookOpen, Clock, Save, Check, Trash2, Pencil, RefreshCw, Plus } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
 import { readCache, writeCache } from "@/lib/admin-cache";
+import { fetchListDelta, mergeList } from "@/lib/list-sync";
 import { useCacheAgeLabel } from "@/lib/use-cache-age";
 import { useRefreshSpin } from "@/lib/use-refresh-spin";
 import { isLocalMode } from "@/lib/local";
@@ -58,12 +59,21 @@ export default function AdminQuizzesPage() {
     try {
       await syncSavedQuizzesFromServer();
 
-      // Fetch quizzes from API (server-side file)
-      const res = await fetch("/api/quizzes", {
-        headers: isLocal ? { "x-local-mode": "true" } : {},
-      });
-      const data = await res.json();
-      const apiQuizzes = data.quizzes || [];
+      // Only the difference: the rows this tab already holds go up as `known`,
+      // so an unchanged list costs one small request instead of every quiz.
+      // Typed loosely on purpose: rows are rendered generically and the page's
+      // own state is untyped, so only `id` is needed for the diff.
+      type DeltaRow = { id: string } & Record<string, unknown>;
+      const cachedQuizzes = readCache<DeltaRow>("quizzes");
+      const delta = await fetchListDelta<DeltaRow>(
+        "/api/quizzes/delta",
+        cachedQuizzes?.data ?? [],
+        cachedQuizzes?.at ?? null,
+        isLocal ? { "x-local-mode": "true" } : {}
+      );
+      const apiQuizzes = delta.full
+        ? delta.changed
+        : mergeList(cachedQuizzes?.data ?? [], delta);
 
       // Merge with any local-only (legacy) quizzes, dedupe by id
       const merged: any[] = [...apiQuizzes];

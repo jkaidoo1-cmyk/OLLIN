@@ -6,6 +6,7 @@ import { serverError, userError } from "@/lib/api-errors";
 import { resolveQuizHostId } from "@/lib/quiz-host";
 import { recordAdminAction } from "@/lib/audit";
 import { normalizeFigure, normalizePreamble, isMissingOptionalColumn } from "@/lib/question-figure";
+import { readVisibleQuizzes, stripQuestionData } from "@/lib/quizzes-list";
 import { Quiz, Question } from "@/lib/types";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -17,58 +18,12 @@ import { join } from "path";
 // via /api/quizzes/[id]?include=answers, which is host/admin-gated.
 export async function GET(request: NextRequest) {
   try {
-    const local = isLocalRequest(request);
-    // Every caller of this list is a signed-in screen (student dashboard, test
-    // quizzes, admin panel). Without a session there is nothing to list, and an
-    // anonymous caller could sweep every published share code in one request —
-    // so require the session instead of answering the world. File mode on a
-    // real server keeps working without one.
-    const session = await getSessionUser(request).catch(() => null);
-    if (!session && !local) {
+    // The visible set is assembled in one place, so /api/quizzes/delta diffs
+    // exactly the list this endpoint returns.
+    const quizzes = await readVisibleQuizzes(request);
+    if (!quizzes) {
       return NextResponse.json({ error: "Sign in to view quizzes." }, { status: 401 });
     }
-    let quizzes: Quiz[] = [];
-
-    // File store only where the filesystem persists. On a serverless host it is
-    // read-only and empty, so reading it here served zero quizzes and made the
-    // admin list look wiped.
-    if (!isEphemeralHost()) {
-      try {
-        quizzes = readServerQuizzes();
-      } catch { quizzes = []; }
-    }
-
-    // Merge in Supabase quizzes (admin client — reads all published quizzes)
-    if (!local) {
-      try {
-        const { createAdminClient } = await import("@/lib/supabase/server");
-        const admin = await createAdminClient();
-        if (admin) {
-          const { data, error } = await admin
-            .from("quizzes")
-            .select("*")
-            .order("created_at", { ascending: false });
-          if (!error && data) {
-            // Admins also need drafts and archived rows; everyone else
-            // (including participants) only ever sees published quizzes.
-            const isAdmin = session?.role === "admin";
-            const published = isAdmin
-              ? (data || [])
-              : (data || []).filter((q: any) => q.status === "published");
-            const sbIds = new Set((published || []).map((q: any) => q.id));
-            const merged = (published || []).map((q: any) => ({
-              ...q,
-              share_code: q.share_code,
-            }));
-            for (const fq of quizzes) {
-              if (!sbIds.has(fq.id)) merged.push(fq);
-            }
-            quizzes = merged;
-          }
-        }
-      } catch { /* Supabase optional */ }
-    }
-
     return NextResponse.json({ quizzes: quizzes.map(stripQuestionData) });
   } catch (error) {
     return serverError("quizzes.list", error, {
@@ -430,25 +385,3 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/** Participant-safe shape: no correct answers or explanations. */
-export function stripQuestionData(q: Partial<Quiz>) {
-  return {
-    id: q.id,
-    host_id: q.host_id,
-    title: q.title,
-    description: q.description,
-    share_code: q.share_code,
-    time_limit_minutes: q.time_limit_minutes,
-    max_attempts: q.max_attempts,
-    show_answers_after: q.show_answers_after,
-    shuffle_questions: q.shuffle_questions,
-    shuffle_options: q.shuffle_options,
-    passing_score: q.passing_score,
-    starts_at: q.starts_at,
-    ends_at: q.ends_at,
-    status: q.status,
-    course_id: q.course_id,
-    created_at: q.created_at,
-    updated_at: q.updated_at,
-  };
-}

@@ -5,17 +5,21 @@ import { BrandMark } from "@/components/Logo";
 import { BottomNav } from "@/components/BottomNav";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { isLocalMode, getLocalUser, getUnreadCount, getLocalQuizzes } from "@/lib/local";
+import { isLocalMode, getLocalUser, getUnreadCount } from "@/lib/local";
 import { isAdmin } from "@/lib/admin";
 import { useEffect, useState } from "react";
-import { Bell } from "lucide-react";
+import { Bell, WifiOff } from "lucide-react";
 import { warmAll, warmResource } from "@/lib/prefetch";
+import { loadMyQuizzes, loadQuizzes } from "@/lib/quizzes-sync";
+import { warmOfflinePages } from "@/lib/offline";
+import { useOffline } from "@/lib/use-offline";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [local, setLocal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const offline = useOffline();
   const supabase = createClient();
 
   useEffect(() => {
@@ -92,16 +96,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // navigating to any dashboard page renders content on first paint.
   useEffect(() => {
     warmAll([
-      ["quizzes", async () => {
-        try {
-          const res = await fetch("/api/quizzes", { headers: { "x-local-mode": "true" } });
-          if (!res.ok) return getLocalQuizzes();
-          const data = await res.json();
-          const server: { id: string }[] = data.quizzes || [];
-          const ids = new Set(server.map((q) => q.id));
-          return [...server, ...getLocalQuizzes().filter((q) => !ids.has(q.id))];
-        } catch { return getLocalQuizzes(); }
-      }],
+      // Quiz lists warm through the delta loaders, so the refreshed copy is a
+      // small difference rather than the whole catalogue.
+      ["quizzes", loadQuizzes],
       ["courses", async () => {
         try {
           const res = await fetch("/api/courses", { headers: { "x-local-mode": "true" } });
@@ -109,13 +106,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           return data.courses || [];
         } catch { return []; }
       }],
-      ["my-quizzes", async () => {
-        try {
-          const res = await fetch("/api/my-quizzes");
-          if (!res.ok) return { quizzes: [], courses: [] };
-          return await res.json();
-        } catch { return { quizzes: [], courses: [] }; }
-      }],
+      ["my-quizzes", loadMyQuizzes],
       ["my-attempts", async () => {
         try {
           const res = await fetch("/api/attempts?mine=true");
@@ -134,8 +125,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ]);
   }, []);
 
+  // Offline copies of the quiz views. The worker fetches them with this
+  // session's cookies, so no private page is ever stored at install time.
+  // Re-warmed whenever the connection comes back.
+  useEffect(() => {
+    warmOfflinePages();
+    window.addEventListener("online", warmOfflinePages);
+    return () => window.removeEventListener("online", warmOfflinePages);
+  }, []);
+
   return (
     <div className="min-h-screen">
+      {offline && (
+        <div
+          role="status"
+          className="bg-[#fdf4e3] text-[#7a4b00] text-center py-1 px-3 text-[11px] font-medium flex items-center justify-center gap-1.5"
+        >
+          <WifiOff className="w-3 h-3 shrink-0" />
+          Offline — showing saved quizzes and attempts. New quizzes need a connection.
+        </div>
+      )}
+
       {local && (
         <div className="bg-[#0b5d34] text-white/90 text-center py-1 text-[11px] font-medium">
           Limited storage — data is saved on this server only and may not persist

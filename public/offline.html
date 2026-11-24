@@ -68,6 +68,19 @@
     }
     button:hover { filter: brightness(0.97); }
     button:disabled { filter: brightness(0.97); cursor: default; }
+    a.secondary {
+      display: block;
+      margin-top: 10px;
+      padding: 10px 18px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--card);
+      color: var(--ink);
+      font-size: 0.88rem;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    a.secondary:hover { border-color: var(--brand); color: var(--brand); }
     .status {
       margin: 12px 0 0;
       font-size: 0.8rem;
@@ -87,8 +100,13 @@
       </svg>
     </div>
     <h1>You're offline</h1>
-    <p>OLLIN needs a connection to load quizzes and save results. Check your internet and try again.</p>
+    <p>
+      This screen wasn't saved on your device. Your quizzes, saved test quizzes
+      and past attempts are still available from the dashboard. Creating or
+      taking a quiz needs a connection.
+    </p>
     <button id="retry" type="button">Retry</button>
+    <a class="secondary" href="/dashboard">Open dashboard</a>
     <p class="status" id="status" role="status" aria-live="polite"></p>
   </div>
 

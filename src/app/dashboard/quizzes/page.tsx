@@ -6,7 +6,8 @@ import Link from "next/link";
 import { isLocalMode, getLocalQuizzes } from "@/lib/local";
 import { SkeletonText, SkeletonList } from "@/components/Skeleton";
 import { QuizViewSwitcher } from "@/components/QuizViewSwitcher";
-import { warmResource, invalidateResource } from "@/lib/prefetch";
+import { getResource, invalidateResource } from "@/lib/prefetch";
+import { loadMyQuizzes } from "@/lib/quizzes-sync";
 import { Quiz, Course } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
 import { Plus, Copy, CheckCircle, ExternalLink, Pencil, ClipboardList, Trash2 } from "lucide-react";
@@ -29,27 +30,28 @@ export default function MyQuizzesPage() {
     // the session cookie identifies the caller — the page no longer waits on
     // auth.getUser() plus two queries in sequence, which is what made switching
     // to this tab slow.
+    const apply = (data: { quizzes: Quiz[]; courses: Course[] }) => {
+      if (!alive) return;
+      const server: Quiz[] = data.quizzes || [];
+      const ids = new Set(server.map((q) => q.id));
+      setQuizzes(
+        isLocalMode()
+          ? [...server, ...getLocalQuizzes().filter((q) => !ids.has(q.id))]
+          : server
+      );
+      setCourses(data.courses || []);
+    };
+
     const load = async () => {
       try {
-        const data = await warmResource("my-quizzes", async () => {
-          const res = await fetch("/api/my-quizzes", {
-            headers: isLocalMode() ? { "x-local-mode": "true" } : {},
-          });
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.error || "Please sign in again.");
-          }
-          return (await res.json()) as { quizzes: Quiz[]; courses: Course[] };
-        });
-        if (!alive) return;
-        const server: Quiz[] = data.quizzes || [];
-        const ids = new Set(server.map((q) => q.id));
-        setQuizzes(
-          isLocalMode()
-            ? [...server, ...getLocalQuizzes().filter((q) => !ids.has(q.id))]
-            : server
-        );
-        setCourses(data.courses || []);
+        // Paint the cached list at once, then let the delta loader ask only for
+        // quizzes added, edited or deleted since the last sync.
+        const cached = getResource<{ quizzes: Quiz[]; courses: Course[] }>("my-quizzes")?.data;
+        if (cached) {
+          apply(cached);
+          setLoading(false);
+        }
+        apply(await loadMyQuizzes());
       } catch (error) {
         if (!alive) return;
         // Quizzes saved in this browser still show when the server is unreachable.
