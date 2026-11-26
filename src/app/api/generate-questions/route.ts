@@ -38,7 +38,9 @@ function normalizeAnswerKey(
   const opts = options || [];
   const loose = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-  if (type === "short_answer" || type === "fill_blank") return raw;
+  // Free-response answers carry their text, not an index: short_answer,
+  // fill_blank and theory (whose "answer" is the model answer) are all raw.
+  if (type === "short_answer" || type === "fill_blank" || type === "theory") return raw;
 
   if (type === "true_false" || /^(true|false)$/i.test(raw)) {
     const lower = raw.toLowerCase();
@@ -173,6 +175,12 @@ async function handle(request: NextRequest) {
         .filter((q) => q.question)
         .map((q) => {
           let type = String(q.type || "multiple_choice");
+          // The AI sometimes labels an open-ended question "multiple_choice".
+          // A theory/short answer item has no options to index into, so trust
+          // the text it supplied instead of dropping it.
+          if (type === "theory" && (!Array.isArray(q.options) || q.options.length < 2)) {
+            q.options = undefined;
+          }
           const options = Array.isArray(q.options) ? q.options.map(String) : undefined;
           // correctAnswer must be a zero-based index (server stores answers as an
           // index); answerKey keeps the option's exact text because that is the

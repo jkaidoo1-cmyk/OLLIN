@@ -133,6 +133,17 @@ export function qualityIssue(
     return null;
   }
 
+  if (q.type === "theory") {
+    // A theory item is marked by AI against its model answer, so that answer is
+    // the key — an item without one cannot be marked at all. Options are not
+    // required and must not be judged here.
+    if (!String(q.correctAnswer || "").trim()) return "missing model answer";
+    if (String(q.correctAnswer).trim().length < 20) {
+      return "model answer too short to mark against";
+    }
+    return null;
+  }
+
   // multiple choice
   if (options.length !== 4) return `expected 4 options, got ${options.length}`;
   for (const opt of options) {

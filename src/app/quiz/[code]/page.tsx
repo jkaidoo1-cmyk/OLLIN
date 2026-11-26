@@ -6,17 +6,32 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizByCode, getLocalQuestions, getLocalUser } from "@/lib/local";
 import { Quiz, Question, QuizAttempt } from "@/lib/types";
-import { Clock, Send, CheckCircle, AlertCircle, User } from "lucide-react";
+import { Clock, Send, CheckCircle, AlertCircle, User, WifiOff, Save } from "lucide-react";
 import { BrandMark, BrandSpinner } from "@/components/Logo";
 import { QuestionFigure } from "@/components/QuestionFigure";
 import { groupQuestions, printsContext } from "@/lib/question-groups";
 import { useToast } from "@/components/ui/toast";
 import { formatTime } from "@/lib/utils";
+import { useOffline } from "@/lib/use-offline";
+import { readJsonResponse } from "@/lib/keep-alive-client";
+import type { TheoryGrade } from "@/lib/ai/theory-grader";
 
 /**
  * True/false answers are stored as "true"/"false" and typed answers as their
  * text; only the first needs prettifying for display.
  */
+/**
+ * Local copy of an unsubmitted theory paper.
+ *
+ * Theory answers have to reach the AI to be marked, so when the device is
+ * offline the attempt cannot be handed in. The answers are kept on this device
+ * instead, tied to the quiz and the signed-in account, and offered back when
+ * the student returns.
+ */
+const THEORY_DRAFT_PREFIX = "ollin_theory_draft";
+
+type TheoryDraft = { answers: Record<string, string>; savedAt: string };
+
 const answerText = (value: string | null | undefined): string => {
   if (value === null || value === undefined || value === "") return "—";
   if (value === "true") return "True";
@@ -113,6 +128,50 @@ export default function QuizPage() {
   // Server-trusted attempt start: the moment the quiz UI was joined.
   const joinedAtRef = useRef<string | null>(null);
   const toast = useToast();
+
+  const offline = useOffline();
+  // A theory answer is prose that only the AI can mark, so a paper containing
+  // one cannot be handed in without a connection.
+  const hasTheory = questions.some((q) => q.question_type === "theory");
+  const [theoryMarks, setTheoryMarks] = useState<Record<string, TheoryGrade>>({});
+  // A paper saved on this device while offline, offered back on return.
+  const [savedDraft, setSavedDraft] = useState<TheoryDraft | null>(null);
+
+  const draftStorageKey = useCallback(
+    () =>
+      `${THEORY_DRAFT_PREFIX}:${quiz?.id || code}:${
+        currentUser?.email || participantName || "guest"
+      }`,
+    [quiz?.id, code, currentUser?.email, participantName]
+  );
+
+  /** Keep an unsubmittable theory paper on this device. */
+  const saveForLater = useCallback(() => {
+    if (!quiz) return;
+    const payload: TheoryDraft = { answers, savedAt: new Date().toISOString() };
+    try {
+      localStorage.setItem(draftStorageKey(), JSON.stringify(payload));
+      setSavedDraft(null);
+      toast.success(
+        "Answers saved on this device. Come back online and submit them from this quiz."
+      );
+    } catch {
+      toast.error(
+        "Could not save your answers on this device — storage may be full. Keep this page open."
+      );
+    }
+  }, [answers, draftStorageKey, quiz, toast]);
+
+  // Offer a saved paper back once the quiz is loaded and nobody has submitted.
+  useEffect(() => {
+    if (!quiz || questions.length === 0 || submitted) return;
+    try {
+      const raw = localStorage.getItem(draftStorageKey());
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as TheoryDraft;
+      if (parsed?.answers && Object.keys(parsed.answers).length > 0) setSavedDraft(parsed);
+    } catch { /* corrupt draft — treat as none */ }
+  }, [quiz, questions.length, submitted, draftStorageKey]);
 
   // Check if user is already logged in
   useEffect(() => {
@@ -372,6 +431,15 @@ export default function QuizPage() {
 
   const handleSubmit = useCallback(async () => {
     if (submitting || submitted || !quiz || !questions.length) return;
+    // Theory answers must reach the AI to be marked, so handing them in while
+    // offline would only fail after the attempt was already spent. Point the
+    // student at the local copy instead.
+    if (offline && hasTheory) {
+      toast.error(
+        "You're offline, so this paper can't be submitted — theory answers have to be marked by AI. Save your answers for later."
+      );
+      return;
+    }
     setSubmitting(true);
 
     // ── Server-side grading ────────────────────────────────
@@ -418,8 +486,21 @@ export default function QuizPage() {
           })),
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to submit quiz");
+      // Theory marking streams through the keep-alive envelope: the request
+      // stays open while the AI compares each prose answer to its model answer.
+      const { ok, data: raw } = await readJsonResponse(res);
+      const data = raw as {
+        error?: string;
+        attempt?: { score_percentage?: number; correct_answers?: number };
+        theory?: unknown;
+        answers?: Array<{ question_id: string; is_correct: boolean; selected_answer: string }>;
+        answer_key?: Record<string, string>;
+        explanations?: Record<string, string | null>;
+      };
+      if (!ok) throw new Error(data.error || "Failed to submit quiz");
+      if (data.theory && typeof data.theory === "object") {
+        setTheoryMarks(data.theory as Record<string, TheoryGrade>);
+      }
 
       score = data.attempt?.score_percentage ?? 0;
       correct = data.attempt?.correct_answers ?? 0;
@@ -538,6 +619,10 @@ export default function QuizPage() {
     }
 
     localStorage.removeItem(`quiz_${quiz.id}_answers`);
+    // The paper is submitted, so the offline copy must not be offered again.
+    try {
+      localStorage.removeItem(draftStorageKey());
+    } catch { /* storage unavailable */ }
 
     setResults({ score, total: questions.length, correct, detailed });
     setSubmitted(true);
@@ -553,7 +638,7 @@ export default function QuizPage() {
         }
       }
     } catch { /* leaderboard optional */ }
-  }, [submitting, submitted, quiz, questions, answers, attempt, isGuest, participantName, supabase, currentUser]);
+  }, [submitting, submitted, quiz, questions, answers, attempt, isGuest, participantName, supabase, currentUser, offline, hasTheory, draftStorageKey]);
 
   // Auto-join for guests with a URL name happens inside the entry check.
   // Logged-in users never see a separate auto-join effect — the check itself
@@ -792,6 +877,11 @@ export default function QuizPage() {
               <p className="text-sm text-[var(--ink-muted)]">
                 {results.correct} out of {results.total} correct
               </p>
+              {hasTheory && (
+                <p className="text-xs text-[var(--ink-muted)] mt-1">
+                  Theory answers were marked by AI against the model answer.
+                </p>
+              )}
               {isGuest && (
                 <p className="text-xs text-[#999] mt-2">
                   Your results were not saved. Log in to track your progress.
@@ -866,11 +956,67 @@ export default function QuizPage() {
                         </div>
                       )}
 
-                      {item.question.explanation && (
+                      {item.question.explanation && item.question.question_type !== "theory" && (
                         <p className="text-xs text-[#666] bg-[#f8f8f8] rounded p-2 mt-1">
                           <span className="font-medium">Explanation:</span> {item.question.explanation}
                         </p>
                       )}
+
+                      {/* Theory marking: how close the answer was, what it hit
+                          and missed, the full explanation, and the steps. */}
+                      {item.question.question_type === "theory" && (() => {
+                        const mark = theoryMarks[item.question.id];
+                        if (!mark) return null;
+                        return (
+                          <div className="mt-2 rounded border border-[#cfe3d7] bg-[#f5f9f7] p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2 text-xs">
+                              <span className="font-semibold text-[#0d6b3d]">
+                                {mark.graded ? "Marked by AI" : "Awaiting review"}
+                              </span>
+                              {mark.graded && (
+                                <span className="text-[#666] tabular-nums">
+                                  {mark.marks}/{item.question.marks || 1} marks · {mark.closeness}% close
+                                </span>
+                              )}
+                            </div>
+
+                            {mark.feedback && (
+                              <p className="text-xs text-[#444]">{mark.feedback}</p>
+                            )}
+
+                            {mark.matchedPoints.length > 0 && (
+                              <p className="text-xs text-green-800">
+                                <span className="font-medium">Covered:</span>{" "}
+                                {mark.matchedPoints.join("; ")}
+                              </p>
+                            )}
+                            {mark.missedPoints.length > 0 && (
+                              <p className="text-xs text-amber-800">
+                                <span className="font-medium">Missed:</span>{" "}
+                                {mark.missedPoints.join("; ")}
+                              </p>
+                            )}
+
+                            {mark.explanation && (
+                              <div className="text-xs text-[#444]">
+                                <span className="font-medium">The full answer:</span>{" "}
+                                {mark.explanation}
+                              </div>
+                            )}
+
+                            {mark.steps.length > 0 && (
+                              <div className="text-xs text-[#444]">
+                                <span className="font-medium">Steps to the answer:</span>
+                                <ol className="list-decimal ml-4 mt-1 space-y-0.5">
+                                  {mark.steps.map((step, si) => (
+                                    <li key={si}>{step}</li>
+                                  ))}
+                                </ol>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -919,6 +1065,65 @@ export default function QuizPage() {
 
       <main className="flex-1 px-4 py-6">
         <div className="app-column space-y-3">
+          {/* A saved paper, offered back rather than restored silently. */}
+          {savedDraft && (
+            <div className="app-card p-4 border-l-4 border-amber-400">
+              <p className="text-sm font-semibold text-[#333]">You have saved answers for this paper</p>
+              <p className="text-xs text-[#666] mt-1">
+                Saved on {new Date(savedDraft.savedAt).toLocaleString()}. Restore them to carry on,
+                or discard them and start fresh.
+              </p>
+              <div className="flex gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAnswers((prev) => ({ ...prev, ...savedDraft.answers }));
+                    setSavedDraft(null);
+                    toast.success("Saved answers restored.");
+                  }}
+                  className="btn-primary text-xs px-3 min-h-[36px]"
+                >
+                  Restore answers
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try { localStorage.removeItem(draftStorageKey()); } catch { /* ignore */ }
+                    setSavedDraft(null);
+                  }}
+                  className="text-xs px-3 min-h-[36px] rounded border border-[#e0e0e0] text-[#666]"
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Offline: a theory paper cannot be handed in, because the answers
+              have to reach the AI to be marked. */}
+          {offline && hasTheory && (
+            <div
+              role="status"
+              className="app-card p-4 border-l-4 border-[#c98a00] bg-[#fdf4e3]"
+            >
+              <p className="text-sm font-semibold text-[#7a4b00] flex items-center gap-1.5">
+                <WifiOff className="w-4 h-4 shrink-0" /> You&apos;re offline
+              </p>
+              <p className="text-xs text-[#7a4b00] mt-1">
+                This paper contains theory questions, which the AI marks when you submit — so it
+                can&apos;t be handed in until you&apos;re back online. Your answers can be saved on
+                this device and submitted later.
+              </p>
+              <button
+                type="button"
+                onClick={saveForLater}
+                className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium px-3 min-h-[36px] rounded border border-[#c98a00] text-[#7a4b00] bg-white"
+              >
+                <Save className="w-3.5 h-3.5" /> Save answers for later
+              </button>
+            </div>
+          )}
+
           {questions.map((q, idx) => {
             const group = groups.get(q.id);
             const showContext = !!(q.preamble && printsContext(group));
@@ -960,7 +1165,23 @@ export default function QuizPage() {
               {/* Branch on the question's type, not on whether it happens to
                   carry options: a fill-in-the-blank or short-answer question has
                   none, and used to fall through to the True/False buttons. */}
-              {q.question_type === "short_answer" || q.question_type === "fill_blank" ? (
+              {q.question_type === "theory" ? (
+                <div className="sm:ml-9">
+                  <textarea
+                    value={answers[q.id] || ""}
+                    onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                    placeholder="Write your answer — explain the reasoning, not just the conclusion"
+                    aria-label={`Answer for question ${idx + 1}`}
+                    rows={6}
+                    maxLength={4000}
+                    className="input-field w-full text-[15px] sm:text-sm resize-y"
+                  />
+                  <div className="flex items-center justify-between text-[10px] text-[var(--ink-faint)] mt-1">
+                    <span>Theory answer · marked by AI against the model answer</span>
+                    <span className="tabular-nums">{(answers[q.id] || "").length}/4000</span>
+                  </div>
+                </div>
+              ) : q.question_type === "short_answer" || q.question_type === "fill_blank" ? (
                 <div className="sm:ml-9">
                   <input
                     type="text"
@@ -1034,15 +1255,30 @@ export default function QuizPage() {
             );
           })}
 
-          <div className="sticky bottom-0 -mx-4 sm:mx-0 px-4 sm:px-0 pt-3 pb-[calc(0.75rem_+_env(safe-area-inset-bottom))] sm:pb-3 bg-white/95 backdrop-blur border-t border-[#e0e0e0] flex justify-center">
+          <div className="sticky bottom-0 -mx-4 sm:mx-0 px-4 sm:px-0 pt-3 pb-[calc(0.75rem_+_env(safe-area-inset-bottom))] sm:pb-3 bg-white/95 backdrop-blur border-t border-[#e0e0e0] flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2">
             <button
               onClick={handleSubmit}
-              disabled={submitting || answeredCount === 0}
+              disabled={submitting || answeredCount === 0 || (offline && hasTheory)}
               className="btn-primary w-full sm:w-auto gap-2 text-[15px] sm:text-sm px-8 min-h-[48px] shadow-lg disabled:opacity-50 transition-all duration-150 active:scale-[0.98]"
             >
               <Send className="w-4 h-4" />
-              {submitting ? "Submitting..." : `Submit (${answeredCount}/${questions.length})`}
+              {submitting
+                ? hasTheory
+                  ? "Submitting and marking…"
+                  : "Submitting..."
+                : offline && hasTheory
+                  ? "Offline — cannot submit"
+                  : `Submit (${answeredCount}/${questions.length})`}
             </button>
+            {offline && hasTheory && (
+              <button
+                type="button"
+                onClick={saveForLater}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 text-sm px-6 min-h-[48px] rounded-lg border border-[#c98a00] text-[#7a4b00] bg-white"
+              >
+                <Save className="w-4 h-4" /> Save for later
+              </button>
+            )}
           </div>
         </div>
       </main>

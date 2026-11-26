@@ -8,18 +8,16 @@ import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalUser, getUnreadCount } from "@/lib/local";
 import { isAdmin } from "@/lib/admin";
 import { useEffect, useState } from "react";
-import { Bell, WifiOff } from "lucide-react";
+import { Bell } from "lucide-react";
 import { warmAll, warmResource } from "@/lib/prefetch";
 import { loadMyQuizzes, loadQuizzes } from "@/lib/quizzes-sync";
 import { warmOfflinePages } from "@/lib/offline";
-import { useOffline } from "@/lib/use-offline";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [local, setLocal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const offline = useOffline();
   const supabase = createClient();
 
   useEffect(() => {
@@ -136,16 +134,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen">
-      {offline && (
-        <div
-          role="status"
-          className="bg-[#fdf4e3] text-[#7a4b00] text-center py-1 px-3 text-[11px] font-medium flex items-center justify-center gap-1.5"
-        >
-          <WifiOff className="w-3 h-3 shrink-0" />
-          Offline — showing saved quizzes and attempts. New quizzes need a connection.
-        </div>
-      )}
-
       {local && (
         <div className="bg-[#0b5d34] text-white/90 text-center py-1 text-[11px] font-medium">
           Limited storage — data is saved on this server only and may not persist

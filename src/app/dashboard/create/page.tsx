@@ -21,7 +21,9 @@ import {
   Check,
   Pencil,
   Trash2,
+  WifiOff,
 } from "lucide-react";
+import { useOffline } from "@/lib/use-offline";
 
 interface GeneratedQ {
   type: string;
@@ -43,6 +45,7 @@ const GENERIC_TITLES = new Set(["material analysis", "untitled quiz", "quiz"]);
 export default function CreateQuizPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const offline = useOffline();
 
   // Course
   const [courses, setCourses] = useState<Course[]>([]);
@@ -421,7 +424,7 @@ export default function CreateQuizPage() {
           id: `local-q-${Date.now()}-${idx}`,
           quiz_id: localQuiz.id,
           question_text: q.question,
-          question_type: q.type as "multiple_choice" | "true_false" | "short_answer" | "fill_blank",
+          question_type: q.type as "multiple_choice" | "true_false" | "short_answer" | "fill_blank" | "theory",
           options: q.options || null,
           correct_answer: q.correctAnswer,
           explanation: q.explanation,
@@ -666,6 +669,16 @@ export default function CreateQuizPage() {
         </p>
       </div>
 
+      {offline && (
+        <div
+          role="status"
+          className="mb-4 p-3 bg-[#fdf4e3] border border-[#f0d9a8] text-[#7a4b00] text-xs rounded flex items-center gap-2"
+        >
+          <WifiOff className="w-4 h-4 flex-shrink-0" />
+          You&apos;re offline. Generating questions needs a connection — you can still set up the rest.
+        </div>
+      )}
+
       {editLoading && questions.length === 0 && (
         <p className="text-xs text-[var(--ink-faint)] mb-3" aria-live="polite">
           Loading this quiz…
@@ -891,6 +904,7 @@ export default function CreateQuizPage() {
                   { value: "true_false", label: "True / False" },
                   { value: "short_answer", label: "Short answer" },
                   { value: "fill_blank", label: "Fill in the blank" },
+                  { value: "theory", label: "Theory" },
                 ].map((t) => (
                   <button
                     key={t.value}
@@ -1103,6 +1117,7 @@ export default function CreateQuizPage() {
                             <option value="true_false">True / False</option>
                             <option value="short_answer">Short answer</option>
                             <option value="fill_blank">Fill in the blank</option>
+                            <option value="theory">Theory</option>
                           </select>
                           {q.type === "multiple_choice" && q.options && (
                             <div className="space-y-1.5 mb-2">
@@ -1158,13 +1173,34 @@ export default function CreateQuizPage() {
                               className="input-field text-xs mb-2"
                             />
                           )}
-                          <input
-                            type="text"
-                            value={q.explanation}
-                            onChange={(e) => updateQuestion(idx, "explanation", e.target.value)}
-                            placeholder="Explanation (shown after submission)"
-                            className="input-field text-xs"
-                          />
+                          {q.type === "theory" ? (
+                            <>
+                              <label className="block text-[10px] text-[#999] mb-0.5">Model answer</label>
+                              <textarea
+                                value={q.correctAnswer}
+                                onChange={(e) => updateQuestion(idx, "correctAnswer", e.target.value)}
+                                placeholder="A full-credit answer — the AI marks student answers by closeness to this."
+                                rows={4}
+                                className="input-field text-xs w-full resize-y mb-2"
+                              />
+                              <label className="block text-[10px] text-[#999] mb-0.5">Expected points</label>
+                              <textarea
+                                value={q.explanation}
+                                onChange={(e) => updateQuestion(idx, "explanation", e.target.value)}
+                                placeholder="Key points a good answer should cover — the AI uses these to explain the mark."
+                                rows={3}
+                                className="input-field text-xs w-full resize-y"
+                              />
+                            </>
+                          ) : (
+                            <input
+                              type="text"
+                              value={q.explanation}
+                              onChange={(e) => updateQuestion(idx, "explanation", e.target.value)}
+                              placeholder="Explanation (shown after submission)"
+                              className="input-field text-xs"
+                            />
+                          )}
                           <div className="mt-2">
                             <textarea
                               value={q.preamble ?? ""}
@@ -1240,6 +1276,17 @@ export default function CreateQuizPage() {
                             <p className="text-xs text-[#666] mt-1">
                               Answer: <span className="font-medium text-green-700">{cleanText(q.correctAnswer)}</span>
                             </p>
+                          )}
+                          {q.type === "theory" && (
+                            <div className="mt-1.5">
+                              <p className="text-xs text-[#666]">
+                                Model answer:{" "}
+                                <span className="font-medium text-green-700 whitespace-pre-line">
+                                  {cleanText(q.correctAnswer || "—")}
+                                </span>
+                              </p>
+                              <p className="text-[10px] text-[#999] mt-0.5">Marked by AI against this answer</p>
+                            </div>
                           )}
                           {q.figure && <QuestionFigure figure={q.figure} />}
                           {q.explanation && (

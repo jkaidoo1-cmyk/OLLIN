@@ -70,11 +70,23 @@ export interface Quiz {
   answer_key?: Record<string, string> | null;
 }
 
+/**
+ * Every question type the app can store. `theory` is free-response: it has no
+ * options and no single key, and is marked by AI against `correct_answer`
+ * (the model answer) and `explanation` (the expected points).
+ */
+export type QuestionType =
+  | "multiple_choice"
+  | "true_false"
+  | "short_answer"
+  | "fill_blank"
+  | "theory";
+
 export interface Question {
   id: string;
   quiz_id: string;
   question_text: string;
-  question_type: "multiple_choice" | "true_false" | "short_answer" | "fill_blank";
+  question_type: QuestionType;
   options: string[] | null;
   correct_answer: string;
   explanation: string | null;
@@ -124,9 +136,10 @@ export interface AttemptAnswer {
 // =============================================
 
 export interface GeneratedQuestion {
-  type: "multiple_choice" | "true_false" | "short_answer" | "fill_blank";
+  type: QuestionType;
   question: string;
   options?: string[];
+  /** For `theory`, this is the model answer the AI marks against. */
   correctAnswer: string;
   answerKey?: string;
   explanation: string;
@@ -142,7 +155,7 @@ export interface QuizCreationInput {
   material_id?: string;
   material_text?: string;
   question_count: number;
-  question_types: ("multiple_choice" | "true_false" | "short_answer" | "fill_blank")[];
+  question_types: QuestionType[];
   time_limit_minutes?: number;
   max_attempts: number;
   show_answers_after: "after_each" | "after_completion" | "never";

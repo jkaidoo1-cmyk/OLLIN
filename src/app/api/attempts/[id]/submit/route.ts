@@ -2,11 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getQuizQuestions, readServerAttempts, writeServerAttempts } from "@/lib/data";
 import type { QuizAttempt } from "@/lib/types";
 import type { Question } from "@/lib/types";
+import type { TheoryGrade } from "@/lib/ai/theory-grader";
 import { isAnswerCorrect, loose } from "@/lib/grading";
 import { getSessionUser } from "@/lib/session";
 import { checkThrottle } from "@/lib/rate-limit";
 import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
 import { serverError } from "@/lib/api-errors";
+import { keepAliveResponse } from "@/lib/keep-alive";
+
+// A quiz containing theory answers is marked by AI before the result is
+// returned, which takes far longer than the host allows a silent response to
+// last — the handler streams through keepAliveResponse for that reason.
+export const maxDuration = 60;
 
 /** Map a stored answer key to the option index when it is option text. */
 function answerKeyFor(question: { correct_answer?: unknown; options?: unknown }): string {
@@ -23,6 +30,14 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  return keepAliveResponse(() => handleSubmit(request, params));
+}
+
+async function handleSubmit(
+  request: NextRequest,
+  paramsPromise: Promise<{ id: string }>
+) {
+  const params = paramsPromise;
   try {
     const local = isLocalRequest(request);
     const { id } = await params;
@@ -283,6 +298,87 @@ export async function POST(
         };
       });
 
+    // ── Theory answers: marked by AI ─────────────────────
+    // A theory answer is prose, so there is no index to compare it with. The
+    // server sends it to the configured models alongside the question's model
+    // answer and expected points; the model scores the closeness and returns
+    // the teaching feedback (explanation and the steps to the answer). Keys
+    // come from the admin's pool, rotated exactly as generation uses them.
+    const theoryFeedback: Record<string, TheoryGrade> = {};
+    const theoryQuestions = (questions as any[]).filter(
+      (q) => q.question_type === "theory"
+    );
+    if (theoryQuestions.length > 0) {
+      const items = theoryQuestions
+        .map((q) => {
+          const studentAnswer = (submitted.get(q.id) || "").trim();
+          return {
+            question_id: q.id as string,
+            question: String(q.question_text ?? ""),
+            modelAnswer: String(q.correct_answer ?? q.answer_key ?? ""),
+            expectedPoints: q.explanation ?? null,
+            studentAnswer,
+            maxMarks: Number(q.marks) || 1,
+            blank: studentAnswer.length === 0,
+          };
+        })
+        // A blank answer needs no model call — it is worth nothing either way.
+        .filter((item) => !item.blank && item.modelAnswer.trim())
+        .map(({ blank: _blank, ...item }) => item);
+
+      let grades = new Map<string, TheoryGrade>();
+      if (items.length > 0) {
+        try {
+          const { gradeTheoryAnswers } = await import("@/lib/ai/theory-grader");
+          grades = await gradeTheoryAnswers(items, {
+            deadlineAt: Date.now() + 40_000,
+            onUsage: async ({ keyId, inputTokens, outputTokens }) => {
+              try {
+                const { recordKeyUsage } = await import("@/lib/ai/key-rotation");
+                await recordKeyUsage(keyId, inputTokens, outputTokens);
+              } catch { /* non-critical */ }
+            },
+          });
+        } catch (err) {
+          console.error(
+            "[submit] theory marking failed:",
+            err instanceof Error ? err.message : err
+          );
+        }
+      }
+
+      for (const q of theoryQuestions) {
+        const entry = graded.find((g) => g.question_id === q.id);
+        if (!entry) continue;
+        const grade = grades.get(q.id as string);
+        if (grade?.graded) {
+          entry.marks_awarded = grade.marks;
+          // 60/100 closeness is the pass mark for one theory answer; a partial
+          // answer still earns its proportional marks.
+          entry.is_correct = grade.closeness >= 60;
+          theoryFeedback[q.id as string] = grade;
+        } else {
+          // Never a silent zero: an answer nobody could mark is flagged for
+          // review so it is visible rather than quietly scored as wrong.
+          entry.marks_awarded = 0;
+          entry.is_correct = false;
+          theoryFeedback[q.id as string] = {
+            question_id: q.id as string,
+            closeness: 0,
+            marks: 0,
+            matchedPoints: [],
+            missedPoints: [],
+            feedback:
+              grade?.feedback ||
+              "This answer is waiting to be marked. It will be reviewed.",
+            explanation: "",
+            steps: [],
+            graded: false,
+          };
+        }
+      }
+    }
+
     const correct = graded.filter((g) => g.is_correct).length;
     const total = graded.length;
     const marksEarned = graded.reduce((s, g) => s + g.marks_awarded, 0);
@@ -348,6 +444,8 @@ export async function POST(
         answers: graded,
         answer_key,
         explanations,
+        // AI marking detail for theory answers, keyed by question id.
+        theory: theoryFeedback,
         practice: true,
       });
     }
@@ -439,7 +537,15 @@ export async function POST(
       }
     }
 
-    return NextResponse.json({ attempt, answers: graded, answer_key, explanations });
+    return NextResponse.json({
+      attempt,
+      answers: graded,
+      answer_key,
+      explanations,
+      // AI marking detail for theory answers: score, closeness, what was hit
+      // and missed, the full explanation and the steps to the answer.
+      theory: theoryFeedback,
+    });
   } catch (error) {
     return serverError("attempts.submit", error, {
       message:
