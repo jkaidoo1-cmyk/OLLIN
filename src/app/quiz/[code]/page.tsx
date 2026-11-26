@@ -513,20 +513,16 @@ export default function QuizPage() {
       );
       return;
     }
-    // ── Offline: mark here, file later ─────────────────────
+    // ── Mark here, file later ──────────────────────────────
     // The copy saved on this device carries the answer key, so the paper can
     // be marked on the spot and the result shown straight away. A recorded
     // attempt (not a practice run) is queued and posted to the server — which
     // re-grades it — the next time there is a connection.
-    if (offline) {
+    // Returns false when this device holds no key for the quiz, so there is
+    // nothing to mark by.
+    const markOnDevice = (): boolean => {
       const markingKey = gradeSource ?? getQuizBundleById(quiz.id)?.questions ?? null;
-      if (!markingKey || markingKey.length === 0) {
-        toast.error(
-          "This quiz isn't saved on this device, so it can't be marked offline. Reconnect, open it once, then try again."
-        );
-        return;
-      }
-      setSubmitting(true);
+      if (!markingKey || markingKey.length === 0) return false;
       const submittedAt = new Date().toISOString();
       const timeTaken =
         quiz.time_limit_minutes && deadlineRef.current
@@ -565,6 +561,17 @@ export default function QuizPage() {
       });
       setSubmitted(true);
       setSubmitting(false);
+      return true;
+    };
+
+    if (offline) {
+      setSubmitting(true);
+      if (!markOnDevice()) {
+        setSubmitting(false);
+        toast.error(
+          "This quiz isn't saved on this device, so it can't be marked offline. Reconnect, open it once, then try again."
+        );
+      }
       return;
     }
 
@@ -672,6 +679,16 @@ export default function QuizPage() {
       // Grading failed. Surface the server's reason (e.g. "Time is up",
       // "You have already taken this quiz") rather than a generic error.
       const msg = err instanceof Error && err.message ? err.message : "Could not submit your quiz. Check your connection and try again.";
+      // The browser can report itself online while nothing is reachable — a
+      // Wi-Fi network with no route, a dead cached API. That is still offline
+      // for the student, so the paper is marked from the saved key and queued
+      // instead of being refused.
+      const networkFailure =
+        err instanceof TypeError ||
+        /failed to fetch|load failed|networkerror|network error|fetch failed|network request failed/i.test(
+          msg
+        );
+      if (networkFailure && !hasTheory && markOnDevice()) return;
       // Terminal rejections (time up / quiz closed / duplicate) leave the
       // submit button failing forever, so hand the student a resolution
       // screen instead of leaving them trapped in the quiz UI. Network-type
