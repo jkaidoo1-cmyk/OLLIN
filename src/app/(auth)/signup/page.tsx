@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { enableLocalMode } from "@/lib/local";
@@ -10,15 +10,41 @@ import { BrandMark, BrandSpinner } from "@/components/Logo";
 import { Eye, EyeOff } from "lucide-react";
 import { MIN_PASSWORD_LENGTH, PASSWORD_HINT, passwordProblem } from "@/lib/password-policy";
 
+interface SignupProgram {
+  id: string;
+  code?: string;
+  name?: string;
+}
+
 export default function SignupPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  // Which programme (course) the student is on, and their class year. Both
+  // decide what the dashboard shows them, so they are asked for up front.
+  const [programs, setPrograms] = useState<SignupProgram[]>([]);
+  const [programsLoaded, setProgramsLoaded] = useState(false);
+  const [programId, setProgramId] = useState("");
+  const [year, setYear] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/programs");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setPrograms(Array.isArray(data.programs) ? data.programs : []);
+      } catch { /* the form still works without the list */ }
+      finally { if (!cancelled) setProgramsLoaded(true); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +66,13 @@ export default function SignupPage() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, full_name: fullName }),
+        body: JSON.stringify({
+          email,
+          password,
+          full_name: fullName,
+          program_id: programId || null,
+          current_year: year,
+        }),
       });
       const data = await res.json();
 
@@ -158,6 +190,53 @@ export default function SignupPage() {
               placeholder="Repeat your password"
               className="input-field"
             />
+          </div>
+
+          <div>
+            <label htmlFor="signup-program-input" className="block text-xs font-semibold text-[var(--ink-soft)] mb-1.5">
+              Course / programme
+            </label>
+            <select
+              id="signup-program-input"
+              value={programId}
+              onChange={(e) => setProgramId(e.target.value)}
+              className="input-field"
+              disabled={!programsLoaded || programs.length === 0}
+            >
+              <option value="">
+                {!programsLoaded
+                  ? "Loading programmes…"
+                  : programs.length === 0
+                  ? "No programmes added yet"
+                  : "Choose your programme"}
+              </option>
+              {programs.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.code ? `${p.code} — ${p.name || ""}` : p.name || p.id}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-[var(--ink-faint)] mt-1.5">
+              {programsLoaded && programs.length === 0
+                ? "Your administrator hasn't added programmes yet — you can choose yours later in Profile."
+                : "Decides which courses you see. You can change it later in Profile."}
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="signup-year-input" className="block text-xs font-semibold text-[var(--ink-soft)] mb-1.5">
+              Class year
+            </label>
+            <select
+              id="signup-year-input"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              className="input-field"
+            >
+              {[1, 2, 3, 4, 5, 6].map((y) => (
+                <option key={y} value={y}>Year {y}</option>
+              ))}
+            </select>
           </div>
 
           <button id="signup-submit-btn" type="submit" disabled={loading} className="btn-primary w-full">

@@ -33,7 +33,16 @@ export async function POST(request: NextRequest) {
     const email = String(body.email || "").trim().toLowerCase();
     const password = String(body.password || "");
     const fullName = String(body.full_name || "").trim();
+    // A student picks their programme and class year while signing up, so the
+    // dashboard shows their courses straight away instead of waiting for an
+    // admin to assign them.
+    const programId = body.program_id ? String(body.program_id).trim() : null;
+    const year = Number(body.current_year ?? 1);
+    const currentYear = Number.isInteger(year) && year >= 1 && year <= 8 ? year : 1;
     const local = isLocalRequest(request);
+
+    const looksLikeUuid = (value: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
     if (!email || !password) {
       return NextResponse.json(
@@ -71,18 +80,33 @@ export async function POST(request: NextRequest) {
             user_metadata: {
               full_name: displayName,
               role: "student",
-              current_year: 1,
+              program_id: programId && looksLikeUuid(programId) ? programId : null,
+              current_year: currentYear,
             },
           });
 
         if (!createError && sbUser?.user) {
+          // A local-file programme id is not a uuid and cannot go in the
+          // profiles column; on a database deployment the ids always are.
+          const storedProgramId =
+            programId && looksLikeUuid(programId) ? programId : null;
+          // Best effort: the profile row is usually created by a trigger from
+          // the metadata above. If it is already there, make sure the chosen
+          // programme and year landed on it.
+          try {
+            await adminSupabase
+              .from("profiles")
+              .update({ program_id: storedProgramId, current_year: currentYear })
+              .eq("id", sbUser.user.id);
+          } catch { /* trigger may not have created the row yet */ }
+
           const user = {
             id: sbUser.user.id,
             email: sbUser.user.email || email,
             full_name: displayName,
             role: "student" as const,
-            program_id: null,
-            current_year: 1,
+            program_id: storedProgramId,
+            current_year: currentYear,
             created_at: new Date().toISOString(),
           };
           // No local flag: this is a database account, like a Supabase login.
@@ -146,8 +170,8 @@ export async function POST(request: NextRequest) {
       full_name: displayName,
       role: "student" as const,
       password_hash: hashPassword(password),
-      program_id: null,
-      current_year: 1,
+      program_id: programId,
+      current_year: currentYear,
       created_at: new Date().toISOString(),
     };
     users.push(newUser);

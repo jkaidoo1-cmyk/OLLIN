@@ -5,9 +5,11 @@ import { serverError } from "@/lib/api-errors";
 
 /**
  * PATCH /api/auth/profile — a logged-in user updates their own profile.
- * Only safe self-service fields are accepted: current_year and password.
- * Full name, role, program assignment, and email stay admin-controlled —
- * a full_name value in the body is silently ignored.
+ * Only safe self-service fields are accepted: current_year, program_id and
+ * password. Full name, role and email stay admin-controlled — a full_name
+ * value in the body is silently ignored. The programme is self-service
+ * because students create their own accounts: an admin assignment they never
+ * asked for is not a substitute for choosing their course.
  *
  * Works in both backends:
  *   - Supabase configured → updates profiles via the service-role client
@@ -19,7 +21,13 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  let body: { current_year?: number; full_name?: string; current_password?: string; new_password?: string };
+  let body: {
+    current_year?: number;
+    program_id?: string | null;
+    full_name?: string;
+    current_password?: string;
+    new_password?: string;
+  };
   try {
     body = await request.json();
   } catch {
@@ -80,13 +88,19 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ message: "Password updated" });
   }
 
-  const updates: { current_year?: number } = {};
+  const updates: { current_year?: number; program_id?: string | null } = {};
   if (body.current_year !== undefined) {
     const y = Number(body.current_year);
     if (!Number.isInteger(y) || y < 1 || y > 8) {
       return NextResponse.json({ error: "Year must be between 1 and 8" }, { status: 400 });
     }
     updates.current_year = y;
+  }
+  if (body.program_id !== undefined) {
+    // Empty string clears the choice; anything else is the programme picked
+    // from the list the signup/profile screen fetched.
+    const p = body.program_id === null ? "" : String(body.program_id).trim();
+    updates.program_id = p || null;
   }
   // full_name deliberately not accepted — names are managed by the admin.
   if (Object.keys(updates).length === 0) {
@@ -103,6 +117,17 @@ export async function PATCH(request: NextRequest) {
       const { createAdminClient } = await import("@/lib/supabase/server");
       const admin = await createAdminClient();
       if (admin) {
+        // profiles.program_id is a uuid column: a file-backed programme id
+        // would fail the cast, so refuse it with a message instead of a 500.
+        if (
+          updates.program_id &&
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(updates.program_id)
+        ) {
+          return NextResponse.json(
+            { error: "That programme isn't available on this account. Pick one from the list." },
+            { status: 400 }
+          );
+        }
         const { error } = await admin.from("profiles").update(updates).eq("id", session.id);
         if (error) {
           return serverError("profile.update", error, {
@@ -120,6 +145,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     if (updates.current_year !== undefined) user.current_year = updates.current_year;
+    if (updates.program_id !== undefined) user.program_id = updates.program_id;
     writeLocalUsers(users);
     return NextResponse.json({ message: "Profile updated" });
   } catch (error) {

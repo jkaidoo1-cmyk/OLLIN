@@ -28,6 +28,8 @@ export interface LocalUser {
   role: "admin" | "student";
   password: string;
   current_year?: number;
+  /** Programme chosen at signup or in the profile; decides which courses show. */
+  program_id?: string | null;
 }
 
 const LOCAL_USERS_DEFAULT: LocalUser[] = [

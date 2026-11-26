@@ -26,7 +26,7 @@ interface Me {
   current_year?: number | null;
 }
 
-type OpenSection = "year" | "password" | "install" | null;
+type OpenSection = "programme" | "year" | "password" | "install" | null;
 
 /** Chrome/Edge fire beforeinstallprompt with this shape; lib.dom doesn't declare it. */
 interface BeforeInstallPromptEvent extends Event {
@@ -52,6 +52,12 @@ export default function ProfilePage() {
 
   const [savingYear, setSavingYear] = useState(false);
   const [savedYearFlash, setSavedYearFlash] = useState<number | null>(null);
+
+  // Programme picker: students choose their own course, so it is loaded when
+  // the row is opened rather than on every profile visit.
+  const [programs, setPrograms] = useState<Array<{ id: string; code?: string; name?: string }>>([]);
+  const [loadingPrograms, setLoadingPrograms] = useState(false);
+  const [savingProgram, setSavingProgram] = useState(false);
 
   // Password form
   const [currentPw, setCurrentPw] = useState("");
@@ -94,7 +100,7 @@ export default function ProfilePage() {
               email: local.email,
               full_name: local.full_name,
               role: local.role || "student",
-              program_id: null,
+              program_id: local.program_id ?? null,
               current_year: local.current_year ?? 1,
             });
             return;
@@ -121,7 +127,7 @@ export default function ProfilePage() {
     return () => { cancelled = true; };
   }, [programId]);
 
-  const syncLocalMirror = (patch: Partial<{ full_name: string; current_year: number }>) => {
+  const syncLocalMirror = (patch: Partial<{ full_name: string; current_year: number; program_id: string | null }>) => {
     try {
       const raw = localStorage.getItem("ollin_local_user");
       if (raw) {
@@ -156,6 +162,49 @@ export default function ProfilePage() {
       toast.error("Could not update year. Check your connection.");
     } finally {
       setSavingYear(false);
+    }
+  };
+
+  const openProgramme = async () => {
+    if (open === "programme") { setOpen(null); return; }
+    setOpen("programme");
+    if (programs.length > 0 || loadingPrograms) return;
+    setLoadingPrograms(true);
+    try {
+      const res = await fetch("/api/programs");
+      if (res.ok) {
+        const data = await res.json();
+        setPrograms(Array.isArray(data.programs) ? data.programs : []);
+      }
+    } catch { toast.error("Could not load programmes. Check your connection."); }
+    finally { setLoadingPrograms(false); }
+  };
+
+  const saveProgram = async (id: string) => {
+    if (!me || id === (me.program_id ?? "")) { setOpen(null); return; }
+    setSavingProgram(true);
+    try {
+      const res = await fetch("/api/auth/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ program_id: id || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        const nextId = id || null;
+        setMe((m) => (m ? { ...m, program_id: nextId } : m));
+        syncLocalMirror({ program_id: nextId });
+        const match = programs.find((p) => p.id === nextId);
+        setProgramName(match ? match.name || match.code || null : null);
+        setOpen(null);
+        toast.success("Programme saved — your courses will update");
+      } else {
+        toast.error(data.error || "Could not update programme");
+      }
+    } catch {
+      toast.error("Could not update programme. Check your connection.");
+    } finally {
+      setSavingProgram(false);
     }
   };
 
@@ -353,6 +402,69 @@ export default function ProfilePage() {
         </div>
         )}
 
+        {/* Programme row — students choose their own course. */}
+        {me.role !== "admin" && (
+        <div>
+          <button
+            type="button"
+            onClick={openProgramme}
+            aria-expanded={open === "programme"}
+            className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-[#fafafa] transition-colors text-left"
+          >
+            <span className="w-8 h-8 rounded-lg bg-[#e6f0e8] flex items-center justify-center shrink-0">
+              <GraduationCap className="w-4 h-4 text-[#006633]" />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-medium text-[#333]">Course / programme</span>
+              <span className="block text-xs text-[#999] truncate">
+                {loadingPrograms
+                  ? "Loading programmes…"
+                  : programName || (programId ? "Programme set" : "Not chosen yet — pick yours")}
+              </span>
+            </span>
+            <ChevronDown className={`w-4 h-4 text-[#ccc] shrink-0 transition-transform ${open === "programme" ? "rotate-180" : ""}`} />
+          </button>
+          {open === "programme" && (
+            <div className="px-4 pb-4">
+              {programs.length === 0 ? (
+                <p className="text-xs text-[#999]">Your administrator hasn&apos;t added any programmes yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {programs.map((p) => {
+                    const active = (me.program_id ?? "") === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        disabled={savingProgram}
+                        onClick={() => saveProgram(p.id)}
+                        className={`w-full text-left px-3 py-2.5 rounded-md text-sm font-medium border transition-colors ${
+                          active
+                            ? "bg-[#006633] text-white border-[#006633]"
+                            : "bg-white text-[#333] border-[#e0e0e0] hover:border-[#006633] hover:text-[#006633]"
+                        }`}
+                      >
+                        {p.code ? `${p.code} — ${p.name || ""}` : p.name || p.id}
+                      </button>
+                    );
+                  })}
+                  {me.program_id && (
+                    <button
+                      type="button"
+                      disabled={savingProgram}
+                      onClick={() => saveProgram("")}
+                      className="w-full text-left px-3 py-2.5 rounded-md text-sm font-medium border border-[#e0e0e0] bg-white text-[#999] hover:border-red-300 hover:text-red-600 transition-colors"
+                    >
+                      Clear my programme
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        )}
+
         {/* Password row — expands to the form */}
         <div>
           <button
@@ -499,7 +611,7 @@ export default function ProfilePage() {
       </div>
 
       <p className="text-xs text-[#999] text-center pb-2">
-        Email, role, and program are managed by your administrator.
+        Email and role are managed by your administrator. Your programme and class year are yours to change.
       </p>
     </div>
   );
