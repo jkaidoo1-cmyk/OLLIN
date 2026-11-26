@@ -32,6 +32,14 @@ export function warmOfflinePages(): void {
  * refills it on the next dashboard visit.
  */
 export async function clearOfflineData(): Promise<void> {
+  // Papers saved on the device (with their answer keys) and results waiting to
+  // be filed belong to the account that stored them.
+  try {
+    const { clearOfflineQuizData } = await import("./offline-quiz");
+    clearOfflineQuizData();
+  } catch {
+    /* storage unavailable */
+  }
   if (typeof caches === "undefined") return;
   try {
     const names = await caches.keys();

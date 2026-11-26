@@ -3,6 +3,7 @@ import { isLocalRequest } from "@/lib/server-host";
 import { getQuizById, getQuizByIdAsAdmin, getQuizByCode, deleteQuiz, getQuizQuestions } from "@/lib/data";
 import { serverError } from "@/lib/api-errors";
 import { normalizeFigure, normalizePreamble, isMissingOptionalColumn } from "@/lib/question-figure";
+import { checkThrottle } from "@/lib/rate-limit";
 
 // GET — get quiz by ID or share code, with questions (public, no auth required)
 // Resolve the requester's session (null for guests)
@@ -136,6 +137,31 @@ export async function GET(
     // Editor mode: the quiz's host (or an admin) may fetch the full question
     // bank including answers, to edit the quiz. Everyone else gets the
     // stripped public view.
+    // Offline copy: a signed-in student may store this paper WITH its answer
+    // key so it can be taken and marked on a device with no connection. The key
+    // must never reach an anonymous caller — that would let anyone read a
+    // quiz's answers from its share code.
+    if (new URL(request.url).searchParams.get("include") === "offline") {
+      const session = await getSession(request);
+      if (!session) {
+        return NextResponse.json(
+          { error: "Sign in to save this quiz for offline use." },
+          { status: 401 }
+        );
+      }
+      if (quiz.status === "draft") {
+        return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
+      }
+      const throttle = checkThrottle(request, "offline-bundle", 30, 60_000);
+      if (throttle.blocked) {
+        return NextResponse.json(
+          { error: throttle.message },
+          { status: 429, headers: { "Retry-After": String(throttle.retryAfterSeconds) } }
+        );
+      }
+      return NextResponse.json({ quiz, questions });
+    }
+
     const includeAnswers = new URL(request.url).searchParams.get("include") === "answers";
     if (includeAnswers) {
       if (!(await canManage(quiz, request))) {

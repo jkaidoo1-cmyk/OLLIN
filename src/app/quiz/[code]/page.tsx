@@ -14,6 +14,15 @@ import { useToast } from "@/components/ui/toast";
 import { formatTime } from "@/lib/utils";
 import { useOffline } from "@/lib/use-offline";
 import { readJsonResponse } from "@/lib/keep-alive-client";
+import {
+  flushPendingAttempts,
+  getQuizBundleByCode,
+  getQuizBundleById,
+  gradeOffline,
+  queuePendingAttempt,
+  saveQuizBundle,
+  warmQuizPage,
+} from "@/lib/offline-quiz";
 import type { TheoryGrade } from "@/lib/ai/theory-grader";
 
 /**
@@ -130,12 +139,28 @@ export default function QuizPage() {
   const toast = useToast();
 
   const offline = useOffline();
+
+  // A result marked here while offline is filed the moment the connection
+  // returns, without waiting for a trip to the dashboard.
+  useEffect(() => {
+    const flush = () => {
+      flushPendingAttempts().catch(() => {});
+    };
+    window.addEventListener("online", flush);
+    return () => window.removeEventListener("online", flush);
+  }, []);
   // A theory answer is prose that only the AI can mark, so a paper containing
   // one cannot be handed in without a connection.
   const hasTheory = questions.some((q) => q.question_type === "theory");
   const [theoryMarks, setTheoryMarks] = useState<Record<string, TheoryGrade>>({});
   // A paper saved on this device while offline, offered back on return.
   const [savedDraft, setSavedDraft] = useState<TheoryDraft | null>(null);
+  // The paper's own answer key, kept on this device so an offline submission
+  // can be marked on the spot. Null until a copy that carries answers loads.
+  const [gradeSource, setGradeSource] = useState<Question[] | null>(null);
+  // True when the result on screen was marked offline and is still waiting to
+  // be filed with the server.
+  const [queuedOffline, setQueuedOffline] = useState(false);
 
   const draftStorageKey = useCallback(
     () =>
@@ -264,9 +289,25 @@ export default function QuizPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quiz?.id, currentUser?.email, joined, loading]);
 
+  /** Store this paper (questions + answer key) on the device for offline use. */
+  const keepOfflineCopy = useCallback(async (quizCode: string) => {
+    try {
+      const res = await fetch(`/api/quizzes/${encodeURIComponent(quizCode)}?include=offline`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data?.quiz || data.quiz.status === "draft" || !Array.isArray(data.questions)) return;
+      if (saveQuizBundle({ quiz: data.quiz, questions: data.questions, savedAt: new Date().toISOString() })) {
+        setGradeSource(data.questions);
+        // Keep the screen itself too, so the link opens offline as well.
+        warmQuizPage(data.quiz.share_code || quizCode);
+      }
+    } catch { /* offline: nothing to refresh */ }
+  }, []);
+
   useEffect(() => {
     const fetchQuiz = async () => {
       // Always try the public API first (works for guests, local, and logged-in users)
+      let unreachable = false;
       try {
         const res = await fetch(`/api/quizzes/${code}`);
         if (res.ok) {
@@ -275,6 +316,7 @@ export default function QuizPage() {
             setQuiz(data.quiz);
             setQuestions(data.questions || []);
             setLoading(false);
+            keepOfflineCopy(code);
             return;
           } else if (data.quiz) {
             setError("This quiz is not published yet.");
@@ -282,14 +324,36 @@ export default function QuizPage() {
             return;
           }
         }
-      } catch { /* fall through to other methods */ }
+      } catch { unreachable = true; }
+
+      // No connection: take the copy saved on this device. It carries the
+      // questions AND their answer key, so the paper can still be marked here.
+      if (unreachable) {
+        const bundle = getQuizBundleByCode(code);
+        if (bundle) {
+          setQuiz(bundle.quiz);
+          setQuestions(bundle.questions);
+          setGradeSource(bundle.questions);
+          setLoading(false);
+          return;
+        }
+      }
 
       // Try local mode localStorage
       if (isLocalMode()) {
         const localQuiz = getLocalQuizByCode(code);
         if (localQuiz && localQuiz.status !== "draft") {
+          // Local rows already carry their answers, so this paper is markable
+          // offline as it stands — and is kept for next time.
+          const localQuestions = getLocalQuestions(localQuiz.id);
           setQuiz(localQuiz);
-          setQuestions(getLocalQuestions(localQuiz.id));
+          setQuestions(localQuestions);
+          setGradeSource(localQuestions);
+          saveQuizBundle({
+            quiz: localQuiz,
+            questions: localQuestions,
+            savedAt: new Date().toISOString(),
+          });
         } else if (localQuiz) {
           setError("This quiz is not published yet.");
         } else {
@@ -313,7 +377,11 @@ export default function QuizPage() {
           setQuiz(data);
           const { data: qData } = await supabase
             .from("questions").select("*").eq("quiz_id", data.id).order("order_index");
-          if (qData) setQuestions(qData);
+          if (qData) {
+            setQuestions(qData);
+            // This fallback reads the full rows, so it is markable offline too.
+            setGradeSource(qData);
+          }
           setLoading(false);
           return;
         }
@@ -323,7 +391,7 @@ export default function QuizPage() {
       setLoading(false);
     };
     fetchQuiz();
-  }, [code, supabase]);
+  }, [code, supabase, keepOfflineCopy]);
 
   useEffect(() => {
     if (joined && quiz?.time_limit_minutes && deadlineRef.current === null) {
@@ -414,15 +482,20 @@ export default function QuizPage() {
     }
 
     if (supabase) {
-      const { data, error } = await supabase.from("quiz_attempts").insert({
-        quiz_id: quiz!.id,
-        participant_name: participantName.trim(),
-        total_questions: questions.length,
-        status: "in_progress",
-      }).select().single();
+      try {
+        const { data, error } = await supabase.from("quiz_attempts").insert({
+          quiz_id: quiz!.id,
+          participant_name: participantName.trim(),
+          total_questions: questions.length,
+          status: "in_progress",
+        }).select().single();
 
-      if (!error) {
-        setAttempt(data);
+        if (!error) {
+          setAttempt(data);
+        }
+      } catch {
+        // Offline: there is no attempt row yet. One is created when the
+        // result is filed, so the student can start straight away.
       }
     }
     joinedAtRef.current = new Date().toISOString();
@@ -440,6 +513,61 @@ export default function QuizPage() {
       );
       return;
     }
+    // ── Offline: mark here, file later ─────────────────────
+    // The copy saved on this device carries the answer key, so the paper can
+    // be marked on the spot and the result shown straight away. A recorded
+    // attempt (not a practice run) is queued and posted to the server — which
+    // re-grades it — the next time there is a connection.
+    if (offline) {
+      const markingKey = gradeSource ?? getQuizBundleById(quiz.id)?.questions ?? null;
+      if (!markingKey || markingKey.length === 0) {
+        toast.error(
+          "This quiz isn't saved on this device, so it can't be marked offline. Reconnect, open it once, then try again."
+        );
+        return;
+      }
+      setSubmitting(true);
+      const submittedAt = new Date().toISOString();
+      const timeTaken =
+        quiz.time_limit_minutes && deadlineRef.current
+          ? Math.max(
+              0,
+              quiz.time_limit_minutes * 60 -
+                Math.round((deadlineRef.current - Date.now()) / 1000)
+            )
+          : null;
+      const graded = gradeOffline(markingKey, answers);
+      if (!isPractice) {
+        queuePendingAttempt({
+          quizId: quiz.id,
+          quizCode: quiz.share_code,
+          participantName: participantName || currentUser?.name || "Anonymous",
+          participantEmail: currentUser?.email || null,
+          startedAt: attempt?.started_at || joinedAtRef.current || submittedAt,
+          submittedAt,
+          timeTakenSeconds: timeTaken,
+          answers: questions.map((q) => ({
+            question_id: q.id,
+            selected_answer: answers[q.id] || "",
+          })),
+          score: graded.score,
+        });
+      }
+      try { localStorage.removeItem(`quiz_${quiz.id}_answers`); } catch { /* storage */ }
+      try { localStorage.removeItem(draftStorageKey()); } catch { /* storage */ }
+      setQueuedOffline(!isPractice);
+      setTheoryMarks({});
+      setResults({
+        score: graded.score,
+        total: graded.total,
+        correct: graded.correct,
+        detailed: graded.detailed,
+      });
+      setSubmitted(true);
+      setSubmitting(false);
+      return;
+    }
+
     setSubmitting(true);
 
     // ── Server-side grading ────────────────────────────────
@@ -638,7 +766,7 @@ export default function QuizPage() {
         }
       }
     } catch { /* leaderboard optional */ }
-  }, [submitting, submitted, quiz, questions, answers, attempt, isGuest, participantName, supabase, currentUser, offline, hasTheory, draftStorageKey]);
+  }, [submitting, submitted, quiz, questions, answers, attempt, isGuest, participantName, supabase, currentUser, offline, hasTheory, draftStorageKey, gradeSource, isPractice, toast]);
 
   // Auto-join for guests with a URL name happens inside the entry check.
   // Logged-in users never see a separate auto-join effect — the check itself
@@ -887,6 +1015,12 @@ export default function QuizPage() {
                   Your results were not saved. Log in to track your progress.
                 </p>
               )}
+              {queuedOffline && (
+                <p className="text-xs text-[#7a4b00] bg-[#fdf4e3] border border-[#f0d9a8] rounded p-2 mt-2 text-left">
+                  Marked on this device while you were offline. Your result is sent to Ollin
+                  automatically the next time you&apos;re online.
+                </p>
+              )}
               {rank && (
                 <p className="text-xs text-[#666] mt-2">
                   Ranked <span className="font-semibold text-[#006633]">#{rank.rank}</span>
@@ -1124,6 +1258,19 @@ export default function QuizPage() {
             </div>
           )}
 
+          {/* Offline with a paper that needs no AI: it is marked here. */}
+          {offline && !hasTheory && (
+            <div role="status" className="app-card p-4 border-l-4 border-[#0d6b3d] bg-[#f2f8f4]">
+              <p className="text-sm font-semibold text-[#0d6b3d] flex items-center gap-1.5">
+                <WifiOff className="w-4 h-4 shrink-0" /> Offline — this quiz is saved on your device
+              </p>
+              <p className="text-xs text-[#3f5a4a] mt-1">
+                Answer as usual and press Submit. The paper is marked here, and your result is
+                sent to Ollin when you reconnect.
+              </p>
+            </div>
+          )}
+
           {questions.map((q, idx) => {
             const group = groups.get(q.id);
             const showContext = !!(q.preamble && printsContext(group));
@@ -1268,7 +1415,9 @@ export default function QuizPage() {
                   : "Submitting..."
                 : offline && hasTheory
                   ? "Offline — cannot submit"
-                  : `Submit (${answeredCount}/${questions.length})`}
+                  : offline
+                    ? `Submit and mark offline (${answeredCount}/${questions.length})`
+                    : `Submit (${answeredCount}/${questions.length})`}
             </button>
             {offline && hasTheory && (
               <button

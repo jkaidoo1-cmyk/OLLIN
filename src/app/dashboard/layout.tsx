@@ -12,6 +12,7 @@ import { Bell } from "lucide-react";
 import { warmAll, warmResource } from "@/lib/prefetch";
 import { loadMyQuizzes, loadQuizzes } from "@/lib/quizzes-sync";
 import { warmOfflinePages } from "@/lib/offline";
+import { flushPendingAttempts } from "@/lib/offline-quiz";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -130,6 +131,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     warmOfflinePages();
     window.addEventListener("online", warmOfflinePages);
     return () => window.removeEventListener("online", warmOfflinePages);
+  }, []);
+
+  // Results marked while offline are filed with the server as soon as there is
+  // a connection — on any dashboard visit and whenever the device reconnects.
+  useEffect(() => {
+    const flush = () => {
+      flushPendingAttempts().catch(() => {});
+    };
+    flush();
+    window.addEventListener("online", flush);
+    return () => window.removeEventListener("online", flush);
   }, []);
 
   return (

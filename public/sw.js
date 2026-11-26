@@ -8,11 +8,12 @@
  *   - read-only GETs for quizzes, courses, saved (test) quizzes and the
  *     student's own attempts + attempt reviews — My attempts and Test quizzes
  *     render their last known contents;
+ *   - quiz screens whose paper is saved on the device (see offline-quiz.ts);
  *   - icons, the offline page and build chunks already loaded.
  *
- * Still needs a connection: creating a quiz, taking a quiz (grading is
- * server-side) and every write or admin read. Those are never cached, so an
- * offline submission can't silently vanish — the request simply fails.
+ * Still needs a connection: creating a quiz, and every admin read or write.
+ * Taking a quiz does not: the page marks a saved paper locally and queues the
+ * result, which is filed through the normal API when the connection returns.
  *
  * Freshness: everything here is network-first. Online, the page always gets the
  * server's answer and the cache is updated behind it; only when the network is
@@ -21,7 +22,7 @@
 
 // Bumped whenever the cached page/API shapes change — the activate handler
 // deletes every other cache, so a stale shell can't outlive a deployment.
-const CACHE = "ollin-v9";
+const CACHE = "ollin-v10";
 
 const OFFLINE_URL = "/offline.html";
 
@@ -192,9 +193,70 @@ async function warmOfflinePages() {
   }
 }
 
+/**
+ * Keep the quiz screen for one share code, so a quiz saved for offline use
+ * opens from the home screen instead of the offline notice. Both link forms
+ * are stored: a shared link (no query) and the practice link the Test quizzes
+ * list uses.
+ */
+async function warmQuizPage(code) {
+  if (!code) return;
+  const cache = await caches.open(CACHE);
+  const paths = [
+    `/quiz/${encodeURIComponent(code)}`,
+    `/quiz/${encodeURIComponent(code)}?practice=1`,
+  ];
+  for (const path of paths) {
+    const url = new URL(path, self.location.origin);
+    try {
+      const page = await fetch(url.href, { credentials: "same-origin" });
+      const type = page.headers.get("content-type") || "";
+      if (page.ok && type.includes("text/html")) {
+        // The page's own build files must be on the device too: an HTML shell
+        // whose chunks are missing cannot render offline. The scripts and
+        // styles the HTML points at are stored here as well.
+        const html = await page.clone().text();
+        await cache.put(new Request(url.href), page.clone());
+        const assets = new Set(
+          (html.match(/\/_next\/static\/[^"'\s>\\&]+/g) || []).slice(0, 80)
+        );
+        await Promise.all(
+          Array.from(assets).map(async (asset) => {
+            try {
+              const assetUrl = new URL(asset, self.location.origin).href;
+              if (await caches.match(assetUrl, { ignoreVary: true })) return;
+              const res = await fetch(assetUrl);
+              if (res.ok) await cache.put(new Request(assetUrl), res.clone());
+            } catch {
+              /* one missing asset must not stop the rest */
+            }
+          })
+        );
+      }
+    } catch {
+      /* offline */
+    }
+    try {
+      const rsc = await fetch(url.href, {
+        credentials: "same-origin",
+        headers: { RSC: "1" },
+      });
+      const type = rsc.headers.get("content-type") || "";
+      if (rsc.ok && !type.includes("text/html")) {
+        await cache.put(rscKey(url), rsc.clone());
+      }
+    } catch {
+      /* offline */
+    }
+  }
+}
+
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "warm-offline") {
     event.waitUntil(warmOfflinePages());
+  }
+  if (event.data && event.data.type === "warm-quiz-page") {
+    event.waitUntil(warmQuizPage(event.data.code));
   }
 });
 

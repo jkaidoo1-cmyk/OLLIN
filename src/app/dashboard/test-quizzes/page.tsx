@@ -8,6 +8,7 @@ import { SkeletonList } from "@/components/Skeleton";
 import { QuizViewSwitcher } from "@/components/QuizViewSwitcher";
 import { getResource, warmResource } from "@/lib/prefetch";
 import { loadQuizzes } from "@/lib/quizzes-sync";
+import { fetchAndSaveQuizBundle } from "@/lib/offline-quiz";
 import { BookOpen, Clock, Play, Search, Share2, Check } from "lucide-react";
 
 interface CourseWithQuizzes {
@@ -176,6 +177,30 @@ export default function TestQuizzesPage() {
       alive = false;
     };
   }, []);
+
+  // Save each listed quiz on this device, so the whole study list can be
+  // opened, taken and marked with no connection. Guests get a 401 from the
+  // bundle endpoint and simply keep the online-only behaviour.
+  useEffect(() => {
+    if (loading) return;
+    let cancelled = false;
+    const codes = [
+      BUILT_IN_TEST_QUIZ.share_code,
+      ...coursesWithQuizzes.flatMap((c) => c.quizzes.map((q) => q.share_code)),
+    ].filter(Boolean);
+    const unique = [...new Set(codes)].slice(0, 10);
+
+    (async () => {
+      for (const quizCode of unique) {
+        if (cancelled || navigator.onLine === false) return;
+        await fetchAndSaveQuizBundle(quizCode);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, coursesWithQuizzes]);
 
   // The built-in test quiz appears unless a search excludes it (a course filter hides it automatically).
   const showBuiltIn =
