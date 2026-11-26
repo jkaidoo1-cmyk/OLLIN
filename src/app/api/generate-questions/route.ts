@@ -75,6 +75,71 @@ function normalizeAnswerKey(
   return "";
 }
 
+interface SchemeCandidate {
+  type: string;
+  question: string;
+  correctAnswer: string;
+  explanation: string;
+}
+
+/** Shortest model answer worth marking against (a word or an option index is not one). */
+const THEORY_SCHEME_MIN_CHARS = 20;
+
+function lacksTheoryScheme(q: SchemeCandidate): boolean {
+  return (
+    q.type === "theory" &&
+    (String(q.correctAnswer || "").trim().length < THEORY_SCHEME_MIN_CHARS ||
+      !String(q.explanation || "").trim())
+  );
+}
+
+/**
+ * Every submission is marked against the scheme saved with its question, so a
+ * theory item must never be stored without one. When the generator returns a
+ * theory question with no usable model answer (or no expected points), the
+ * scheme is written here and attached to the item before it is saved.
+ *
+ * Items that still have no scheme keep their contents; the quality gate drops
+ * them and reports them like any other defect instead of letting an unmarkable
+ * question reach a student.
+ */
+async function fillTheorySchemes<T extends SchemeCandidate>(
+  items: T[],
+  options: {
+    deadlineAt?: number;
+    onUsage?: (usage: { keyId: string; inputTokens: number; outputTokens: number }) => Promise<void> | void;
+  } = {}
+): Promise<T[]> {
+  const missing = items.filter(lacksTheoryScheme);
+  if (missing.length === 0) return items;
+  if (options.deadlineAt && options.deadlineAt - Date.now() < 8_000) return items;
+  try {
+    const { generateTheorySchemes } = await import("@/lib/ai/theory-grader");
+    const schemes = await generateTheorySchemes(
+      missing.map((q) => q.question),
+      { deadlineAt: options.deadlineAt, onUsage: options.onUsage }
+    );
+    if (schemes.size === 0) return items;
+    return items.map((q) => {
+      if (!lacksTheoryScheme(q)) return q;
+      const key = String(q.question || "").trim().replace(/\s+/g, " ").toLowerCase();
+      const scheme = schemes.get(key);
+      if (!scheme) return q;
+      return {
+        ...q,
+        correctAnswer: scheme.modelAnswer,
+        explanation: scheme.expectedPoints || q.explanation,
+      };
+    });
+  } catch (err) {
+    console.error(
+      "[generate] theory scheme writing failed:",
+      err instanceof Error ? err.message : err
+    );
+    return items;
+  }
+}
+
 /** Fisher–Yates: a real shuffle, so position carries no information. */
 function shuffled<T>(items: T[]): T[] {
   const out = [...items];
@@ -219,9 +284,27 @@ async function handle(request: NextRequest) {
         `Extracted ${normalizedExamQuestions.length} questions from ${file_name || material_text?.slice(0, 32) || "exam upload"}`
       );
 
+      // Extracted theory items are marked against their model answer too, so
+      // any that came back with a stub answer get a real scheme now.
+      let examQuestionsForSave: Record<string, unknown>[] = normalizedExamQuestions;
+      try {
+        examQuestionsForSave = await fillTheorySchemes(
+          normalizedExamQuestions as unknown as SchemeCandidate[],
+          {
+            deadlineAt: Date.now() + 40_000,
+            onUsage: async ({ keyId, inputTokens, outputTokens }) => {
+              try {
+                const { recordKeyUsage } = await import("@/lib/ai/key-rotation");
+                await recordKeyUsage(keyId, inputTokens, outputTokens);
+              } catch { /* non-critical */ }
+            },
+          }
+        ) as unknown as Record<string, unknown>[];
+      } catch { /* keep the extracted items as they are */ }
+
       return NextResponse.json({
         analysis,
-        questions: normalizedExamQuestions,
+        questions: examQuestionsForSave,
         // Questions the model returned without a resolvable answer are dropped
         // rather than stored with a guessed key — report how many.
         dropped: Math.max(0, (questions as Record<string, unknown>[]).filter((q) => q.question).length - normalizedExamQuestions.length),
@@ -360,7 +443,9 @@ async function handle(request: NextRequest) {
 
     const acceptBatch = (batch: unknown[], subject: string) =>
       (batch as Record<string, unknown>[])
-      .filter((q) => q.question && q.correctAnswer !== undefined)
+      // A theory item is judged against its model answer, so it is kept even
+      // when the generator left the answer empty — the scheme is written below.
+      .filter((q) => q.question && (q.correctAnswer !== undefined || q.type === "theory"))
       .map((q) => {
         const isTF = q.type === "true_false";
         let rawOptions = Array.isArray(q.options) ? q.options.map(String) : undefined;
@@ -378,7 +463,9 @@ async function handle(request: NextRequest) {
           question: String(q.question || ""),
           options: rawOptions,
           correctAnswer: normalizeAnswerKey(type, q.correctAnswer, rawOptions),
-          explanation: String(q.explanation || "Based on the provided material."),
+          // For theory this is the expected points, not a one-line reason: a
+          // filler sentence here would be a rubric nobody wrote.
+          explanation: String(q.explanation || (type === "theory" ? "" : "Based on the provided material.")),
           topic: String(q.topic || subject || "General"),
           difficulty: ["easy", "medium", "hard"].includes(q.difficulty as string)
             ? q.difficulty
@@ -390,7 +477,7 @@ async function handle(request: NextRequest) {
           preamble: normalizePreamble(q.preamble),
         };
       })
-      .filter((q) => q.correctAnswer !== "");
+      .filter((q) => q.correctAnswer !== "" || q.type === "theory");
 
     // Deterministic quality gate: the prompt states the standard, this enforces
     // the part of it a script can check (banned stems, bogus options, repeats).
@@ -399,16 +486,17 @@ async function handle(request: NextRequest) {
     const stemSeen = new Set<string>();
     const dropped: { question: string; reason: string }[] = [];
 
-    const gate = (batch: unknown[]) => {
-      const { kept, dropped: rejected } = filterLowQuality(
-        acceptBatch(batch, analysis.subject),
-        stemSeen
-      );
+    const gate = async (batch: unknown[]) => {
+      const accepted = await fillTheorySchemes(acceptBatch(batch, analysis.subject), {
+        deadlineAt,
+        onUsage: recordUsage,
+      });
+      const { kept, dropped: rejected } = filterLowQuality(accepted, stemSeen);
       dropped.push(...rejected);
       return kept;
     };
 
-    let qualityChecked = gate(questions);
+    let qualityChecked = await gate(questions);
 
     // A rejected item must not silently shrink the quiz: ask once more for the
     // shortfall, naming the points already covered so the retry adds new ones
@@ -438,7 +526,7 @@ async function handle(request: NextRequest) {
             onUsage: recordUsage,
           }
         );
-        qualityChecked = [...qualityChecked, ...gate(retry.questions)];
+        qualityChecked = [...qualityChecked, ...(await gate(retry.questions))];
       } catch (err) {
         // A failed top-up is not a failed quiz: keep what passed the gate and
         // report the real count in the response below.
@@ -476,7 +564,7 @@ async function handle(request: NextRequest) {
               .join("\n\n"),
             onUsage: recordUsage,
           });
-          const added = gate(retry.questions).filter(
+          const added = (await gate(retry.questions)).filter(
             (q) => q.type === "true_false" && q.correctAnswer === "false"
           );
           if (added.length > 0) {

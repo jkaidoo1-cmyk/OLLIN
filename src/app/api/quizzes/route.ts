@@ -100,6 +100,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "A quiz can have at most 500 questions" }, { status: 422 });
     }
 
+    // Theory answers are marked against the question's stored model answer, so
+    // a theory item without one can never be marked — refuse the save rather
+    // than publish a question no student can be scored on fairly.
+    const { theorySchemeDefect } = await import("@/lib/ai/quality");
+    const schemeDefect = theorySchemeDefect(questions);
+    if (schemeDefect) {
+      return NextResponse.json(
+        {
+          error: `Question ${schemeDefect.index + 1} is a theory question, so it needs a model answer of at least a sentence. Every student is marked against it, so it must be written before the quiz is saved.`,
+          question_index: schemeDefect.index,
+        },
+        { status: 422 }
+      );
+    }
+
     if (local && body.quiz) {
       // Direct-save path: normalize the client-built quiz before persisting,
       // so a malformed payload can never poison the server file.

@@ -315,7 +315,10 @@ async function handleSubmit(
           return {
             question_id: q.id as string,
             question: String(q.question_text ?? ""),
-            modelAnswer: String(q.correct_answer ?? q.answer_key ?? ""),
+            // The scheme saved with the question is the only thing anyone is
+            // marked against, so it is read fresh for this submission and the
+            // same rows are used for every student.
+            modelAnswer: String(q.correct_answer || q.answer_key || ""),
             expectedPoints: q.explanation ?? null,
             studentAnswer,
             maxMarks: Number(q.marks) || 1,

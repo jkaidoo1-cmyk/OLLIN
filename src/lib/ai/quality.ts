@@ -168,6 +168,30 @@ export function qualityIssue(
 }
 
 /**
+ * A theory question is marked against its stored model answer, so a theory
+ * item without a usable one would be unmarkable (or, worse, marked against a
+ * leftover option index). Returns the first offending question index, or null.
+ * Used to refuse the save instead of publishing a question nobody can mark.
+ */
+export function theorySchemeDefect(
+  questions: Array<{
+    question_type?: string;
+    type?: string;
+    correct_answer?: unknown;
+    correctAnswer?: unknown;
+  }>
+): { index: number } | null {
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    const type = q.question_type ?? q.type;
+    if (type !== "theory") continue;
+    const answer = String(q.correct_answer ?? q.correctAnswer ?? "").trim();
+    if (answer.length < 20) return { index: i };
+  }
+  return null;
+}
+
+/**
  * Split a generated batch into kept items and dropped items with reasons.
  * Returns everything when nothing is wrong, so callers can log only on change.
  */

@@ -64,6 +64,47 @@ export interface TheoryGrade {
   model?: string;
 }
 
+/**
+ * The marking scheme for one theory question: the model answer and the points
+ * a full-mark response must cover.
+ */
+export interface TheoryScheme {
+  question: string;
+  modelAnswer: string;
+  expectedPoints: string;
+}
+
+/**
+ * A theory question is only fair if every submission is marked against the same
+ * stored scheme. The generator is asked for that scheme, but when it returns a
+ * question without one (or with a one-word "answer"), the scheme is written
+ * here and saved with the question — not re-invented per submission.
+ */
+export function theorySchemePrompt(questions: string[]): string {
+  const list = questions
+    .map((q, i) => `--- QUESTION ${i + 1} ---\n${q.trim()}`)
+    .join("\n\n");
+
+  return `You are writing the marking scheme for theory (free-response) exam questions. For each question, write the reference answer a full-mark response must contain.
+
+Rules:
+- modelAnswer: 2–5 sentences that answer the question completely and correctly, in the subject's own terms. It is the reference a marker compares every student against, so it must settle the question on its own.
+- expectedPoints: the distinct key points a full-mark answer must cover, each a short phrase, separated by semicolons (4–8 points). They must follow from the model answer and be specific to this question — no generic advice such as "answer clearly".
+- Never leave a question without a scheme. If the question is ambiguous, answer the most defensible reading of it.
+- Do not restate the question in the model answer.
+
+Questions:
+${list}
+
+JSON only, in this exact shape (one entry per question, same order):
+{"schemes":[{"question":"","modelAnswer":"","expectedPoints":""}]}`;
+}
+
+/** Normalise a question stem for map lookups. */
+function schemeKey(question: string): string {
+  return question.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 export function theoryGradingPrompt(items: TheoryGradingItem[]): string {
   const blocks = items
     .map((item, i) => {
@@ -331,6 +372,79 @@ export async function gradeTheoryAnswers(
   }
 
   return results;
+}
+
+/**
+ * Writes marking schemes for theory questions, keyed by the question text.
+ *
+ * Uses the same key pool and rotation as marking, so this works on any
+ * deployment that can generate questions. Questions the model could not answer
+ * are simply absent from the map — the caller keeps the item as it is.
+ */
+export async function generateTheorySchemes(
+  questions: string[],
+  options: {
+    deadlineAt?: number;
+    onUsage?: (usage: { keyId: string; inputTokens: number; outputTokens: number }) => Promise<void> | void;
+  } = {}
+): Promise<Map<string, TheoryScheme>> {
+  const schemes = new Map<string, TheoryScheme>();
+  if (questions.length === 0) return schemes;
+
+  const { getAllKeys, recordKeyUsage } = await import("./key-rotation");
+  const allKeys = await getAllKeys();
+  const enabled = allKeys.filter((k) => k.enabled && k.key);
+  if (enabled.length === 0) return schemes;
+  const providers = [...new Set(enabled.map((k) => k.provider))] as Array<"groq" | "gemini">;
+
+  for (let i = 0; i < questions.length; i += MAX_QUESTIONS_PER_CALL) {
+    const batch = questions.slice(i, i + MAX_QUESTIONS_PER_CALL);
+    const prompt = theorySchemePrompt(batch);
+    let written = false;
+
+    for (const provider of providers) {
+      if (options.deadlineAt && options.deadlineAt - Date.now() < 4_000) break;
+      try {
+        const { result, keyId } = await tryWithRotation(
+          (apiKey) => callProvider(provider, apiKey, prompt, options.deadlineAt),
+          provider
+        );
+        await options.onUsage?.({
+          keyId,
+          inputTokens: result.usage.input,
+          outputTokens: result.usage.output,
+        });
+        try {
+          await recordKeyUsage(keyId, result.usage.input, result.usage.output);
+        } catch { /* non-critical */ }
+
+        const parsed = parseJson(result.raw);
+        const list = Array.isArray(parsed.schemes) ? (parsed.schemes as Record<string, unknown>[]) : [];
+        for (const [index, question] of batch.entries()) {
+          const row =
+            list.find((r) => schemeKey(String(r.question ?? "")) === schemeKey(question)) ??
+            list[index];
+          const modelAnswer = String(row?.modelAnswer ?? "").trim();
+          const expectedPoints = String(row?.expectedPoints ?? "").trim();
+          // A one-word answer is not a scheme — reject it rather than storing it
+          // and marking every student against it.
+          if (modelAnswer.length < 20) continue;
+          schemes.set(schemeKey(question), { question, modelAnswer, expectedPoints });
+        }
+        written = true;
+        break;
+      } catch (err) {
+        console.error(
+          `[theory-grader] ${provider} scheme writing failed:`,
+          err instanceof Error ? err.message : err
+        );
+      }
+    }
+
+    if (!written) continue;
+  }
+
+  return schemes;
 }
 
 function ungraded(item: TheoryGradingItem, reason: string): TheoryGrade {

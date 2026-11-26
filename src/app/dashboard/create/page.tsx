@@ -384,6 +384,19 @@ export default function CreateQuizPage() {
 
   // Publish
   const handlePublish = async () => {
+    // A theory question is marked against its model answer. Publishing one
+    // without a usable model answer would leave the AI nothing to mark it
+    // against, so the save is refused here before the request is made.
+    const theoryDefect = questions.findIndex(
+      (q) => q.type === "theory" && String(q.correctAnswer || "").trim().length < 20
+    );
+    if (theoryDefect >= 0) {
+      setGenerateError(
+        `Question ${theoryDefect + 1} is a theory question, so it needs a model answer of at least a sentence — that model answer is the marking scheme every student's answer is judged against.`
+      );
+      setEditingIdx(theoryDefect);
+      return;
+    }
     setPublishing(true);
     try {
       const shareCode = editId
@@ -1110,7 +1123,28 @@ export default function CreateQuizPage() {
                           />
                           <select
                             value={q.type}
-                            onChange={(e) => updateQuestion(idx, "type", e.target.value)}
+                            onChange={(e) => {
+                              // Answers do not translate between types: a
+                              // leftover multiple-choice index would become a
+                              // theory "model answer" and be marked against.
+                              const next = e.target.value;
+                              const wasTheory = q.type === "theory";
+                              setQuestions((prev) =>
+                                prev.map((qq, i) =>
+                                  i === idx
+                                    ? {
+                                        ...qq,
+                                        type: next,
+                                        correctAnswer:
+                                          next === "theory" || wasTheory ? "" : qq.correctAnswer,
+                                        explanation:
+                                          next === "theory" || wasTheory ? "" : qq.explanation,
+                                        options: next === "theory" ? undefined : qq.options,
+                                      }
+                                    : qq
+                                )
+                              );
+                            }}
                             className="input-field mb-2 text-xs"
                           >
                             <option value="multiple_choice">Multiple choice</option>

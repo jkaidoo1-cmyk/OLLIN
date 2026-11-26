@@ -233,6 +233,20 @@ export async function PUT(
       return NextResponse.json({ error: "At least one question is required" }, { status: 400 });
     }
 
+    // Theory items are marked against their stored model answer; saving one
+    // without it would leave the question unmarkable.
+    const { theorySchemeDefect } = await import("@/lib/ai/quality");
+    const schemeDefect = theorySchemeDefect(questions);
+    if (schemeDefect) {
+      return NextResponse.json(
+        {
+          error: `Question ${schemeDefect.index + 1} is a theory question, so it needs a model answer of at least a sentence. Every student is marked against it, so it must be written before the quiz is saved.`,
+          question_index: schemeDefect.index,
+        },
+        { status: 422 }
+      );
+    }
+
     // Server file mode: upsert the quiz row, replace its questions.
     const { readServerQuizzes, writeServerQuizzes, readServerQuestions, writeServerQuestions } =
       await import("@/lib/data");
