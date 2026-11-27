@@ -366,6 +366,37 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Enforce the quiz's attempt limit against the rows that actually
+        // exist. The guard above reads the FILE store, which is empty on a
+        // serverless host, so a student could retake a one-attempt quiz by
+        // simply reopening it — the limit was never checked against Postgres.
+        if (participantId) {
+          const { data: quizRow } = await admin
+            .from("quizzes")
+            .select("max_attempts")
+            .eq("id", safeQuizId)
+            .maybeSingle();
+          const allowed = Math.max(1, Number(quizRow?.max_attempts) || 1);
+          const { count: completedCount } = await admin
+            .from("quiz_attempts")
+            .select("id", { count: "exact", head: true })
+            .eq("quiz_id", safeQuizId)
+            .eq("participant_id", participantId)
+            .in("status", ["completed", "timed_out"]);
+          if ((completedCount ?? 0) >= allowed) {
+            return NextResponse.json(
+              {
+                error:
+                  allowed > 1
+                    ? `You have used all ${allowed} attempts for this quiz.`
+                    : "You have already taken this quiz.",
+                duplicate: true,
+              },
+              { status: 409 }
+            );
+          }
+        }
+
         const { data: created, error: insertError } = await admin
           .from("quiz_attempts")
           .insert({
@@ -421,8 +452,12 @@ export async function POST(request: NextRequest) {
       total_questions: clampInt(total_questions, 0, 1000, 0),
       correct_answers: clampInt(correct_answers, 0, 1000, 0),
       score_percentage: clampInt(score_percentage, 0, 100, 0),
-      marks_earned: clampInt(correct_answers, 0, 1000, 0),
-      marks_total: clampInt(total_questions, 0, 1000, 0),
+      // Marks are not question counts: a 2-mark item made this record claim
+      // "1 of 1" for a question worth 2. Only the graded submit route can
+      // compute real marks, so anything a client sends here stays clamped and
+      // defaults to zero.
+      marks_earned: clampInt(body.marks_earned, 0, 1000, 0),
+      marks_total: clampInt(body.marks_total, 0, 1000, clampInt(total_questions, 0, 1000, 0)),
       status: attemptStatus,
       answers: answers || null, // question_id → selected answer, for review
       created_at: new Date().toISOString(),

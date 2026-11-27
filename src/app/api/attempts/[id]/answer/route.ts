@@ -50,7 +50,36 @@ export async function POST(
       );
     }
 
-    const attempt = readServerAttempts().find((a) => a.id === id) as AttemptRow | undefined;
+    // The attempt lives in quiz_attempts on a deployed host and in the file
+    // store on a local one. Looking in the file store alone answered 404 to
+    // every autosave in production, so in-progress answers were never saved.
+    let attempt = readServerAttempts().find((a) => a.id === id) as AttemptRow | undefined;
+    let dbParticipantId: string | null = null;
+    if (!attempt && !local) {
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/server");
+        const admin = await createAdminClient();
+        if (admin) {
+          const { data: row } = await admin
+            .from("quiz_attempts")
+            .select("id,quiz_id,participant_id,status")
+            .eq("id", id)
+            .maybeSingle();
+          if (row) {
+            dbParticipantId = row.participant_id ?? null;
+            attempt = {
+              id: row.id,
+              quiz_id: row.quiz_id,
+              status: row.status,
+              participant_email: null,
+              answers: null,
+            } as unknown as AttemptRow;
+          }
+        }
+      } catch {
+        /* reported as not found below */
+      }
+    }
     if (!attempt) {
       return NextResponse.json({ error: "Attempt not found" }, { status: 404 });
     }
@@ -58,7 +87,17 @@ export async function POST(
       return NextResponse.json({ error: "This attempt is already finished" }, { status: 409 });
     }
 
-    if (attempt.participant_email) {
+    // Ownership is the stored participant id where one exists, the email for
+    // older file records. A client-supplied identity is never trusted.
+    const storedOwnerId = dbParticipantId ?? (attempt as { participant_id?: string | null }).participant_id ?? null;
+    if (storedOwnerId) {
+      const session = await getSessionUser(request).catch(() => null);
+      const allowed =
+        !!session && (session.id === storedOwnerId || session.role === "admin");
+      if (!allowed) {
+        return NextResponse.json({ error: "Not your attempt" }, { status: 403 });
+      }
+    } else if (attempt.participant_email) {
       const session = await getSessionUser(request).catch(() => null);
       const allowed =
         !!session && (session.email === attempt.participant_email || session.role === "admin");
@@ -70,7 +109,8 @@ export async function POST(
     // Server-derived correctness — the SAME comparison the submit route uses,
     // so autosave feedback can't disagree with the final score (a stored
     // answer key in option-text form used to look wrong here).
-    const questions = (await getQuizQuestions(attempt.quiz_id, true)) as any[];
+    let questions = (await getQuizQuestions(attempt.quiz_id, local)) as any[];
+    if (questions.length === 0) questions = (await getQuizQuestions(attempt.quiz_id, true)) as any[];
     const q = questions.find((qq) => qq.id === questionId);
     const options = Array.isArray(q?.options) ? (q.options as unknown[]).map(String) : [];
     const isCorrect = !!q && isAnswerCorrect(selected, String(q.correct_answer ?? ""), options);

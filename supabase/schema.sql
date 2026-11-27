@@ -91,7 +91,7 @@ create table if not exists public.questions (
   quiz_id uuid references public.quizzes(id) on delete cascade not null,
   question_text text not null,
   question_type text not null default 'multiple_choice'
-    check (question_type in ('multiple_choice', 'true_false', 'short_answer', 'fill_blank')),
+    check (question_type in ('multiple_choice', 'true_false', 'short_answer', 'fill_blank', 'theory')),
   options jsonb,
   correct_answer text not null,
   explanation text,

@@ -243,35 +243,36 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const { data: quiz, error: quizError } = await admin
-          .from("quizzes")
-          .insert({
-            host_id: hostId,
-            title: title.trim(),
-            description: description || null,
-            share_code: shareCode,
-            time_limit_minutes: time_limit_minutes || null,
-            max_attempts: max_attempts ?? 1,
-            show_answers_after: show_answers_after || "after_completion",
-            shuffle_questions: shuffle_questions ?? true,
-            shuffle_options: shuffle_options ?? true,
-            passing_score: passing_score ?? 60,
-            starts_at: starts_at ?? null,
-            ends_at: ends_at ?? null,
-            course_id: course_id ?? null,
-            status: status || "published",
-          })
-          .select()
-          .single();
-        if (quizError) throw quizError;
+        const quizFields = {
+          title: title.trim(),
+          description: description || null,
+          time_limit_minutes: time_limit_minutes || null,
+          max_attempts: max_attempts ?? 1,
+          show_answers_after: show_answers_after || "after_completion",
+          shuffle_questions: shuffle_questions ?? true,
+          shuffle_options: shuffle_options ?? true,
+          passing_score: passing_score ?? 60,
+          starts_at: starts_at ?? null,
+          ends_at: ends_at ?? null,
+          course_id: course_id ?? null,
+          status: status || "published",
+        };
 
-        // Insert questions
-        if (questions && questions.length > 0) {
+        // A save that is retried must not become a second quiz. The client
+        // sends one stable draft id for the whole form, so a repeated POST
+        // (e.g. after a lost response) reuses the row the first attempt made
+        // instead of inserting a duplicate under the same title.
+        const draftId =
+          typeof body.quiz?.id === "string" &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.quiz.id)
+            ? body.quiz.id
+            : null;
+
+        const storeQuestions = async (quizId: string): Promise<number> => {
           const questionInserts = questions.map((q: any, idx: number) => ({
-            quiz_id: quiz.id,
+            quiz_id: quizId,
             ...normalizeQuestionPayload(q, idx),
           }));
-          createdQuestionCount = questionInserts.length;
           let { error: qError } = await admin.from("questions").insert(questionInserts);
           // The `figure` column ships as a migration: retry without it rather
           // than lose the whole quiz because a deployment is one SQL file ahead.
@@ -282,6 +283,85 @@ export async function POST(request: NextRequest) {
               .insert(questionInserts.map(({ figure: _figure, preamble: _preamble, ...rest }) => rest)));
           }
           if (qError) throw qError;
+          return questionInserts.length;
+        };
+
+        if (draftId) {
+          const { data: existing } = await admin
+            .from("quizzes")
+            .select("id,host_id,share_code")
+            .eq("id", draftId)
+            .maybeSingle();
+          if (existing) {
+            if (existing.host_id !== hostId && session?.role !== "admin") {
+              return NextResponse.json(
+                { error: "A quiz with this id already belongs to another creator" },
+                { status: 409 }
+              );
+            }
+            const { data: updated, error: updateError } = await admin
+              .from("quizzes")
+              .update({ ...quizFields, updated_at: new Date().toISOString() })
+              .eq("id", draftId)
+              .select()
+              .single();
+            if (updateError) throw updateError;
+            const saved = updated as Quiz;
+            // Only fill in questions when the earlier attempt stored none.
+            // Replacing them on every retry would wipe a quiz that did save.
+            const { count } = await admin
+              .from("questions")
+              .select("id", { count: "exact", head: true })
+              .eq("quiz_id", draftId);
+            if (!count) createdQuestionCount = await storeQuestions(draftId);
+
+            if (session) {
+              await recordAdminAction(
+                request,
+                session,
+                "quiz.create",
+                "quiz",
+                saved.id,
+                `Saved quiz "${saved.title}" with ${createdQuestionCount} questions`
+              );
+            }
+            return NextResponse.json({ quiz: saved, code: existing.share_code, replayed: true });
+          }
+        }
+
+        const { data: inserted, error: quizError } = await admin
+          .from("quizzes")
+          .insert({
+            ...(draftId ? { id: draftId } : {}),
+            host_id: hostId,
+            share_code: shareCode,
+            ...quizFields,
+          })
+          .select()
+          .single();
+        if (quizError) throw quizError;
+        const created = inserted as Quiz;
+
+        // Insert questions. A quiz whose questions could not be stored is
+        // rolled back: leaving the row behind produced a published but empty
+        // quiz that every list showed as a stray duplicate of the retry.
+        if (questions && questions.length > 0) {
+          try {
+            createdQuestionCount = await storeQuestions(created.id);
+          } catch (qErr) {
+            const { error: rollbackError } = await admin
+              .from("quizzes")
+              .delete()
+              .eq("id", created.id);
+            if (rollbackError) {
+              console.error(
+                "[quizzes.create] could not roll back empty quiz",
+                created.id,
+                rollbackError.message
+              );
+            }
+            throw qErr;
+          }
         }
 
         if (session) {
@@ -290,12 +370,12 @@ export async function POST(request: NextRequest) {
             session,
             "quiz.create",
             "quiz",
-            quiz.id,
-            `Created quiz "${title.trim()}" with ${createdQuestionCount} questions`
+            created.id,
+            `Created quiz "${created.title}" with ${createdQuestionCount} questions`
           );
         }
 
-        return NextResponse.json({ quiz, code: shareCode });
+        return NextResponse.json({ quiz: created, code: shareCode });
       } catch (err) {
         if (err instanceof Error) supabaseError = err;
         else supabaseError = new Error(String(err));
@@ -305,9 +385,13 @@ export async function POST(request: NextRequest) {
       // write there "succeeds" and is gone, so report the real failure.
       if (isEphemeralHost()) {
         console.error("[quizzes.create] database write failed:", supabaseError?.message);
+        // A question type the table's check constraint rejects can never be
+        // fixed by retrying — name it, otherwise the user just keeps clicking.
+        const rejectedType = /question_type/i.test(supabaseError?.message || "");
         return userError("storage_unavailable", {
-          message:
-            "Your quiz wasn't saved. Nothing was created — please try again in a moment.",
+          message: rejectedType
+            ? "This quiz has a question type the database doesn't accept yet. Nothing was created — run supabase/question-theory.sql in the Supabase SQL editor, then save again."
+            : "Your quiz wasn't saved. Nothing was created — please try again in a moment.",
           extra: { not_persisted: true },
         });
       }

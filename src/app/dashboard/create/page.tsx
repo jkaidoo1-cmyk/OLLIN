@@ -43,6 +43,13 @@ interface GeneratedQ {
 /** Placeholder titles produced when the model gives no title of its own. */
 const GENERIC_TITLES = new Set(["material analysis", "untitled quiz", "quiz"]);
 
+/** A stable draft id: reused by retries, replaced after a successful save. */
+function freshDraftId(): string {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export default function CreateQuizPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -122,6 +129,11 @@ export default function CreateQuizPage() {
 
   // Publishing
   const { pending: publishing, begin: beginPublish, end: endPublish } = usePendingAction();
+  // One id for the whole draft. Saving the same form twice (a retry after a
+  // failed-looking request) updates this quiz instead of creating a second
+  // copy of it under the same title. It is replaced once a save succeeds, so
+  // the next quiz built in this session is a new row rather than an overwrite.
+  const [draftId, setDraftId] = useState(freshDraftId);
   const [generatedCode, setGeneratedCode] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -402,7 +414,7 @@ export default function CreateQuizPage() {
     }
     if (!beginPublish()) return;
     try {
-      const shareCode = editId
+      let shareCode = editId
         ? editShareCode
         : quizMode === "self"
         ? `SELF-${Date.now()}`
@@ -416,7 +428,7 @@ export default function CreateQuizPage() {
 
       if (isLocalMode()) {
         const localQuiz: Quiz = {
-          id: editId || `local-quiz-${Date.now()}`,
+          id: editId || `local-quiz-${draftId}`,
           host_id: currentUserId,
           title: resolvedTitle(),
           description: null,
@@ -467,6 +479,10 @@ export default function CreateQuizPage() {
             const err = await saveRes.json();
             throw new Error(err.error || "Failed to save quiz");
           }
+          // The server owns the share code that was actually stored; showing
+          // a locally invented one handed out a code that found no quiz.
+          const saved = await saveRes.json().catch(() => ({}));
+          if (saved?.code) shareCode = saved.code;
         } catch (saveErr) {
           setGenerateError(saveErr instanceof Error ? saveErr.message : "Failed to save quiz. Please try again.");
           endPublish();
@@ -486,6 +502,7 @@ export default function CreateQuizPage() {
           "quiz"
         );
         setGeneratedCode(shareCode);
+        setDraftId(freshDraftId());
         return;
       }
 
@@ -496,7 +513,7 @@ export default function CreateQuizPage() {
       // bounced them to /login, and an edit inserted a duplicate quiz instead
       // of updating the existing one.
       const quizPayload = {
-        id: editId || undefined,
+        id: editId || draftId,
         title: resolvedTitle(),
         description: null,
         share_code: shareCode,
@@ -542,8 +559,12 @@ export default function CreateQuizPage() {
         throw new Error(err.error || "Failed to save quiz");
       }
 
+      const saved = await res.json().catch(() => ({}));
+      if (saved?.code) shareCode = saved.code;
+
       invalidateResource("quizzes");
       invalidateResource("my-quizzes");
+      setDraftId(freshDraftId());
       setGeneratedCode(shareCode);
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : "Failed to publish quiz");

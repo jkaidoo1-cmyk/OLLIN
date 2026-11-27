@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readServerAttempts } from "@/lib/data";
 import { getSessionUser } from "@/lib/session";
+import { isLocalRequest } from "@/lib/server-host";
 
 /**
  * GET /api/quizzes/[id]/leaderboard?limit=10
@@ -9,9 +10,24 @@ import { getSessionUser } from "@/lib/session";
  * completion time. If the requester is logged in, `your_rank` (1-based) is
  * their best attempt's position among all attempts.
  *
- * Reads from the server attempts store (the quiz page records every
- * completed attempt there, in both storage modes).
+ * Attempts live in quiz_attempts on a deployed host and in the file store on a
+ * local one. Reading only the file store made the leaderboard permanently
+ * empty in production.
  */
+interface LeaderRow {
+  id: string;
+  quiz_id: string;
+  participant_id?: string | null;
+  participant_name: string | null;
+  participant_email?: string | null;
+  score_percentage: number | null;
+  correct_answers: number | null;
+  total_questions: number | null;
+  time_taken_seconds: number | null;
+  completed_at: string | null;
+  status: string;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -19,43 +35,64 @@ export async function GET(
   try {
     const { id } = await params;
     const limit = Math.min(50, Math.max(1, parseInt(request.nextUrl.searchParams.get("limit") || "10", 10)));
+    const local = isLocalRequest(request);
 
-    const attempts = readServerAttempts() as unknown as Array<{
-      quiz_id: string;
-      participant_name: string;
-      participant_email?: string | null;
-      score_percentage: number;
-      correct_answers: number;
-      total_questions: number;
-      time_taken_seconds: number | null;
-      completed_at: string;
-      status: string;
-    }>;
+    const rows: LeaderRow[] = [];
 
-    const ranked = attempts
-      .filter((a) => a.quiz_id === id && a.status === "completed")
-      .sort((a, b) => {
-        if (b.score_percentage !== a.score_percentage) {
-          return b.score_percentage - a.score_percentage;
+    if (!local) {
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/server");
+        const admin = await createAdminClient();
+        if (admin) {
+          const { data } = await admin
+            .from("quiz_attempts")
+            .select(
+              "id,quiz_id,participant_id,participant_name,score_percentage,correct_answers,total_questions,time_taken_seconds,completed_at,status"
+            )
+            .eq("quiz_id", id)
+            .eq("status", "completed")
+            .limit(500);
+          rows.push(...((data ?? []) as LeaderRow[]));
         }
-        const ta = a.time_taken_seconds ?? Number.MAX_SAFE_INTEGER;
-        const tb = b.time_taken_seconds ?? Number.MAX_SAFE_INTEGER;
-        return ta - tb;
-      });
+      } catch {
+        /* fall through to the file store */
+      }
+    }
+
+    if (local || rows.length === 0) {
+      const seen = new Set(rows.map((r) => r.id));
+      for (const a of readServerAttempts() as unknown as LeaderRow[]) {
+        if (a.quiz_id === id && a.status === "completed" && !seen.has(a.id)) rows.push(a);
+      }
+    }
+
+    const ranked = rows.sort((a, b) => {
+      const byScore = (b.score_percentage ?? 0) - (a.score_percentage ?? 0);
+      if (byScore !== 0) return byScore;
+      const ta = a.time_taken_seconds ?? Number.MAX_SAFE_INTEGER;
+      const tb = b.time_taken_seconds ?? Number.MAX_SAFE_INTEGER;
+      return ta - tb;
+    });
 
     const session = await getSessionUser(request).catch(() => null);
+    // Database rows are owned by participant_id; file rows by email.
+    const isMine = (a: LeaderRow) =>
+      !!session &&
+      (a.participant_id === session.id ||
+        (!!a.participant_email && a.participant_email === session.email));
+
     let yourRank: number | null = null;
     let yourBest: { score: number; correct: number; total: number } | null = null;
 
     if (session) {
-      const mine = ranked.filter((a) => a.participant_email === session.email);
+      const mine = ranked.filter(isMine);
       if (mine.length > 0) {
         const best = mine[0]; // ranked list → first is best
         yourRank = ranked.indexOf(best) + 1;
         yourBest = {
-          score: best.score_percentage,
-          correct: best.correct_answers,
-          total: best.total_questions,
+          score: best.score_percentage ?? 0,
+          correct: best.correct_answers ?? 0,
+          total: best.total_questions ?? 0,
         };
       }
     }
@@ -65,12 +102,12 @@ export async function GET(
       leaders: ranked.slice(0, limit).map((a, i) => ({
         rank: i + 1,
         name: a.participant_name || "Anonymous",
-        score: a.score_percentage,
-        correct: a.correct_answers,
-        total: a.total_questions,
+        score: a.score_percentage ?? 0,
+        correct: a.correct_answers ?? 0,
+        total: a.total_questions ?? 0,
         time_seconds: a.time_taken_seconds,
         completed_at: a.completed_at,
-        is_you: !!session && a.participant_email === session.email,
+        is_you: isMine(a),
       })),
       your_rank: yourRank,
       your_best: yourBest,
