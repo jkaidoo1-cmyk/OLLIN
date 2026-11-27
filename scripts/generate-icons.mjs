@@ -16,8 +16,9 @@ const MARK = {
   ringRadius: 9.2,
   ringWidth: 3.4,
   dotRadius: 3.6,
-  // Diagonal cut-out slot, bottom-left of the circumference.
-  notch: { x: -6.1, y: -2.5, width: 10.8, height: 5, transform: "translate(5.5 18.8) rotate(135)" },
+  // Diagonal cut-out at the bottom-left. The ring is one arc with round caps,
+  // so both ends of the cut-out are rounded rather than squared off.
+  gap: { center: 134, span: 52 },
 };
 
 const INK = "#1D4A2E";
@@ -30,20 +31,28 @@ const CANVAS = "#F4F8F5";
 // (ringRadius + ringWidth / 2) * 2 = 21.8 units of the 24 unit viewBox.
 const OUTER_UNITS = (MARK.ringRadius + MARK.ringWidth / 2) * 2;
 
+/** One arc around the circle, leaving the cut-out between its two ends. */
+function ringArc(radius, gap) {
+  const point = (deg) => {
+    const rad = (deg * Math.PI) / 180;
+    const x = MARK.viewBox / 2 + radius * Math.cos(rad);
+    const y = MARK.viewBox / 2 + radius * Math.sin(rad);
+    return `${x.toFixed(3)} ${y.toFixed(3)}`;
+  };
+  const start = gap.center + gap.span / 2;
+  const end = gap.center - gap.span / 2 + 360;
+  return `M ${point(start)} A ${radius} ${radius} 0 1 1 ${point(end)}`;
+}
+
 function markSvg({ size, markFraction, ring, dot, background = null }) {
   const scale = (markFraction * MARK.viewBox) / OUTER_UNITS;
-  const { viewBox, ringRadius, ringWidth, dotRadius, notch } = MARK;
+  const { viewBox, ringRadius, ringWidth, dotRadius, gap } = MARK;
   const bg = background ? `<rect width="${viewBox}" height="${viewBox}" fill="${background}"/>` : "";
-  const n = notch;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${viewBox} ${viewBox}">
   ${bg}
-  <mask id="cut" maskUnits="userSpaceOnUse" x="-24" y="-24" width="72" height="72">
-    <rect x="-24" y="-24" width="72" height="72" fill="#fff"/>
-    <rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" transform="${n.transform}" fill="#000"/>
-  </mask>
   <g transform="translate(${viewBox / 2} ${viewBox / 2}) scale(${scale.toFixed(6)}) translate(${-viewBox / 2} ${-viewBox / 2})">
-    <circle cx="${viewBox / 2}" cy="${viewBox / 2}" r="${ringRadius}" fill="none" stroke="${ring}" stroke-width="${ringWidth}" mask="url(#cut)"/>
+    <path d="${ringArc(ringRadius, gap)}" fill="none" stroke="${ring}" stroke-width="${ringWidth}" stroke-linecap="round"/>
     <circle cx="${viewBox / 2}" cy="${viewBox / 2}" r="${dotRadius}" fill="${dot}"/>
   </g>
 </svg>`;
