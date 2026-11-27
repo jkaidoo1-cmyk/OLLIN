@@ -9,7 +9,7 @@ import { QuizViewSwitcher } from "@/components/QuizViewSwitcher";
 import { getResource, warmResource } from "@/lib/prefetch";
 import { loadQuizzes } from "@/lib/quizzes-sync";
 import { fetchAndSaveQuizBundle } from "@/lib/offline-quiz";
-import { BookOpen, Clock, Play, Search, Share2, Check } from "lucide-react";
+import { BookOpen, ChevronDown, Clock, Play, Search, Share2, Check } from "lucide-react";
 
 interface CourseWithQuizzes {
   course: Course;
@@ -60,7 +60,9 @@ function buildCourseGroups(
 
 export default function TestQuizzesPage() {
   const [coursesWithQuizzes, setCoursesWithQuizzes] = useState<CourseWithQuizzes[]>([]);
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  // One course open at a time, like the quizzes dashboard: a long study list
+  // reads as a few course rows instead of every quiz at once.
+  const [openCourseId, setOpenCourseId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [sharedId, setSharedId] = useState<string | null>(null);
@@ -102,20 +104,12 @@ export default function TestQuizzesPage() {
   // tab therefore renders before anything touches the network.
   useEffect(() => {
     let alive = true;
-    let autoSelected = false;
 
     type SavedLink = { quiz_id: string; course_id: string };
 
     const paint = (quizzes: Quiz[], savedLinks: SavedLink[], courses: Course[]) => {
       if (!alive) return;
-      const groups = buildCourseGroups(savedLinks, courses, quizzes);
-      setCoursesWithQuizzes(groups);
-      // Pick the only course once; a later refresh must not override a filter
-      // the student has set.
-      if (!autoSelected && groups.length === 1) {
-        autoSelected = true;
-        setSelectedCourseId(groups[0].course.id);
-      }
+      setCoursesWithQuizzes(buildCourseGroups(savedLinks, courses, quizzes));
       setLoading(false);
     };
 
@@ -177,12 +171,17 @@ export default function TestQuizzesPage() {
     };
   }, [loading, coursesWithQuizzes]);
 
-  const filteredQuizzes = coursesWithQuizzes
-    .filter((c) => (selectedCourseId ? c.course.id === selectedCourseId : true))
-    .flatMap((c) => c.quizzes)
-    .filter((q) =>
-      q.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+  // One section per course. A search narrows the quizzes inside each section
+  // instead of flattening the courses away.
+  const searching = searchQuery.trim().length > 0;
+  const sections = coursesWithQuizzes
+    .map(({ course, quizzes }) => ({
+      course,
+      quizzes: searching
+        ? quizzes.filter((q) => q.title.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+        : quizzes,
+    }))
+    .filter((s) => s.quizzes.length > 0);
 
   return (
     <div className="pt-2">
@@ -210,25 +209,6 @@ export default function TestQuizzesPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Course filter */}
-          <div className="flex gap-2 overflow-x-auto pb-2">
-            <button
-              onClick={() => setSelectedCourseId(null)}
-              className={`chip${selectedCourseId === null ? " active" : ""}`}
-            >
-              All courses
-            </button>
-            {coursesWithQuizzes.map(({ course, quizzes }) => (
-              <button
-                key={course.id}
-                onClick={() => setSelectedCourseId(course.id)}
-                className={`chip${selectedCourseId === course.id ? " active" : ""}`}
-              >
-                {course.code} ({quizzes.length})
-              </button>
-            ))}
-          </div>
-
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#999]" />
@@ -241,72 +221,93 @@ export default function TestQuizzesPage() {
             />
           </div>
 
-          {/* Quiz list */}
-          <div className="space-y-2">
-            {filteredQuizzes.length === 0 ? (
-              <div className="app-card py-10 text-center">
-                <p className="text-sm font-semibold text-[var(--ink)]">No quizzes found</p>
-              </div>
-            ) : (
-              filteredQuizzes.map((quiz) => {
-                const course = coursesWithQuizzes.find((c) =>
-                  c.quizzes.some((q) => q.id === quiz.id)
-                )?.course;
-
+          {sections.length === 0 ? (
+            <div className="app-card py-10 text-center">
+              <p className="text-sm font-semibold text-[var(--ink)]">No quizzes found</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {sections.map(({ course, quizzes }) => {
+                const open = searching || openCourseId === course.id;
                 return (
-                  <div
-                    key={quiz.id}
-                    className="app-card flex flex-wrap items-center gap-3 sm:gap-4"
-                  >
-                    <div className="tile-icon">
-                      <BookOpen className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1 min-w-[140px]">
-                      <p className="text-sm font-medium text-[#333] truncate">
-                        {quiz.title}
-                      </p>
-                      <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                        {course && (
-                          <span className="text-xs text-[#999]">
-                            {course.code}
-                          </span>
-                        )}
-                        <span className="text-xs text-[#999] font-mono whitespace-nowrap">
-                          {quiz.share_code}
-                        </span>
-                        {quiz.time_limit_minutes && (
-                          <span className="text-xs text-[#999] flex items-center gap-1 whitespace-nowrap">
-                            <Clock className="w-3 h-3" /> {quiz.time_limit_minutes} min
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                  <div key={course.id} className="app-card overflow-hidden p-0">
                     <button
-                      onClick={() => shareQuiz(quiz)}
-                      title={`Share link: /quiz/${quiz.share_code}`}
-                      className={`text-xs font-semibold px-3 py-2 rounded-[var(--radius-pill)] border flex items-center gap-1.5 flex-shrink-0 transition-colors ${
-                        sharedId === quiz.id
-                          ? "border-[#cbe8d6] bg-[#e7f5ec] text-[#116b3c]"
-                          : "border-[var(--border-strong)] text-[var(--ink-soft)] hover:border-[var(--primary)]"
-                      }`}
+                      type="button"
+                      onClick={() => {
+                        if (!searching) setOpenCourseId(open ? null : course.id);
+                      }}
+                      aria-expanded={open}
+                      className="w-full flex items-center gap-3 p-4 text-left"
                     >
-                      {sharedId === quiz.id ? (
-                        <><Check className="w-3.5 h-3.5" /> Link copied</>
-                      ) : (
-                        <><Share2 className="w-3.5 h-3.5" /> Share</>
-                      )}
+                      <span className="tile-icon">
+                        <BookOpen className="w-5 h-5" />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-bold text-[var(--ink)] truncate">
+                          {course.code} — {course.name}
+                        </span>
+                        <span className="block text-xs text-[var(--ink-muted)]">
+                          {quizzes.length} quiz{quizzes.length === 1 ? "" : "es"}
+                        </span>
+                      </span>
+                      <ChevronDown
+                        className={`w-4 h-4 shrink-0 text-[var(--ink-faint)] transition-transform ${open ? "rotate-180" : ""}`}
+                      />
                     </button>
-                    <Link
-                      href={`/quiz/${quiz.share_code}?practice=1`}
-                      className="btn-primary text-xs px-4 py-2 flex-shrink-0"
-                    >
-                      <Play className="w-3.5 h-3.5" /> Take quiz
-                    </Link>
+
+                    {open && (
+                      <div className="border-t border-[var(--border)] p-3 space-y-2">
+                        {quizzes.map((quiz) => (
+                          <div
+                            key={quiz.id}
+                            className="rounded-xl border border-[var(--border)] p-3"
+                          >
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="flex-1 min-w-0 text-sm font-bold text-[var(--ink)] truncate">
+                                {quiz.title}
+                              </p>
+                              {quiz.time_limit_minutes && (
+                                <span className="text-xs text-[#999] flex items-center gap-1 whitespace-nowrap">
+                                  <Clock className="w-3 h-3" /> {quiz.time_limit_minutes} min
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                              <span className="text-xs text-[#999] font-mono whitespace-nowrap">
+                                {quiz.share_code}
+                              </span>
+                              <span className="flex-1" />
+                              <button
+                                onClick={() => shareQuiz(quiz)}
+                                title={`Share link: /quiz/${quiz.share_code}`}
+                                className={`text-xs font-semibold px-3 py-2 rounded-[var(--radius-pill)] border flex items-center gap-1.5 flex-shrink-0 transition-colors ${
+                                  sharedId === quiz.id
+                                    ? "border-[#cbe8d6] bg-[#e7f5ec] text-[#116b3c]"
+                                    : "border-[var(--border-strong)] text-[var(--ink-soft)] hover:border-[var(--primary)]"
+                                }`}
+                              >
+                                {sharedId === quiz.id ? (
+                                  <><Check className="w-3.5 h-3.5" /> Link copied</>
+                                ) : (
+                                  <><Share2 className="w-3.5 h-3.5" /> Share</>
+                                )}
+                              </button>
+                              <Link
+                                href={`/quiz/${quiz.share_code}?practice=1`}
+                                className="btn-primary text-xs px-4 py-2 flex-shrink-0"
+                              >
+                                <Play className="w-3.5 h-3.5" /> Take quiz
+                              </Link>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
-              })
-            )}
-          </div>
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

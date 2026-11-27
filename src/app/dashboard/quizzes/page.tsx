@@ -10,7 +10,7 @@ import { getResource, invalidateResource } from "@/lib/prefetch";
 import { loadMyQuizzes } from "@/lib/quizzes-sync";
 import { Quiz, Course } from "@/lib/types";
 import { formatRelativeDate } from "@/lib/utils";
-import { Copy, CheckCircle, ExternalLink, Pencil, ClipboardList, Trash2, BookOpen, ChevronDown } from "lucide-react";
+import { Copy, CheckCircle, ExternalLink, Pencil, ClipboardList, Trash2 } from "lucide-react";
 import { useConfirm, useToast } from "@/components/ui/toast";
 
 export default function MyQuizzesPage() {
@@ -18,7 +18,6 @@ export default function MyQuizzesPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "published">("all");
   const [courses, setCourses] = useState<Course[]>([]);
-  const [openCourseId, setOpenCourseId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const router = useRouter();
   const confirmDialog = useConfirm();
@@ -26,6 +25,11 @@ export default function MyQuizzesPage() {
 
   useEffect(() => {
     let alive = true;
+    // One warmed request carries both the quizzes and the courses they are
+    // filtered by. The dashboard layout starts it before this page opens, and
+    // the session cookie identifies the caller — the page no longer waits on
+    // auth.getUser() plus two queries in sequence, which is what made switching
+    // to this tab slow.
     const apply = (data: { quizzes: Quiz[]; courses: Course[] }) => {
       if (!alive) return;
       const server: Quiz[] = data.quizzes || [];
@@ -40,6 +44,8 @@ export default function MyQuizzesPage() {
 
     const load = async () => {
       try {
+        // Paint the cached list at once, then let the delta loader ask only for
+        // quizzes added, edited or deleted since the last sync.
         const cached = getResource<{ quizzes: Quiz[]; courses: Course[] }>("my-quizzes")?.data;
         if (cached) {
           apply(cached);
@@ -48,6 +54,7 @@ export default function MyQuizzesPage() {
         apply(await loadMyQuizzes());
       } catch (error) {
         if (!alive) return;
+        // Quizzes saved in this browser still show when the server is unreachable.
         setQuizzes(getLocalQuizzes());
         if (error instanceof Error && /sign in/i.test(error.message)) router.push("/login");
       } finally {
@@ -82,6 +89,9 @@ export default function MyQuizzesPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 404) {
+        // The server has never heard of this quiz: it lives only in this
+        // browser's cache, which is exactly why the delete fails. Remove the
+        // phantom locally so it stops reappearing on every visit.
         const { removeLocalQuiz } = await import("@/lib/local");
         removeLocalQuiz(quiz.id);
         setQuizzes((prev) => prev.filter((q) => q.id !== quiz.id));
@@ -95,15 +105,16 @@ export default function MyQuizzesPage() {
         return;
       }
       setQuizzes((prev) => prev.filter((q) => q.id !== quiz.id));
+      // Keep the warmed lists in step, or a later visit resurrects the row.
       invalidateResource("quizzes");
       invalidateResource("my-quizzes");
+      // Confirm the quiz is really gone before claiming it is. A success
+      // response that deleted nothing is how a removed quiz came back.
       let stillThere = false;
       try {
         const check = await fetch(`/api/quizzes/${quiz.id}`, { cache: "no-store" });
         stillThere = check.ok;
-      } catch {
-        /* offline: trust the response */
-      }
+      } catch { /* offline: trust the response */ }
       if (stillThere) {
         toast.error("The quiz is still on the server — it wasn't deleted. Please try again.");
         return;
@@ -114,37 +125,20 @@ export default function MyQuizzesPage() {
     }
   };
 
-    const otherCourse: Course = {
-    id: "other",
-    code: "—",
-    name: "Other",
-    description: null,
-    department: null,
-    program_id: null,
-    year: null,
-    created_by: null,
-    created_at: "",
-    updated_at: "",
+  const filtered = filter === "all" ? quizzes : quizzes.filter((q) => q.status === filter);
+
+  const statusStyles: Record<string, string> = {
+    published: "badge badge-success",
+    active: "badge badge-primary",
+    draft: "badge badge-warning",
+    archived: "badge badge-slate",
   };
-  const sections: { course: Course; quizzes: Quiz[] }[] = [];
-  for (const quiz of filter === "all" ? quizzes : quizzes.filter((q) => q.status === filter)) {
-    const course = courses.find((c) => c.id === quiz.course_id);
-    if (course) {
-      const idx = sections.findIndex((s) => s.course.id === course.id);
-      if (idx === -1) sections.push({ course, quizzes: [quiz] });
-      else sections[idx].quizzes.push(quiz);
-    } else {
-      const idx = sections.findIndex((s) => s.course.id === "other");
-      if (idx === -1) sections.push({ course: otherCourse, quizzes: [quiz] });
-      else sections[idx].quizzes.push(quiz);
-    }
-  }
 
   if (loading) {
     return (
       <div className="pt-3" aria-busy="true">
         <SkeletonText className="h-9 w-40 mb-6" />
-        <SkeletonList rows={4} rowClass="h-24" />
+        <SkeletonList rows={3} rowClass="h-24" />
       </div>
     );
   }
@@ -154,11 +148,12 @@ export default function MyQuizzesPage() {
       <div className="flex items-start justify-between gap-3 mb-5">
         <div className="min-w-0">
           <h1 className="greeting">My quizzes</h1>
-          <p className="greeting-sub">Pick a course to see the quizzes you created for it.</p>
+          <p className="greeting-sub">Everything you have created.</p>
         </div>
         <QuizViewSwitcher />
       </div>
 
+      {/* Filters */}
       <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1">
         {(["all", "published"] as const).map((f) => (
           <button
@@ -171,7 +166,7 @@ export default function MyQuizzesPage() {
         ))}
       </div>
 
-      {sections.length === 0 ? (
+      {filtered.length === 0 ? (
         <Link href="/dashboard/create" className="list-row app-card no-underline">
           <span className="tile-icon">
             <ClipboardList className="w-5 h-5" />
@@ -185,106 +180,82 @@ export default function MyQuizzesPage() {
         </Link>
       ) : (
         <div className="space-y-3">
-          {sections.map(({ course, quizzes: courseQuizzes }) => {
-            const open = openCourseId === course.id;
-            return (
-              <div key={course.id} className="app-card overflow-hidden p-0">
+          {filtered.map((quiz) => (
+            <div key={quiz.id} className="app-card">
+              <div className="flex items-start gap-3">
+                <span className="tile-icon">
+                  <ClipboardList className="w-5 h-5" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Link
+                      href={`/dashboard/quizzes/${quiz.id}`}
+                      className="font-bold text-sm text-[var(--ink)] hover:text-[var(--primary)] no-underline"
+                    >
+                      {quiz.title}
+                    </Link>
+                    <span className={statusStyles[quiz.status] || "badge badge-slate"}>
+                      {quiz.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1.5 text-xs text-[var(--ink-faint)]">
+                    <span>{formatRelativeDate(quiz.created_at)}</span>
+                    <button
+                      onClick={() => copyShareLink(quiz.share_code, quiz.id)}
+                      className="flex items-center gap-1 font-mono text-[var(--primary)] font-semibold"
+                    >
+                      {copiedId === quiz.id ? (
+                        <><CheckCircle className="w-3 h-3" /> Copied</>
+                      ) : (
+                        <><Copy className="w-3 h-3" /> {quiz.share_code}</>
+                      )}
+                    </button>
+                    {quiz.course_id && (
+                      <span className="text-[var(--primary-strong)] bg-[var(--primary-soft)] px-2 py-0.5 rounded-full">
+                        {courses.find((c) => c.id === quiz.course_id)?.code || "Course"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-[var(--border)]">
+                <Link
+                  href={`/dashboard/quizzes/${quiz.id}`}
+                  className="text-xs font-semibold text-[var(--primary)]"
+                >
+                  Results
+                </Link>
+                <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
+                <Link
+                  href={`/dashboard/create?edit=${quiz.id}`}
+                  className="text-xs font-semibold text-[var(--ink-muted)] inline-flex items-center gap-1"
+                >
+                  <Pencil className="w-3 h-3" /> Edit
+                </Link>
+                {quiz.status === "published" && (
+                  <>
+                    <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
+                    <Link
+                      href={`/quiz/${quiz.share_code}`}
+                      target="_blank"
+                      className="text-xs font-semibold text-[var(--ink-muted)] inline-flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3" /> Open
+                    </Link>
+                  </>
+                )}
+                <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
                 <button
                   type="button"
-                  onClick={() => setOpenCourseId(open ? null : course.id)}
-                  aria-expanded={open}
-                  className="w-full flex items-center gap-3 p-4 text-left"
+                  onClick={() => handleDeleteQuiz(quiz)}
+                  className="text-xs font-semibold text-red-600 inline-flex items-center gap-1"
                 >
-                  <span className="tile-icon">
-                    <BookOpen className="w-5 h-5" />
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-sm font-bold text-[var(--ink)] truncate">
-                      {course.code} — {course.name}
-                    </span>
-                    <span className="block text-xs text-[var(--ink-muted)]">
-                      {courseQuizzes.length} quiz{courseQuizzes.length === 1 ? "" : "es"}
-                    </span>
-                  </span>
-                  <ChevronDown
-                    className={`w-4 h-4 shrink-0 text-[var(--ink-faint)] transition-transform ${open ? "rotate-180" : ""}`}
-                  />
+                  <Trash2 className="w-3 h-3" /> Delete
                 </button>
-
-                {open && (
-                  <div className="border-t border-[var(--border)] p-3 space-y-2">
-                    {courseQuizzes.map((quiz) => (
-                      <div
-                        key={quiz.id}
-                        className="rounded-xl border border-[var(--border)] p-3"
-                      >
-                        <div className="flex items-start gap-2 flex-wrap">
-                          <Link
-                            href={`/dashboard/quizzes/${quiz.id}`}
-                            className="font-bold text-sm text-[var(--ink)] hover:text-[var(--primary)] no-underline flex-1 min-w-0"
-                          >
-                            {quiz.title}
-                          </Link>
-                          <span className="badge badge-success">
-                            {quiz.status}
-                          </span>
-                        </div>
-                        <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1.5 text-xs text-[var(--ink-faint)]">
-                          <span>{formatRelativeDate(quiz.created_at)}</span>
-                          <button
-                            onClick={() => copyShareLink(quiz.share_code, quiz.id)}
-                            className="flex items-center gap-1 font-mono text-[var(--primary)] font-semibold"
-                          >
-                            {copiedId === quiz.id ? (
-                              <><CheckCircle className="w-3 h-3" /> Copied</>
-                            ) : (
-                              <><Copy className="w-3 h-3" /> {quiz.share_code}</>
-                            )}
-                          </button>
-                        </div>
-
-                        <div className="flex items-center flex-wrap gap-2 mt-3 pt-3 border-t border-[var(--border)]">
-                          <Link
-                            href={`/dashboard/quizzes/${quiz.id}`}
-                            className="text-xs font-semibold text-[var(--primary)]"
-                          >
-                            Results
-                          </Link>
-                          <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
-                          <Link
-                            href={`/dashboard/quizzes/${quiz.id}/edit`}
-                            className="text-xs font-semibold text-[var(--ink-muted)] inline-flex items-center gap-1"
-                          >
-                            <Pencil className="w-3 h-3" /> Edit
-                          </Link>
-                          {quiz.status === "published" && (
-                            <>
-                              <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
-                              <Link
-                                href={`/quiz/${quiz.share_code}`}
-                                target="_blank"
-                                className="text-xs font-semibold text-[var(--ink-muted)] inline-flex items-center gap-1"
-                              >
-                                <ExternalLink className="w-3 h-3" /> Open
-                              </Link>
-                            </>
-                          )}
-                          <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteQuiz(quiz)}
-                            className="text-xs font-semibold text-red-600 inline-flex items-center gap-1"
-                          >
-                            <Trash2 className="w-3 h-3" /> Delete
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
     </div>
