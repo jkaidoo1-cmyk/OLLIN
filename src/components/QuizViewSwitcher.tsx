@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 /**
  * Segmented switch between the three quiz views:
- * My quizzes, Test quizzes and My attempts.
+ * Test quizzes (the quizzes home), My quizzes and My attempts.
  *
  * All three destinations stay visible as buttons so the user never has to
  * open a menu to discover where they can go. Stacked in a column at the right
@@ -13,8 +13,8 @@ import { usePathname } from "next/navigation";
  * used (the bottom nav keeps its own copy of the same destinations).
  */
 const VIEWS = [
-  { href: "/dashboard/quizzes", label: "My quizzes" },
   { href: "/dashboard/test-quizzes", label: "Test quizzes" },
+  { href: "/dashboard/quizzes", label: "My quizzes" },
   { href: "/dashboard/attempts", label: "My attempts" },
 ];
 

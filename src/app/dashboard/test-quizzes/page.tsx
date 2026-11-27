@@ -17,37 +17,13 @@ interface CourseWithQuizzes {
 }
 
 /**
- * Test quizzes — admin-saved quizzes for the student's courses, plus the
- * built-in OLLIN Test Quiz (TST-101) that exists on every deployment so
- * anyone can try the platform from any device.
+ * Test quizzes — admin-saved quizzes for the student's courses.
  * All data is read from the server APIs (single source of truth):
  *   - /api/saved-quizzes  → quiz ↔ course links saved by the admin
  *   - /api/courses        → courses, filtered by the student's year
  *   - /api/quizzes        → quiz metadata (title, code, time limit)
  */
 
-/** The built-in platform test quiz — always offered, independent of courses. */
-const BUILT_IN_TEST_QUIZ: Quiz & { built_in: true } = {
-  id: "quiz-test-tst101",
-  host_id: "system",
-  title: "OLLIN Test Quiz",
-  description: "Try the platform — 5 quick questions.",
-  share_code: "TST-101",
-  time_limit_minutes: 15,
-  max_attempts: 1,
-  show_answers_after: "after_completion",
-  shuffle_questions: false,
-  shuffle_options: false,
-  passing_score: 50,
-  starts_at: null,
-  ends_at: null,
-  status: "published",
-  course_id: null,
-  material_id: null,
-  created_at: "2026-09-24T17:00:00.000Z",
-  updated_at: "2026-09-24T17:00:00.000Z",
-  built_in: true,
-};
 /**
  * Group admin-saved quiz links under the courses this student may see.
  * Pure, so the cached paint and the delta refresh build the same list.
@@ -184,10 +160,9 @@ export default function TestQuizzesPage() {
   useEffect(() => {
     if (loading) return;
     let cancelled = false;
-    const codes = [
-      BUILT_IN_TEST_QUIZ.share_code,
-      ...coursesWithQuizzes.flatMap((c) => c.quizzes.map((q) => q.share_code)),
-    ].filter(Boolean);
+    const codes = coursesWithQuizzes
+      .flatMap((c) => c.quizzes.map((q) => q.share_code))
+      .filter(Boolean);
     const unique = [...new Set(codes)].slice(0, 10);
 
     (async () => {
@@ -202,32 +177,7 @@ export default function TestQuizzesPage() {
     };
   }, [loading, coursesWithQuizzes]);
 
-  // The built-in test quiz appears unless a search excludes it (a course filter hides it automatically).
-  const showBuiltIn =
-    !selectedCourseId &&
-    "ollin test quiz".includes(searchQuery.trim().toLowerCase());
-  const builtInFirst: CourseWithQuizzes[] = [
-    ...(showBuiltIn
-      ? [
-          {
-            course: {
-              id: "built-in",
-              code: "TEST",
-              name: "Platform test quiz",
-              description: null,
-              program_id: null,
-              year: null,
-              created_at: BUILT_IN_TEST_QUIZ.created_at,
-              updated_at: BUILT_IN_TEST_QUIZ.updated_at,
-            } as Course,
-            quizzes: [BUILT_IN_TEST_QUIZ],
-          },
-        ]
-      : []),
-    ...coursesWithQuizzes,
-  ];
-
-  const filteredQuizzes = builtInFirst
+  const filteredQuizzes = coursesWithQuizzes
     .filter((c) => (selectedCourseId ? c.course.id === selectedCourseId : true))
     .flatMap((c) => c.quizzes)
     .filter((q) =>
@@ -248,7 +198,7 @@ export default function TestQuizzesPage() {
 
       {loading ? (
         <SkeletonList rows={3} rowClass="h-24" />
-      ) : builtInFirst.length === 0 ? (
+      ) : coursesWithQuizzes.length === 0 ? (
         <div className="app-card py-12 text-center">
           <span className="tile-icon mx-auto mb-3">
             <BookOpen className="w-5 h-5" />
@@ -268,7 +218,7 @@ export default function TestQuizzesPage() {
             >
               All courses
             </button>
-            {builtInFirst.map(({ course, quizzes }) => (
+            {coursesWithQuizzes.map(({ course, quizzes }) => (
               <button
                 key={course.id}
                 onClick={() => setSelectedCourseId(course.id)}

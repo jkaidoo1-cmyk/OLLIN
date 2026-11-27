@@ -6,7 +6,7 @@ import { House, LayoutGrid, LogIn, Plus, UserRound } from "lucide-react";
 
 const items = [
   { href: "/dashboard", label: "Home", icon: House },
-  { href: "/dashboard/quizzes", label: "Quizzes", icon: LayoutGrid },
+  { href: "/dashboard/test-quizzes", label: "Quizzes", icon: LayoutGrid },
   { href: "/dashboard/create", label: "", icon: Plus, fab: true },
   { href: "/join", label: "Join", icon: LogIn },
   { href: "/dashboard/profile", label: "Profile", icon: UserRound },
@@ -21,10 +21,16 @@ export function BottomNav() {
       <div className="bottom-nav-inner">
         {items.map((item) => {
           const Icon = item.icon;
+          // Test quizzes is the quizzes home, so the quizzes tab also stays
+          // selected on the My quizzes pages underneath it.
           const active =
             item.href === "/dashboard"
               ? pathname === "/dashboard"
-              : pathname === item.href || pathname.startsWith(`${item.href}/`);
+              : pathname === item.href ||
+                pathname.startsWith(`${item.href}/`) ||
+                (item.href === "/dashboard/test-quizzes" &&
+                  (pathname === "/dashboard/quizzes" ||
+                    pathname.startsWith("/dashboard/quizzes/")));
 
           if (item.fab) {
             return (
