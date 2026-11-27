@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readServerAttempts, writeServerAttempts } from "@/lib/data";
-import { getSessionUser } from "@/lib/session";
+import { getSessionUser, type SessionUser } from "@/lib/session";
 import { getClientIp, checkThrottle } from "@/lib/rate-limit";
 import { serverError, userError } from "@/lib/api-errors";
 import { isEphemeralHost, isLocalRequest } from "@/lib/server-host";
@@ -15,6 +15,44 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
   const n = Number(v);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The id that owns an attempt in Postgres.
+ *
+ * Supabase sessions carry the profile uuid directly. Seeded / file-store
+ * accounts ("demo-001", "admin-001") do not: their attempts were stored
+ * unowned, so they never appeared in "My attempts" and a retake was never
+ * matched against the limit. Resolve the profile that owns their email.
+ */
+async function resolveParticipantId(
+  admin: NonNullable<Awaited<ReturnType<(typeof import("@/lib/supabase/server"))["createAdminClient"]>>>,
+  session: { id: string; email: string }
+): Promise<string | null> {
+  if (UUID_RE.test(session.id)) return session.id;
+  if (!session.email) return null;
+  const { data } = await admin
+    .from("profiles")
+    .select("id")
+    .ilike("email", session.email)
+    .maybeSingle();
+  const id = (data as { id?: string } | null)?.id;
+  return id && UUID_RE.test(id) ? id : null;
+}
+
+const FORBIDDEN_ROSTER = { error: "Only the quiz creator or an admin can view attempts" };
+
+/** A roster (participant names and scores) belongs to the quiz's creator or an admin. */
+function ownsAllQuizzes(
+  session: SessionUser | null,
+  quizIds: string[],
+  quizzes: Array<{ id: string; host_id?: string | null }>
+): boolean {
+  if (!session) return false;
+  if (session.role === "admin") return true;
+  return quizIds.every((id) => quizzes.some((q) => q.id === id && q.host_id === session.id));
 }
 
 function clampDate(v: unknown): string | null {
@@ -67,8 +105,7 @@ export async function GET(request: NextRequest) {
         const limitRaw = parseInt(request.nextUrl.searchParams.get("limit") || "200", 10);
         const limit = Math.min(500, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 200));
         const session = await getSessionUser(request).catch(() => null);
-        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        const sessionIsUuid = !!session && UUID_RE.test(session.id);
+        const accountId = session ? await resolveParticipantId(admin, session) : null;
 
         let query = admin
           .from("quiz_attempts")
@@ -80,27 +117,20 @@ export async function GET(request: NextRequest) {
           if (!session) {
             return userError("auth_required");
           }
-          // File-mode ids are not uuids and own no rows in Postgres.
-          if (!sessionIsUuid) return NextResponse.json({ attempts: [] });
-          query = query.eq("participant_id", session.id);
+          // An account with no profile has no rows in Postgres.
+          if (!accountId) return NextResponse.json({ attempts: [] });
+          query = query.eq("participant_id", accountId);
         } else if (quizId || quizIds.length) {
           if (!session) {
             return NextResponse.json({ error: "Only the quiz creator or an admin can view attempts" }, { status: 403 });
           }
           if (session.role !== "admin") {
-            const wanted = quizId ? [quizId] : quizIds;
             const { data: owned } = await admin
               .from("quizzes")
               .select("id, host_id")
-              .in("id", wanted);
-            const mineOwned = new Set(
-              (owned || []).filter((q: any) => q.host_id === session.id).map((q: any) => q.id)
-            );
-            if (mineOwned.size !== new Set(wanted).size) {
-              return NextResponse.json(
-                { error: "Only the quiz creator or an admin can view attempts" },
-                { status: 403 }
-              );
+              .in("id", quizId ? [quizId] : quizIds);
+            if (!ownsAllQuizzes(session, quizId ? [quizId] : quizIds, owned || [])) {
+              return NextResponse.json(FORBIDDEN_ROSTER, { status: 403 });
             }
           }
           query = quizId ? query.eq("quiz_id", quizId) : query.in("quiz_id", quizIds);
@@ -150,14 +180,9 @@ export async function GET(request: NextRequest) {
       // Single quiz — only its creator or an admin may read the roster
       // (names + scores); anyone can hit this URL by guessing quiz ids.
       const { readServerQuizzes } = await import("@/lib/data");
-      const quiz = readServerQuizzes().find((q) => q.id === quizId);
-      const session2 = await getSessionUser(request);
-      const isCreator = !!session2 && ((quiz && session2.id === quiz.host_id) || session2.role === "admin");
-      if (!isCreator) {
-        return NextResponse.json(
-          { error: "Only the quiz creator or an admin can view attempts" },
-          { status: 403 }
-        );
+      const session = await getSessionUser(request);
+      if (!ownsAllQuizzes(session, [quizId], readServerQuizzes())) {
+        return NextResponse.json(FORBIDDEN_ROSTER, { status: 403 });
       }
       const quizAttempts = allAttempts
         .filter((a) => a.quiz_id === quizId)
@@ -169,17 +194,9 @@ export async function GET(request: NextRequest) {
     if (quizIds.length) {
       // Batch read for the creator's dashboard — same rule as a single quiz.
       const { readServerQuizzes } = await import("@/lib/data");
-      const all = readServerQuizzes();
-      const session3 = await getSessionUser(request);
-      const allowed = !!session3 && quizIds.every((id) => {
-        if (session3.role === "admin") return true;
-        return all.some((q) => q.id === id && q.host_id === session3.id);
-      });
-      if (!allowed) {
-        return NextResponse.json(
-          { error: "Only the quiz creator or an admin can view attempts" },
-          { status: 403 }
-        );
+      const session = await getSessionUser(request);
+      if (!ownsAllQuizzes(session, quizIds, readServerQuizzes())) {
+        return NextResponse.json(FORBIDDEN_ROSTER, { status: 403 });
       }
       const batch = allAttempts
         .filter((a) => quizIds.includes(a.quiz_id))
@@ -347,8 +364,9 @@ export async function POST(request: NextRequest) {
       const admin = await createAdminClient();
       if (admin) {
         const session = await getSessionUser(request).catch(() => null);
-        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        const participantId = session && UUID_RE.test(session.id) ? session.id : null;
+        // The attempt must belong to the signed-in account, or it never shows
+        // in "My attempts" and the duplicate guard never sees it.
+        const participantId = session ? await resolveParticipantId(admin, session) : null;
         const name = clampStr(participant_name, 80) || "Anonymous";
 
         if (attemptStatus === "in_progress") {
@@ -363,6 +381,22 @@ export async function POST(request: NextRequest) {
             : await resumeQuery.eq("participant_name", name).is("participant_id", null);
           if (resumable && resumable[0]) {
             return NextResponse.json({ attempt: resumable[0], resumed: true });
+          }
+          // Rows written before their session resolved to a profile id sit
+          // unowned. Claim the one this account clearly created and resume it,
+          // rather than leaving a phantom and minting a second attempt.
+          if (participantId) {
+            const { data: claimed } = await admin
+              .from("quiz_attempts")
+              .update({ participant_id: participantId })
+              .eq("quiz_id", safeQuizId)
+              .eq("status", "in_progress")
+              .eq("participant_name", name)
+              .is("participant_id", null)
+              .select();
+            if (claimed && claimed[0]) {
+              return NextResponse.json({ attempt: claimed[0], resumed: true });
+            }
           }
         }
 

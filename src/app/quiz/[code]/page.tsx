@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { isLocalMode, getLocalQuizByCode, getLocalQuestions, getLocalUser } from "@/lib/local";
+import { getCurrentUser } from "@/lib/current-user";
 import { Quiz, Question, QuizAttempt } from "@/lib/types";
 import { Clock, Send, CheckCircle, AlertCircle, User, WifiOff, Save } from "lucide-react";
 import { BrandMark, BrandSpinner } from "@/components/Logo";
@@ -212,41 +213,14 @@ export default function QuizPage() {
         setParticipantName(guestName);
         return;
       }
-      // Identify the user through the app's own session cookie: the browser
-      // often holds no Supabase session, and asking only the Supabase client
-      // left signed-in students typing their name again.
-      try {
-        const res = await fetch("/api/auth/me", { cache: "no-store" });
-        if (res.ok) {
-          const data = await res.json().catch(() => ({}));
-          if (data?.user) {
-            const name =
-              data.user.full_name || data.user.email?.split("@")[0] || "Student";
-            setCurrentUser({ name, email: data.user.email, isGuest: false });
-            setParticipantName(name);
-            return;
-          }
-        }
-      } catch { /* offline — fall back to the client-side checks */ }
-      if (isLocalMode()) {
-        const localUser = getLocalUser();
-        if (localUser) {
-          setCurrentUser({ name: localUser.full_name, email: localUser.email, isGuest: false });
-          setParticipantName(localUser.full_name);
-        }
-        return;
-      }
-      if (supabase) {
-        const { data } = await supabase.auth.getUser();
-        if (data.user) {
-          const name = data.user.user_metadata?.full_name || data.user.email?.split("@")[0] || "Student";
-          setCurrentUser({ name, email: data.user.email, isGuest: false });
-          setParticipantName(name);
-        }
+      const user = await getCurrentUser();
+      if (user) {
+        setCurrentUser(user);
+        setParticipantName(user.name);
       }
     };
     checkUser();
-  }, [guestName, supabase]);
+  }, [guestName]);
 
   // Entry check + auto-join, in one place: a logged-in student who already
   // completed this quiz gets their result screen instead of the quiz (the
@@ -274,29 +248,18 @@ export default function QuizPage() {
     if (!currentUser || currentUser.isGuest) return;
     let cancelled = false;
     (async () => {
+      // One query in every mode: the route reads the account's own attempts
+      // server-side, so the page no longer keeps a second, client-side copy of
+      // the “already taken” check against Postgres.
       let found: { score_percentage: number } | null = null;
       try {
-        if (isLocalMode()) {
-          const res = await fetch("/api/attempts?mine=true");
-          if (res.ok) {
-            const data = await res.json();
-            const match = (data.attempts || []).find(
-              (a: { quiz_id: string; status: string }) => a.quiz_id === quiz.id && a.status === "completed"
-            );
-            if (match) found = { score_percentage: match.score_percentage ?? 0 };
-          }
-        } else if (supabase) {
-          const { data: userData } = await supabase.auth.getUser();
-          if (userData.user) {
-            const { data } = await supabase
-              .from("quiz_attempts")
-              .select("score_percentage")
-              .eq("quiz_id", quiz.id)
-              .eq("participant_id", userData.user.id)
-              .eq("status", "completed")
-              .limit(1);
-            if (data && data.length) found = { score_percentage: data[0].score_percentage ?? 0 };
-          }
+        const res = await fetch("/api/attempts?mine=true", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          const match = (data.attempts || []).find(
+            (a: { quiz_id: string; status: string }) => a.quiz_id === quiz.id && a.status === "completed"
+          );
+          if (match) found = { score_percentage: match.score_percentage ?? 0 };
         }
       } catch { /* fail open — the server still blocks duplicate submits */ }
       if (cancelled) return;
@@ -483,47 +446,31 @@ export default function QuizPage() {
       return;
     }
 
-    if (isGuest || isLocalMode()) {
-      joinedAtRef.current = new Date().toISOString();
-      // Record the start server-side so the time limit survives page
-      // refreshes — otherwise a student could reset their timer forever.
-      try {
-        const res = await fetch("/api/attempts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            quiz_id: quiz!.id,
-            participant_name: participantName || "Guest",
-            status: "in_progress",
-          }),
-        });
-        if (res.ok) {
-          const d = await res.json();
-          if (d.attempt?.id) setAttempt(d.attempt);
-        }
-      } catch { /* server will still grade on submit */ }
-      setJoined(true);
-      return;
-    }
-
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from("quiz_attempts").insert({
-          quiz_id: quiz!.id,
-          participant_name: participantName.trim(),
-          total_questions: questions.length,
-          status: "in_progress",
-        }).select().single();
-
-        if (!error) {
-          setAttempt(data);
-        }
-      } catch {
-        // Offline: there is no attempt row yet. One is created when the
-        // result is filed, so the student can start straight away.
-      }
-    }
     joinedAtRef.current = new Date().toISOString();
+    // One path for every participant. The route records the attempt against
+    // the signed-in account (participant_id from the session cookie) so it
+    // shows in "My attempts" and the duplicate guard sees it; a guest's row is
+    // simply unowned. Inserting from the browser Supabase client skipped that
+    // linkage entirely. Recording the start server-side also keeps the time
+    // limit honest across page refreshes.
+    try {
+      const res = await fetch("/api/attempts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          quiz_id: quiz!.id,
+          participant_name: participantName.trim() || "Guest",
+          status: "in_progress",
+        }),
+      });
+      if (res.ok) {
+        const d = await res.json().catch(() => ({}));
+        if (d.attempt?.id) setAttempt(d.attempt);
+      }
+    } catch {
+      // Offline: there is no attempt row yet. One is created when the result
+      // is filed, so the student can start straight away.
+    }
     setJoined(true);
   };
 

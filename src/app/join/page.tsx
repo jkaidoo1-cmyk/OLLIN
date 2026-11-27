@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, User, Ticket } from "lucide-react";
 import { BrandMark, BrandSpinner } from "@/components/Logo";
-import { isLocalMode, getLocalUser } from "@/lib/local";
-import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/current-user";
 import { BottomNav } from "@/components/BottomNav";
 import { usePendingAction } from "@/lib/use-pending-action";
 
@@ -18,42 +17,17 @@ export default function JoinQuizPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
 
   useEffect(() => {
     const check = async () => {
-      // The app's own session cookie identifies the user in every mode. The
-      // browser often holds no Supabase session of its own, so asking only the
-      // Supabase client made signed-in students type their name again.
-      try {
-        const res = await fetch("/api/auth/me", { cache: "no-store" });
-        if (res.ok) {
-          const data = await res.json().catch(() => ({}));
-          if (data?.user) {
-            setUserName(data.user.full_name || data.user.email?.split("@")[0] || "User");
-            setIsLoggedIn(true);
-            return;
-          }
-        }
-      } catch { /* offline — fall back to the client-side checks */ }
-      if (isLocalMode()) {
-        const user = getLocalUser();
-        if (user) {
-          setUserName(user.full_name || "User");
-          setIsLoggedIn(true);
-        }
-        return;
-      }
-      if (supabase) {
-        const { data } = await supabase.auth.getUser();
-        if (data.user) {
-          setUserName(data.user.user_metadata?.full_name || data.user.email?.split("@")[0] || "User");
-          setIsLoggedIn(true);
-        }
+      const user = await getCurrentUser();
+      if (user) {
+        setUserName(user.name);
+        setIsLoggedIn(true);
       }
     };
     check();
-  }, [supabase]);
+  }, []);
 
   // Accept any code shape the platform issues (3-3, SMKR8VX9, FALLBACK-…),
   // and let people paste the whole share link instead of hunting for the code.
