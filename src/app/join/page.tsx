@@ -22,6 +22,20 @@ export default function JoinQuizPage() {
 
   useEffect(() => {
     const check = async () => {
+      // The app's own session cookie identifies the user in every mode. The
+      // browser often holds no Supabase session of its own, so asking only the
+      // Supabase client made signed-in students type their name again.
+      try {
+        const res = await fetch("/api/auth/me", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (data?.user) {
+            setUserName(data.user.full_name || data.user.email?.split("@")[0] || "User");
+            setIsLoggedIn(true);
+            return;
+          }
+        }
+      } catch { /* offline — fall back to the client-side checks */ }
       if (isLocalMode()) {
         const user = getLocalUser();
         if (user) {

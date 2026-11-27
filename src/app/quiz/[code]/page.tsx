@@ -209,8 +209,25 @@ export default function QuizPage() {
     const checkUser = async () => {
       if (guestName) {
         setCurrentUser({ name: guestName, isGuest: true });
+        setParticipantName(guestName);
         return;
       }
+      // Identify the user through the app's own session cookie: the browser
+      // often holds no Supabase session, and asking only the Supabase client
+      // left signed-in students typing their name again.
+      try {
+        const res = await fetch("/api/auth/me", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (data?.user) {
+            const name =
+              data.user.full_name || data.user.email?.split("@")[0] || "Student";
+            setCurrentUser({ name, email: data.user.email, isGuest: false });
+            setParticipantName(name);
+            return;
+          }
+        }
+      } catch { /* offline — fall back to the client-side checks */ }
       if (isLocalMode()) {
         const localUser = getLocalUser();
         if (localUser) {
@@ -454,7 +471,8 @@ export default function QuizPage() {
   }, [joined, quiz]);
 
   const handleJoin = async () => {
-    if (!participantName.trim()) return;
+    // A practice run records nothing, so it never needs a name.
+    if (!isPractice && !participantName.trim()) return;
     if (alreadyTaken) return; // entry check owns this state
     if (!joinAction.begin()) return;
 
@@ -968,27 +986,39 @@ export default function QuizPage() {
                 </div>
               )}
 
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-[#333] mb-1.5">Your name</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#999] pointer-events-none" />
-                  <input
-                    id="participant-name-input"
-                    type="text"
-                    value={participantName}
-                    onChange={(e) => setParticipantName(e.target.value)}
-                    placeholder="Enter your name"
-                    className="input-field pl-10"
-                  />
+              {!isPractice && (
+                <div className="mb-4">
+                  {currentUser ? (
+                    <p className="text-sm text-[var(--ink-muted)]">
+                      Taking this quiz as{" "}
+                      <span className="font-semibold text-[var(--ink)]">{currentUser.name}</span>
+                      {currentUser.isGuest && " (guest)"}
+                    </p>
+                  ) : (
+                    <>
+                      <label className="block text-sm font-medium text-[#333] mb-1.5">Your name</label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#999] pointer-events-none" />
+                        <input
+                          id="participant-name-input"
+                          type="text"
+                          value={participantName}
+                          onChange={(e) => setParticipantName(e.target.value)}
+                          placeholder="Enter your name"
+                          className="input-field pl-10"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
-              </div>
+              )}
 
               <button
                 id="start-quiz-btn"
                 onClick={handleJoin}
                 data-pending={joinAction.pending || undefined}
                 disabled={
-                  !participantName.trim() ||
+                  (!isPractice && !participantName.trim()) ||
                   !!(quiz!.starts_at && Date.now() < new Date(quiz!.starts_at).getTime()) ||
                   !!(quiz!.ends_at && Date.now() > new Date(quiz!.ends_at).getTime())
                 }
