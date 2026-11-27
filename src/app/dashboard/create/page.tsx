@@ -24,6 +24,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useOffline } from "@/lib/use-offline";
+import { usePendingAction } from "@/lib/use-pending-action";
 
 interface GeneratedQ {
   type: string;
@@ -97,7 +98,9 @@ export default function CreateQuizPage() {
 
   // Questions
   const [questions, setQuestions] = useState<GeneratedQ[]>([]);
-  const [generating, setGenerating] = useState(false);
+  // Generation costs a model call and publish writes rows: each must run once
+  // per click. The lock is synchronous, so a double tap cannot get through.
+  const { pending: generating, begin: beginGenerate, end: endGenerate } = usePendingAction();
   // Seconds spent generating. A spinner alone reads as "frozen" on a ten-second
   // wait; a counter proves the request is alive.
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -118,7 +121,7 @@ export default function CreateQuizPage() {
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
 
   // Publishing
-  const [publishing, setPublishing] = useState(false);
+  const { pending: publishing, begin: beginPublish, end: endPublish } = usePendingAction();
   const [generatedCode, setGeneratedCode] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -296,7 +299,7 @@ export default function CreateQuizPage() {
   // Generate questions
   const handleGenerate = async () => {
     if (!materialText.trim()) return;
-    setGenerating(true);
+    if (!beginGenerate()) return;
     setGenerateError("");
     setGenerateNotice("");
 
@@ -378,7 +381,7 @@ export default function CreateQuizPage() {
     } catch (err) {
       setGenerateError(toUserMessage(err, "We couldn't generate questions. Please try again."));
     } finally {
-      setGenerating(false);
+      endGenerate();
     }
   };
 
@@ -397,7 +400,7 @@ export default function CreateQuizPage() {
       setEditingIdx(theoryDefect);
       return;
     }
-    setPublishing(true);
+    if (!beginPublish()) return;
     try {
       const shareCode = editId
         ? editShareCode
@@ -466,7 +469,7 @@ export default function CreateQuizPage() {
           }
         } catch (saveErr) {
           setGenerateError(saveErr instanceof Error ? saveErr.message : "Failed to save quiz. Please try again.");
-          setPublishing(false);
+          endPublish();
           return;
         }
         addLocalQuiz(localQuiz, localQuestions);
@@ -545,7 +548,7 @@ export default function CreateQuizPage() {
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : "Failed to publish quiz");
     } finally {
-      setPublishing(false);
+      endPublish();
     }
   };
 
@@ -1031,6 +1034,7 @@ export default function CreateQuizPage() {
         <button
           onClick={handleGenerate}
           disabled={(!materialText.trim() && !(materialFileBase64 && materialFileType)) || generating}
+          data-pending={generating || undefined}
           className="btn-primary w-full min-h-[48px] py-2.5 text-sm flex items-center justify-center gap-2 disabled:opacity-60"
         >
           {generating ? (
@@ -1368,6 +1372,7 @@ export default function CreateQuizPage() {
               <button
                 onClick={handlePublish}
                 disabled={publishing || questions.length === 0}
+                data-pending={publishing || undefined}
                 className="btn-primary w-full min-h-[48px] py-2.5 text-sm flex items-center justify-center gap-2 shadow-lg disabled:opacity-60"
               >
                 {publishing ? (

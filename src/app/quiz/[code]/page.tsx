@@ -13,6 +13,7 @@ import { groupQuestions, printsContext } from "@/lib/question-groups";
 import { useToast } from "@/components/ui/toast";
 import { formatTime } from "@/lib/utils";
 import { useOffline } from "@/lib/use-offline";
+import { usePendingAction } from "@/lib/use-pending-action";
 import { readJsonResponse } from "@/lib/keep-alive-client";
 import {
   flushPendingAttempts,
@@ -120,7 +121,10 @@ export default function QuizPage() {
   // report elapsed time when the student hands in.
   const [initialSeconds, setInitialSeconds] = useState<number | null>(null);
   const deadlineRef = useRef<number | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  // Submission is final on the server, so a second click must never open a
+  // second request. `beginSubmit()` locks before the first await; `submitting`
+  // keeps the button blurred and disabled while the paper is being marked.
+  const { pending: submitting, begin: beginSubmit, end: endSubmit } = usePendingAction();
   // Terminal submit rejection (time up / closed / duplicate) — shows a
   // resolution screen; the quiz UI is no longer reachable or retryable.
   const [rejection, setRejection] = useState<{ message: string } | null>(null);
@@ -134,6 +138,8 @@ export default function QuizPage() {
   } | null>(null);
 
   const autoJoiningRef = useRef(false);
+  // Starting a quiz twice would mint two attempts; the ref closes that gap.
+  const joinAction = usePendingAction();
   // Server-trusted attempt start: the moment the quiz UI was joined.
   const joinedAtRef = useRef<string | null>(null);
   const toast = useToast();
@@ -450,6 +456,7 @@ export default function QuizPage() {
   const handleJoin = async () => {
     if (!participantName.trim()) return;
     if (alreadyTaken) return; // entry check owns this state
+    if (!joinAction.begin()) return;
 
     // Practice: no attempt row, no server-side record of who is taking it.
     if (isPractice) {
@@ -560,14 +567,14 @@ export default function QuizPage() {
         detailed: graded.detailed,
       });
       setSubmitted(true);
-      setSubmitting(false);
+      endSubmit();
       return true;
     };
 
     if (offline) {
-      setSubmitting(true);
+      if (!beginSubmit()) return;
       if (!markOnDevice()) {
-        setSubmitting(false);
+        endSubmit();
         toast.error(
           "This quiz isn't saved on this device, so it can't be marked offline. Reconnect, open it once, then try again."
         );
@@ -575,7 +582,7 @@ export default function QuizPage() {
       return;
     }
 
-    setSubmitting(true);
+    if (!beginSubmit()) return;
 
     // ── Server-side grading ────────────────────────────────
     // Correct answers never reach the browser, so the server computes the
@@ -739,7 +746,7 @@ export default function QuizPage() {
         return;
       }
       toast.error(msg);
-      setSubmitting(false);
+      endSubmit();
       return;
     }
 
@@ -771,7 +778,7 @@ export default function QuizPage() {
 
     setResults({ score, total: questions.length, correct, detailed });
     setSubmitted(true);
-    setSubmitting(false);
+    endSubmit();
 
     // Fetch the participant's standing on this quiz (best-effort)
     try {
@@ -783,7 +790,7 @@ export default function QuizPage() {
         }
       }
     } catch { /* leaderboard optional */ }
-  }, [submitting, submitted, quiz, questions, answers, attempt, isGuest, participantName, supabase, currentUser, offline, hasTheory, draftStorageKey, gradeSource, isPractice, toast]);
+  }, [submitting, submitted, quiz, questions, answers, attempt, isGuest, participantName, supabase, currentUser, offline, hasTheory, draftStorageKey, gradeSource, isPractice, toast, beginSubmit, endSubmit]);
 
   // Auto-join for guests with a URL name happens inside the entry check.
   // Logged-in users never see a separate auto-join effect — the check itself
@@ -979,6 +986,7 @@ export default function QuizPage() {
               <button
                 id="start-quiz-btn"
                 onClick={handleJoin}
+                data-pending={joinAction.pending || undefined}
                 disabled={
                   !participantName.trim() ||
                   !!(quiz!.starts_at && Date.now() < new Date(quiz!.starts_at).getTime()) ||
@@ -1423,6 +1431,7 @@ export default function QuizPage() {
             <button
               onClick={handleSubmit}
               disabled={submitting || answeredCount === 0 || (offline && hasTheory)}
+              data-pending={submitting || undefined}
               className="btn-primary w-full sm:w-auto gap-2 text-[15px] sm:text-sm px-8 min-h-[48px] shadow-lg disabled:opacity-50 transition-all duration-150 active:scale-[0.98]"
             >
               <Send className="w-4 h-4" />

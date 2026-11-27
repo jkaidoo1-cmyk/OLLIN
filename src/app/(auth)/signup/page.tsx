@@ -9,6 +9,7 @@ import { clearOfflineData } from "@/lib/offline";
 import { BrandMark, BrandSpinner } from "@/components/Logo";
 import { Eye, EyeOff } from "lucide-react";
 import { MIN_PASSWORD_LENGTH, PASSWORD_HINT, passwordProblem } from "@/lib/password-policy";
+import { usePendingAction } from "@/lib/use-pending-action";
 
 interface SignupProgram {
   id: string;
@@ -28,7 +29,9 @@ export default function SignupPage() {
   const [programId, setProgramId] = useState("");
   const [year, setYear] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  // One click, one account. The lock is a ref flipped before the first await,
+  // so a double tap can never POST twice (which would answer "email taken").
+  const { pending: loading, begin, end } = usePendingAction();
   const [error, setError] = useState("");
   const router = useRouter();
 
@@ -60,7 +63,7 @@ export default function SignupPage() {
       return;
     }
 
-    setLoading(true);
+    if (!begin()) return;
 
     try {
       const res = await fetch("/api/auth/signup", {
@@ -78,7 +81,7 @@ export default function SignupPage() {
 
       if (!res.ok || !data.user) {
         setError(data.error || "Could not create your account.");
-        setLoading(false);
+        end();
         return;
       }
 
@@ -91,7 +94,7 @@ export default function SignupPage() {
       router.refresh();
     } catch {
       setError("Unable to reach the server. Please try again.");
-      setLoading(false);
+      end();
     }
   };
 
@@ -239,7 +242,7 @@ export default function SignupPage() {
             </select>
           </div>
 
-          <button id="signup-submit-btn" type="submit" disabled={loading} className="btn-primary w-full">
+          <button id="signup-submit-btn" type="submit" disabled={loading} data-pending={loading || undefined} className="btn-primary w-full">
             {loading ? (
               <><BrandSpinner className="w-4 h-4" /> Creating account…</>
             ) : "Create account"}

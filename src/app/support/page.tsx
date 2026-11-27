@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BrandMark } from "@/components/Logo";
 import { BottomNav } from "@/components/BottomNav";
 import { ArrowLeft, Check, LifeBuoy, Loader2, MessageCircle, Send, UserRound } from "lucide-react";
+import { usePendingAction } from "@/lib/use-pending-action";
 
 /**
  * Help desk — original layout, sharpened UI:
@@ -24,7 +25,9 @@ const QUICK_TOPICS = [
 
 export default function SupportPage() {
   const [form, setForm] = useState({ name: "", contact: "", subject: "", message: "" });
-  const [sending, setSending] = useState(false);
+  // A message must be sent once. The ref lock closes the window between the
+  // click and React re-rendering the disabled button.
+  const { pending: sending, begin, end } = usePendingAction();
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   // ?from=dashboard → students came from the dashboard menu, send them back there
@@ -59,7 +62,7 @@ export default function SupportPage() {
       setError("Please write your message before sending.");
       return;
     }
-    setSending(true);
+    if (!begin()) return;
     setError("");
     try {
       const res = await fetch("/api/support", {
@@ -76,7 +79,7 @@ export default function SupportPage() {
     } catch {
       setError("Could not reach the server. Please check your connection and try again.");
     } finally {
-      setSending(false);
+      end();
     }
   };
 
@@ -235,6 +238,7 @@ export default function SupportPage() {
             <button
               type="submit"
               disabled={!canSend}
+              data-pending={sending || undefined}
               className="btn-primary w-full sm:w-auto"
             >
               {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { isLocalMode, disableLocalMode, clearLocalUser, getLocalUser } from "@/lib/local";
 import { createClient } from "@/lib/supabase/client";
+import { usePendingAction } from "@/lib/use-pending-action";
 
 /**
  * Student profile — settings-list layout.
@@ -50,20 +51,20 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<OpenSection>(null);
 
-  const [savingYear, setSavingYear] = useState(false);
+  const { pending: savingYear, begin: beginYear, end: endYear } = usePendingAction();
   const [savedYearFlash, setSavedYearFlash] = useState<number | null>(null);
 
   // Programme picker: students choose their own course, so it is loaded when
   // the row is opened rather than on every profile visit.
   const [programs, setPrograms] = useState<Array<{ id: string; code?: string; name?: string }>>([]);
   const [loadingPrograms, setLoadingPrograms] = useState(false);
-  const [savingProgram, setSavingProgram] = useState(false);
+  const { pending: savingProgram, begin: beginProgram, end: endProgram } = usePendingAction();
 
   // Password form
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
-  const [savingPw, setSavingPw] = useState(false);
+  const { pending: savingPw, begin: beginPw, end: endPw } = usePendingAction();
   const [showPw, setShowPw] = useState(false);
 
   // PWA install
@@ -140,7 +141,7 @@ export default function ProfilePage() {
 
   const saveYear = async (y: number) => {
     if (!me || y === me.current_year) { setOpen(null); return; }
-    setSavingYear(true);
+    if (!beginYear()) return;
     try {
       const res = await fetch("/api/auth/profile", {
         method: "PATCH",
@@ -161,7 +162,7 @@ export default function ProfilePage() {
     } catch {
       toast.error("Could not update year. Check your connection.");
     } finally {
-      setSavingYear(false);
+      endYear();
     }
   };
 
@@ -182,7 +183,7 @@ export default function ProfilePage() {
 
   const saveProgram = async (id: string) => {
     if (!me || id === (me.program_id ?? "")) { setOpen(null); return; }
-    setSavingProgram(true);
+    if (!beginProgram()) return;
     try {
       const res = await fetch("/api/auth/profile", {
         method: "PATCH",
@@ -204,7 +205,7 @@ export default function ProfilePage() {
     } catch {
       toast.error("Could not update programme. Check your connection.");
     } finally {
-      setSavingProgram(false);
+      endProgram();
     }
   };
 
@@ -243,7 +244,7 @@ export default function ProfilePage() {
       toast.error("New passwords do not match");
       return;
     }
-    setSavingPw(true);
+    if (!beginPw()) return;
     try {
       const res = await fetch("/api/auth/profile", {
         method: "PATCH",
@@ -263,7 +264,7 @@ export default function ProfilePage() {
     } catch {
       toast.error("Could not change password. Check your connection.");
     } finally {
-      setSavingPw(false);
+      endPw();
     }
   };
 
@@ -383,6 +384,7 @@ export default function ProfilePage() {
                     key={y}
                     type="button"
                     disabled={savingYear}
+                    data-pending={savingYear || undefined}
                     onClick={() => saveYear(y)}
                     className={`relative py-2.5 rounded-md text-sm font-medium border transition-colors ${
                       y === year
@@ -437,6 +439,7 @@ export default function ProfilePage() {
                         key={p.id}
                         type="button"
                         disabled={savingProgram}
+                        data-pending={savingProgram || undefined}
                         onClick={() => saveProgram(p.id)}
                         className={`w-full text-left px-3 py-2.5 rounded-md text-sm font-medium border transition-colors ${
                           active
@@ -537,6 +540,7 @@ export default function ProfilePage() {
                 <button
                   type="submit"
                   disabled={savingPw || !currentPw || !newPw || !confirmPw}
+                  data-pending={savingPw || undefined}
                   className="btn-primary text-sm"
                 >
                   {savingPw && <Loader2 className="w-4 h-4 animate-spin" />}

@@ -8,16 +8,20 @@ import { clearResourceCache } from "@/lib/prefetch";
 import { clearOfflineData } from "@/lib/offline";
 import { BrandMark, BrandSpinner } from "@/components/Logo";
 import { Eye, EyeOff } from "lucide-react";
+import { usePendingAction } from "@/lib/use-pending-action";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  // One click starts one login. `begin()` locks synchronously (so a second tap
+  // in the same frame is ignored) and `pending` blurs and disables the button
+  // until the request settles.
+  const { pending: loading, begin, end } = usePendingAction();
   const [error, setError] = useState("");
   const [fpOpen, setFpOpen] = useState(false);
   const [fpEmail, setFpEmail] = useState("");
-  const [fpSending, setFpSending] = useState(false);
+  const { pending: fpSending, begin: beginFp, end: endFp } = usePendingAction();
   const [fpDone, setFpDone] = useState(false);
   const [fpError, setFpError] = useState("");
   const router = useRouter();
@@ -31,7 +35,7 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    if (!begin()) return;
     setError("");
 
     try {
@@ -46,7 +50,7 @@ export default function LoginPage() {
 
       if (!res.ok || !data.user) {
         setError(data.error || "Invalid email or password.");
-        setLoading(false);
+        end();
         return;
       }
 
@@ -72,7 +76,7 @@ export default function LoginPage() {
       router.refresh();
     } catch {
       setError("Unable to reach the server. Please try again.");
-      setLoading(false);
+      end();
     }
   };
 
@@ -139,7 +143,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <button id="login-submit-btn" type="submit" disabled={loading} className="btn-primary w-full">
+          <button id="login-submit-btn" type="submit" disabled={loading} data-pending={loading || undefined} className="btn-primary w-full">
             {loading ? (
               <><BrandSpinner className="w-4 h-4" /> Logging in…</>
             ) : "Log in"}
@@ -175,8 +179,8 @@ export default function LoginPage() {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (fpSending) return;
-                setFpSending(true);
+                if (!beginFp()) return;
+
                 setFpError("");
                 try {
                   const res = await fetch("/api/auth/forgot-password", {
@@ -190,7 +194,7 @@ export default function LoginPage() {
                 } catch {
                   setFpError("Could not reach the server. Try again.");
                 } finally {
-                  setFpSending(false);
+                  endFp();
                 }
               }}
               className="app-card space-y-3"
@@ -208,7 +212,7 @@ export default function LoginPage() {
                 className="input-field"
               />
               <div className="flex items-center gap-3">
-                <button type="submit" disabled={fpSending} className="btn-primary flex-1">
+                <button type="submit" disabled={fpSending} data-pending={fpSending || undefined} className="btn-primary flex-1">
                   {fpSending ? "Sending…" : "Send request"}
                 </button>
                 <button

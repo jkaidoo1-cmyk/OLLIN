@@ -8,10 +8,12 @@ import { BrandMark, BrandSpinner } from "@/components/Logo";
 import { isLocalMode, getLocalUser } from "@/lib/local";
 import { createClient } from "@/lib/supabase/client";
 import { BottomNav } from "@/components/BottomNav";
+import { usePendingAction } from "@/lib/use-pending-action";
 
 export default function JoinQuizPage() {
   const [code, setCode] = useState("");
-  const [loading, setLoading] = useState(false);
+  // Joining navigates; a second tap before the route change would push twice.
+  const { pending: loading, begin } = usePendingAction();
   const [userName, setUserName] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
@@ -62,7 +64,7 @@ export default function JoinQuizPage() {
       setIsGuest(true);
     }
 
-    setLoading(true);
+    if (!begin()) return;
     // Pass guest name via URL so the quiz page knows
     const params = new URLSearchParams();
     if (!isLoggedIn && userName.trim()) {
@@ -131,7 +133,7 @@ export default function JoinQuizPage() {
             <button
               id="join-quiz-btn"
               type="submit"
-              disabled={loading || !isValid}
+              disabled={loading || !isValid} data-pending={loading || undefined}
               className="btn-primary w-full"
             >
               {loading ? (
@@ -216,7 +218,7 @@ export default function JoinQuizPage() {
           <button
             id="join-quiz-btn"
             type="submit"
-            disabled={loading || !isValid}
+            disabled={loading || !isValid} data-pending={loading || undefined}
             className="btn-primary w-full"
           >
             {loading ? (

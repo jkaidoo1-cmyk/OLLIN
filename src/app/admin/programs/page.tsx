@@ -11,6 +11,7 @@ import { readCache, writeCache } from "@/lib/admin-cache";
 import { useCacheAgeLabel } from "@/lib/use-cache-age";
 import { useRefreshSpin } from "@/lib/use-refresh-spin";
 import { isLocalMode } from "@/lib/local";
+import { usePendingAction } from "@/lib/use-pending-action";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -37,6 +38,10 @@ export default function AdminProgramsPage() {
   // Refresh gets its own spin: `loading` is the first-paint skeleton, and a
   // cached reload can finish before a frame of rotation is visible.
   const refreshSpin = useRefreshSpin();
+  // A create is locked from the tap, not from the next render: two quick taps
+  // used to POST the same code twice and produce a server "already exists"
+  // error for a program that had actually been created.
+  const createLock = usePendingAction();
 
   const [showForm, setShowForm] = useState(false);
   const [formCode, setFormCode] = useState("");
@@ -102,6 +107,19 @@ export default function AdminProgramsPage() {
       return;
     }
 
+    // The code is unique in this catalogue, so the same code twice IS the same
+    // program — refuse it before any request, including while the first write
+    // is still in flight. This is the idempotency check, client side.
+    const code = formCode.trim().toLowerCase();
+    const clash =
+      programs.some((p) => (p.code || "").trim().toLowerCase() === code) ||
+      pending.some((a) => a.type === "add" && a.program.code.trim().toLowerCase() === code);
+    if (clash) {
+      setFormError(`${formCode.trim()} is already in the catalogue`);
+      return;
+    }
+    if (!createLock.begin()) return;
+
     const newProgram: Program = {
       id: `pending-${Date.now()}`,
       code: formCode,
@@ -112,7 +130,7 @@ export default function AdminProgramsPage() {
       updated_at: new Date().toISOString(),
     };
 
-    void persist({ type: "add", program: newProgram });
+    void persist({ type: "add", program: newProgram }).finally(() => createLock.end());
     setFormCode("");
     setFormName("");
     setFormDept("");

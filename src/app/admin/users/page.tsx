@@ -11,6 +11,7 @@ import { readCache, writeCache } from "@/lib/admin-cache";
 import { useCacheAgeLabel } from "@/lib/use-cache-age";
 import { useRefreshSpin } from "@/lib/use-refresh-spin";
 import { isLocalMode } from "@/lib/local";
+import { usePendingAction } from "@/lib/use-pending-action";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -47,6 +48,9 @@ export default function AdminUsersPage() {
   // Refresh spins on its own timer so a fast, cached reload still reads as
   // "I did something".
   const refreshSpin = useRefreshSpin();
+  // One account per tap: two clicks in the same frame both passed the
+  // "email already exists" check before the list re-rendered.
+  const createLock = usePendingAction();
 
   // Create form
   const [showForm, setShowForm] = useState(false);
@@ -156,6 +160,8 @@ export default function AdminUsersPage() {
       return;
     }
 
+    if (!createLock.begin()) return;
+
     const newUser: User = {
       id: `pending-${Date.now()}`,
       email: formEmail.trim(),
@@ -165,7 +171,9 @@ export default function AdminUsersPage() {
       created_at: new Date().toISOString(),
     };
 
-    void persist({ type: "add", user: newUser, password: formPassword });
+    void persist({ type: "add", user: newUser, password: formPassword }).finally(() =>
+      createLock.end()
+    );
     resetForm();
   };
 

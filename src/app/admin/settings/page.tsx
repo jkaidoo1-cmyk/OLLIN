@@ -5,6 +5,7 @@ import { Loader2, Plus, Trash2, Power, PowerOff, Key, AlertCircle, Info, XCircle
 import { useConfirm, useToast } from "@/components/ui/toast";
 import { SkeletonList } from "@/components/Skeleton";
 import { statusMessage } from "@/lib/client-errors";
+import { usePendingAction } from "@/lib/use-pending-action";
 
 interface ApiKeyEntry {
   id: string;
@@ -37,7 +38,8 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [newKey, setNewKey] = useState("");
   const [newProvider, setNewProvider] = useState("groq");
-  const [adding, setAdding] = useState(false);
+  // A key is added once per click; the lock closes the pre-render gap.
+  const { pending: adding, begin: beginAdd, end: endAdd } = usePendingAction();
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [source, setSource] = useState<"env" | "file" | "supabase">("file");
@@ -86,7 +88,7 @@ export default function AdminSettingsPage() {
 
   const handleAddKey = async () => {
     if (!newKey.trim()) return;
-    setAdding(true);
+    if (!beginAdd()) return;
     setError("");
     setSuccess("");
 
@@ -102,7 +104,7 @@ export default function AdminSettingsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add key");
     } finally {
-      setAdding(false);
+      endAdd();
     }
   };
 
@@ -352,6 +354,7 @@ export default function AdminSettingsPage() {
             <button
               onClick={handleAddKey}
               disabled={!newKey.trim() || adding}
+              data-pending={adding || undefined}
               className="btn-primary text-xs px-3 py-2 flex items-center gap-1 shrink-0"
             >
               {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}

@@ -11,6 +11,7 @@ import { SkeletonList } from "@/components/Skeleton";
 import { readCache, writeCache } from "@/lib/admin-cache";
 import { useCacheAgeLabel } from "@/lib/use-cache-age";
 import { useRefreshSpin } from "@/lib/use-refresh-spin";
+import { usePendingAction } from "@/lib/use-pending-action";
 
 /** True when the server rejected the admin session itself. */
 function isAuthError(msg: string): boolean {
@@ -39,6 +40,8 @@ export default function AdminCoursesPage() {
   // Refresh spin is held visible for a minimum time: a cached fetch used to
   // finish so fast the icon barely moved.
   const refreshSpin = useRefreshSpin();
+  // Locked at the tap so a double submit can't race two identical POSTs.
+  const createLock = usePendingAction();
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
   const [courseQuizzes, setCourseQuizzes] = useState<Record<string, Quiz[]>>({});
 
@@ -185,6 +188,18 @@ export default function AdminCoursesPage() {
       return;
     }
 
+    // A course code is globally unique, so the same code twice is the same
+    // course — refuse it before the request, including mid-flight.
+    const code = formCode.trim().toLowerCase();
+    const clash =
+      courses.some((c) => (c.code || "").trim().toLowerCase() === code) ||
+      pending.some((a) => a.type === "add" && a.course.code.trim().toLowerCase() === code);
+    if (clash) {
+      setFormError(`${formCode.trim()} is already in the catalogue`);
+      return;
+    }
+    if (!createLock.begin()) return;
+
     const newCourse: Course = {
       id: `pending-${Date.now()}`,
       code: formCode,
@@ -198,7 +213,7 @@ export default function AdminCoursesPage() {
       updated_at: new Date().toISOString(),
     };
 
-    void persist({ type: "add", course: newCourse });
+    void persist({ type: "add", course: newCourse }).finally(() => createLock.end());
     setFormCode("");
     setFormName("");
     setFormDept("");
